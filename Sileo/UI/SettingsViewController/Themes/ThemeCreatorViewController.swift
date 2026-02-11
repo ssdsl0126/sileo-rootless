@@ -157,11 +157,12 @@ class ThemeCreatorViewController: BaseSettingsViewController {
             guard let themeName = themeName else {
                 let controller = UIAlertController(title: "Please set a name.", message: nil, preferredStyle: .alert)
                 controller.addAction(.init(title: "OK", style: .cancel))
+                self.present(controller, animated: true, completion: nil)
                 return
             }
             
             // make sure the name isn't already being used
-            guard !SileoThemeManager.shared.themeList.contains(where: { $0.name == themeName }) else {
+            guard !SileoThemeManager.shared.themeList.contains(where: { $0.name == themeName || String(localizationKey: $0.name) == themeName }) else {
                 let controller = UIAlertController(title: "Cannot use name", message: "The name \"\(themeName)\" is already being used", preferredStyle: .alert)
                 controller.addAction(.init(title: "OK", style: .cancel, handler: nil))
                 self.present(controller, animated: true, completion: nil)
@@ -186,6 +187,7 @@ class ThemeCreatorViewController: BaseSettingsViewController {
             }
             
             UserDefaults.standard.set(encoded, forKey: "userSavedThemes")
+            NotificationCenter.default.post(name: SileoThemeManager.sileoReloadThemeNotification, object: nil)
             sectionVC?.tableView.reloadData()
             self.navigationController?.popViewController(animated: true)
         default: break

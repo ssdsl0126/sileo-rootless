@@ -25,6 +25,8 @@ func dynamicColor(default defaultColor: UIColor, dark: UIColor) -> UIColor {
 class SileoThemeManager: NSObject {
     @objc static var shared = SileoThemeManager()
     static let sileoChangedThemeNotification = Notification.Name("sileoChangedThemeNotification")
+    static let sileoReloadThemeNotification = Notification.Name("sileoReloadThemeNotification")
+    private static var reloadObserver: NSObjectProtocol?
     
     var tintColor: UIColor
     
@@ -32,7 +34,7 @@ class SileoThemeManager: NSObject {
     var themeList = [SileoTheme]()
     
     override init() {
-        let lightTheme = SileoTheme(name: String(localizationKey: "Sileo_Light"), interfaceStyle: .light)
+        let lightTheme = SileoTheme(name: "Sileo_Light", interfaceStyle: .light)
         lightTheme.backgroundColor = .white
         lightTheme.secondaryBackgroundColor = UIColor(white: 245/255, alpha: 1)
         lightTheme.labelColor = .black
@@ -42,7 +44,7 @@ class SileoThemeManager: NSObject {
         lightTheme.bannerColor = UIColor(red: 0.941, green: 0.996, blue: 1, alpha: 1)
         themeList.append(lightTheme)
 
-        let darkTheme = SileoTheme(name: String(localizationKey: "Sileo_Dark"), interfaceStyle: .dark)
+        let darkTheme = SileoTheme(name: "Sileo_Dark", interfaceStyle: .dark)
         darkTheme.backgroundColor = UIColor(red: 28/255, green: 28/255, blue: 30/255, alpha: 1)
         darkTheme.secondaryBackgroundColor = UIColor(white: 60/255, alpha: 1)
         darkTheme.labelColor = .white
@@ -53,7 +55,7 @@ class SileoThemeManager: NSObject {
         themeList.append(darkTheme)
         
         if #available(iOS 13.0, *) {
-            let adaptiveTheme = SileoTheme(name: String(localizationKey: "Sileo_Adaptive"), interfaceStyle: .system)
+            let adaptiveTheme = SileoTheme(name: "Sileo_Adaptive", interfaceStyle: .system)
             adaptiveTheme.backgroundColor = dynamicColor(default: .white,
                                                          dark: UIColor(red: 28/255, green: 28/255, blue: 30/255, alpha: 1))
             adaptiveTheme.secondaryBackgroundColor = dynamicColor(default: UIColor(white: 245/255, alpha: 1),
@@ -68,7 +70,7 @@ class SileoThemeManager: NSObject {
                                                      dark: UIColor(red: 0.059, green: 0.004, blue: 0, alpha: 1))
             themeList.append(adaptiveTheme)
             
-            let systemTheme = SileoTheme(name: String(localizationKey: "System"), interfaceStyle: .system)
+            let systemTheme = SileoTheme(name: "System", interfaceStyle: .system)
             systemTheme.backgroundColor = .systemBackground
             systemTheme.secondaryBackgroundColor = .secondarySystemBackground
             systemTheme.labelColor = .label
@@ -78,9 +80,9 @@ class SileoThemeManager: NSObject {
             themeList.append(systemTheme)
         }
         
-        var defaultTheme = "Sileo Light"
+        var defaultTheme = "Sileo_Light"
         if #available(iOS 13.0, *) {
-            defaultTheme = "Sileo Adaptive"
+            defaultTheme = "Sileo_Adaptive"
         }
         
         let fallbackColor = UIColor(red: 44/255, green: 177/255, blue: 190/255, alpha: 1)
@@ -91,16 +93,27 @@ class SileoThemeManager: NSObject {
             self.tintColor = fallbackColor
         }
         
-        if let userSavedThemesData = UserDefaults.standard.data(forKey: "userSavedThemes"), let userSavedThemes = try? ZippyJSONDecoder().decode([SileoCodableTheme].self, from: userSavedThemesData) {
-            themeList.append(contentsOf: Array(Set(userSavedThemes.map { $0.sileoTheme })))
+        if let userSavedThemesData = UserDefaults.standard.data(forKey: "userSavedThemes"),
+           let userSavedThemes = try? ZippyJSONDecoder().decode([SileoCodableTheme].self, from: userSavedThemesData) {
+            for userTheme in userSavedThemes.map(\.sileoTheme) where !themeList.contains(where: { $0.name == userTheme.name }) {
+                themeList.append(userTheme)
+            }
         }
         
-        themeList = Array(Set(themeList)) // duplicate removal
-        
-        let strings = themeList.map({ $0.name })
-        currentTheme = themeList[strings.firstIndex(of: UserDefaults.standard.value(forKey: "currentTheme") as? String ?? defaultTheme) ?? 0]
-        
+        let savedTheme = UserDefaults.standard.value(forKey: "currentTheme") as? String
+        let selectedIndex = themeList.firstIndex(where: { theme in
+            theme.name == (savedTheme ?? defaultTheme) || String(localizationKey: theme.name) == (savedTheme ?? defaultTheme)
+        }) ?? 0
+        currentTheme = themeList[selectedIndex]
+        UserDefaults.standard.set(currentTheme.name, forKey: "currentTheme")
+
         super.init()
+        
+        if Self.reloadObserver == nil {
+            Self.reloadObserver = NotificationCenter.default.addObserver(forName: SileoThemeManager.sileoReloadThemeNotification, object: nil, queue: nil) { _ in
+                SileoThemeManager.shared = SileoThemeManager()
+            }
+        }
     }
     
     func activate(theme: SileoTheme) {

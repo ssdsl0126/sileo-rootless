@@ -14,6 +14,7 @@ final class RepoManager {
 
     static let progressNotification = Notification.Name("SileoRepoManagerProgress")
     private var repoDatabase = DispatchQueue(label: "org.coolstar.SileoStore.repo-database")
+    private var hasDuplicateRepo = false
 
     enum RepoHashType: String, CaseIterable {
         case sha256
@@ -28,6 +29,7 @@ final class RepoManager {
     }
 
     static let shared = RepoManager()
+    private static let iconQueue = OperationQueue(name: "RepoManager.iconQueue", maxConcurrent: 10)
 
     private(set) var repoList: [Repo] = []
     private var repoListLock = DispatchSemaphore(value: 1)
@@ -72,7 +74,11 @@ final class RepoManager {
             if item.pathExtension == "list" {
                 parseListFile(at: item)
             } else if item.pathExtension == "sources" {
+                hasDuplicateRepo = false
                 parseSourcesFile(at: item)
+                if hasDuplicateRepo && item.path.hasSuffix("/etc/apt/sources.list.d/sileo.sources") {
+                    writeListToFile()
+                }
             }
         }
         #endif
@@ -244,6 +250,31 @@ final class RepoManager {
             return repoNormalizedStr == normalizedStr
         })
     }
+    
+    func repo(with repo: Repo) -> Repo? {
+        guard let url = URL(string: repo.rawURL) else { return nil }
+        return self.repo(with: url, suite: repo.suite, components: repo.components)
+    }
+    
+    func repo(with url: URL, suite: String = "./", components: [String]? = []) -> Repo? {
+        let components = components?.filter { !$0.isEmpty } ?? []
+        guard var lhs = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
+        if lhs.path.isEmpty { lhs.path = "/" }
+        lhs.scheme = "url"
+
+        defer { repoListLock.signal() }
+        repoListLock.wait()
+
+        for repo in repoList {
+            guard var rhs = URLComponents(string: repo.rawURL) else { continue }
+            if rhs.path.isEmpty { rhs.path = "/" }
+            rhs.scheme = "url"
+            if lhs == rhs && repo.suite == suite && Set(repo.components) == Set(components) {
+                return repo
+            }
+        }
+        return nil
+    }
 
     func repo(withSourceFile sourceFile: String) -> Repo? {
         repoList.first { $0.rawEntry == sourceFile }
@@ -264,6 +295,10 @@ final class RepoManager {
         let repo = self.repo(with: url)
         return repo != nil
     }
+    
+    func hasRepo(with url: URL, suite: String = "./", components: [String]? = []) -> Bool {
+        repo(with: url, suite: suite, components: components) != nil
+    }
 
     private func parseRepoEntry(_ repoEntry: String, at url: URL, withTypes types: [String], uris: [String], suites: [String], components: [String]?) {
         guard types.contains("deb") else {
@@ -271,8 +306,14 @@ final class RepoManager {
         }
 
         for repoURL in uris {
-            guard !hasRepo(with: URL(string: repoURL)!)
-            else {
+            guard let parsedURL = URL(string: repoURL),
+                  ["http", "https"].contains(parsedURL.scheme?.lowercased()),
+                  parsedURL.host != nil else {
+                continue
+            }
+            let suite = suites.first ?? "./"
+            guard !hasRepo(with: parsedURL, suite: suite, components: components) else {
+                hasDuplicateRepo = true
                 continue
             }
 
@@ -368,7 +409,7 @@ final class RepoManager {
                 metadataUpdateGroup.leave()
             } else {
                 repo.isIconLoaded = true
-                DispatchQueue.global().async {
+                RepoManager.iconQueue.addOperation {
                     @discardableResult func image(for url: URL, scale: CGFloat) -> Bool {
                         let cache = EvanderNetworking.imageCache(url, scale: scale)
                         if let image = cache.1 {
@@ -413,9 +454,13 @@ final class RepoManager {
 
     private func fixLists() {
         #if !targetEnvironment(simulator) && !TARGET_SANDBOX
-        spawnAsRoot(args: [CommandPath.mkdir, "-p", CommandPath.lists])
-        spawnAsRoot(args: [CommandPath.chown, "-R", "root:wheel", CommandPath.lists])
-        spawnAsRoot(args: [CommandPath.chmod, "-R", "0755", CommandPath.lists])
+        var directory: ObjCBool = false
+        let exists = FileManager.default.fileExists(atPath: CommandPath.lists, isDirectory: &directory)
+        if !exists || !directory.boolValue {
+            spawnAsRoot(args: [CommandPath.mkdir, "-p", CommandPath.lists])
+            spawnAsRoot(args: [CommandPath.chown, "-R", "root:wheel", CommandPath.lists])
+            spawnAsRoot(args: [CommandPath.chmod, "-R", "0755", CommandPath.lists])
+        }
         #endif
     }
 
@@ -571,7 +616,7 @@ final class RepoManager {
 
         for threadID in 0..<(ProcessInfo.processInfo.processorCount * 2) {
             updateGroup.enter()
-            let repoQueue = DispatchQueue(label: "repo-queue-\(threadID)")
+            let repoQueue = DispatchQueue(label: "repo-update-queue-\(threadID)")
             repoQueue.async {
                 while true {
                     lock.lock()
@@ -979,10 +1024,10 @@ final class RepoManager {
 
                         if !skipPackages {
                             if !releaseFileContainsHashes || (releaseFileContainsHashes && isPackagesFileValid) {
-                                let packageDict = repo.packageDict
+                                let packageDict = repo.allNewestPackages
                                 repo.packageDict = PackageListManager.readPackages(repoContext: repo, packagesFile: packagesFile.url)
-                                let databaseChanges = Array(repo.packageDict.values).filter { package -> Bool in
-                                    if let tmp = packageDict[package.packageID] {
+                                let databaseChanges = Array(repo.allNewestPackages.values).filter { package -> Bool in
+                                    if let tmp = packageDict[package.package] {
                                         if tmp.version == package.version {
                                             return false
                                         }

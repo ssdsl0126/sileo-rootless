@@ -89,6 +89,7 @@ class ThemesSectionViewController: BaseSettingsViewController {
         } set {
             let encoded = (try? JSONEncoder().encode(newValue.map(\.codable))) ?? Data()
             UserDefaults.standard.set(encoded, forKey: "userSavedThemes")
+            NotificationCenter.default.post(name: SileoThemeManager.sileoReloadThemeNotification, object: nil)
         }
     }
     

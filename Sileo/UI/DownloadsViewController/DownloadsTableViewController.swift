@@ -514,7 +514,7 @@ class DownloadsTableViewController: SileoViewController {
             for file in DownloadManager.shared.cachedFiles {
                 deleteFileAsRoot(file)
             }
-            PackageListManager.shared.installChange()
+            PackageListManager.shared.reloadInstalled()
             DispatchQueue.main.async {
                 NotificationCenter.default.post(name: PackageListManager.stateChange, object: nil)
                 NotificationCenter.default.post(name: PackageListManager.installChange, object: nil)
@@ -581,7 +581,7 @@ class DownloadsTableViewController: SileoViewController {
                 self.detailsTextView?.scrollRangeToVisible(NSRange(location: detailsAttributedString.string.count - 1, length: 1))
             }
         }, completionCallback: { _, finish, refresh in
-            PackageListManager.shared.installChange()
+            PackageListManager.shared.reloadInstalled()
             DispatchQueue.main.async {
                 
                 NotificationCenter.default.post(name: PackageListManager.stateChange, object: nil)
@@ -762,8 +762,13 @@ extension DownloadsTableViewController: UITableViewDataSource {
         if indexPath.section == 3 {
             // Error listing
             let error = errors[indexPath.row]
-            let package = Package(package: error.packageID, version: "-1")
-            cell.package = DownloadPackage(package: package)
+            let allPackages = upgrades + installations + installdeps + uninstallations + uninstalldeps
+            if let package = allPackages.first(where: { $0.package.package == error.packageID }) {
+                cell.package = package
+            } else {
+                let package = Package(package: error.packageID, version: "-1")
+                cell.package = DownloadPackage(package: package)
+            }
             cell.title = error.packageID
             var description = ""
             for (index, conflict) in error.conflictingPackages.enumerated() {

@@ -58,6 +58,11 @@ class SettingsViewController: BaseSettingsViewController, ThemeSelected {
         super.updateSileoColors()
         tableView.reloadData()
     }
+    
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        tableView.reloadData()
+    }
 
     func loadProviders() {
         PaymentManager.shared.getAllPaymentProviders { providers in
@@ -136,7 +141,7 @@ extension SettingsViewController { // UITableViewDataSource
                 cell.pickerView.selectRow(cell.values.firstIndex(of: SileoThemeManager.shared.currentTheme.name) ?? 0, inComponent: 0, animated: false)
                 cell.callback = self
                 cell.title.text = String(localizationKey: "Theme")
-                cell.subtitle.text = cell.values[cell.pickerView.selectedRow(inComponent: 0)]
+                cell.subtitle.text = String(localizationKey: cell.values[cell.pickerView.selectedRow(inComponent: 0)])
                 cell.backgroundColor = .clear
                 cell.title.textColor = .tintColor
                 cell.subtitle.textColor = .tintColor

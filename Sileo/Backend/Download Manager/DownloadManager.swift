@@ -21,7 +21,7 @@ public enum DownloadManagerQueue: Int {
 final class DownloadManager {
     static let lockStateChangeNotification = Notification.Name("SileoDownloadManagerLockStateChanged")
     static let aptQueue: DispatchQueue = {
-        let queue = DispatchQueue(label: "Sileo.AptQueue", qos: .userInitiated)
+        let queue = DispatchQueue(label: "Sileo.AptQueue", qos: .userInteractive)
         queue.setSpecific(key: DownloadManager.queueKey, value: DownloadManager.queueContext)
         return queue
     }()
@@ -454,14 +454,9 @@ final class DownloadManager {
         for (host, packages) in installDepOperation {
             if let repo = RepoManager.shared.repoList.first(where: { $0.url?.host == host }) {
                 for package in packages {
-                    if let repoPackage = repo.packageDict[package.0] {
-                        if repoPackage.version == package.1 {
-                            rawInstalls.append(repoPackage)
-                            installIdentifiers.removeAll { $0 == package.0 }
-                        } else if let version = repoPackage.getVersion(package.1) {
-                            rawInstalls.append(version)
-                            installIdentifiers.removeAll { $0 == package.0 }
-                        }
+                    if let repoPackage = repo.getPackage(identifier: package.0, version: package.1, ignoreArch: true) {
+                        rawInstalls.append(repoPackage)
+                        installIdentifiers.removeAll { $0 == package.0 }
                     }
                 }
             } else if host == "local-deb" {

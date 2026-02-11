@@ -126,7 +126,7 @@ class DependencyResolverAccelerator {
                 return
             }
         }
-        for packageVersion in package.allVersions {
+        for packageVersion in package.allVersions() {
             getDependenciesInternal2(package: packageVersion, sourceFileURL: url)
         }
     }
@@ -149,7 +149,7 @@ class DependencyResolverAccelerator {
                 let packageIds = parseDependsString(depends: packagesData)
                 for repo in RepoManager.shared.repoList {
                     for packageID in packageIds {
-                        if let depPackage = repo.packageDict[packageID] {
+                        if let depPackage = repo.newestPackage(identifier: packageID) {
                             getDependenciesInternal(package: depPackage)
                         }
                     }

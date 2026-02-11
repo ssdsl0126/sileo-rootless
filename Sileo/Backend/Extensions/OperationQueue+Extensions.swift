@@ -18,4 +18,10 @@ extension OperationQueue {
         }
     }
     
+    convenience init(name: String, maxConcurrent: Int) {
+        self.init()
+        self.name = name
+        self.maxConcurrentOperationCount = maxConcurrent
+    }
+    
 }

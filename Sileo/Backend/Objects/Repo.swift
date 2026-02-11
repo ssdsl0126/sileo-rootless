@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import UIKit
 
 final class Repo: Equatable {
     var isSecure: Bool = false
@@ -63,25 +64,111 @@ final class Repo: Equatable {
     var releaseGPGProgress = CGFloat(0)
     var packagesProgress = CGFloat(0)
 
-    var packageDict: [String: Package] = [:] {
+    var allNewestPackages = [String: Package]()
+    var preferredNewestPackages = [String: Package]()
+    
+    var packageDict: [String?: [String: [String: Package]]] = [:] {
         didSet {
+            var allNewestPackages = [String: Package]()
+            var preferredNewestPackages = [String: Package]()
+            
+            for (_, idDict) in packageDict {
+                for (identifier, versionPackages) in idDict {
+                    for (_, package) in versionPackages {
+                        if let old = preferredNewestPackages[identifier] {
+                            if preferredPackage(old: old, new: package) {
+                                preferredNewestPackages[identifier] = package
+                            }
+                        } else {
+                            preferredNewestPackages[identifier] = package
+                        }
+                        
+                        if let old = allNewestPackages[identifier] {
+                            if DpkgWrapper.isVersion(package.version, greaterThan: old.version) {
+                                allNewestPackages[identifier] = package
+                            }
+                        } else {
+                            allNewestPackages[identifier] = package
+                        }
+                    }
+                }
+            }
+            
+            self.allNewestPackages = allNewestPackages
+            self.preferredNewestPackages = preferredNewestPackages
             reloadInstalled()
-            packagesProvides = Array(packageDict.values).filter { $0.rawControl["provides"] != nil }
+            packagesProvides = Array(preferredNewestPackages.values).filter { $0.rawControl["provides"] != nil }
         }
     }
     var packageArray: [Package] {
-        Array(packageDict.values)
+        Array(preferredNewestPackages.values)
     }
     var packagesProvides = [Package]()
-    var installed: [Package]?
+    var installedPackages: [Package]?
+    var installed: [Package]? {
+        get { installedPackages }
+        set { installedPackages = newValue }
+    }
+    
+    public func getPackage(identifier: String, version: String, ignoreArch: Bool = false) -> Package? {
+        guard let package = preferredNewestPackages[identifier] else {
+            return nil
+        }
+        
+        if version == package.version {
+            return package
+        } else if let versionPackage = packageDict[package.architecture]?[identifier]?[version] {
+            return versionPackage
+        }
+        
+        if ignoreArch {
+            for (_, idDict) in packageDict {
+                if let versionPackage = idDict[identifier]?[version] {
+                    return versionPackage
+                }
+            }
+        }
+        
+        return nil
+    }
+    
+    public func allVersions(identifier: String, ignoreArch: Bool = false) -> [Package] {
+        guard let package = preferredNewestPackages[identifier] else {
+            return []
+        }
+        
+        let preferredArchVersions = Array((packageDict[package.architecture]?[identifier] ?? [:]).values)
+        guard ignoreArch else {
+            return preferredArchVersions
+        }
+        
+        var allVersions = preferredArchVersions
+        var seenVersions = Set(preferredArchVersions.map(\.version))
+        for (_, idDict) in packageDict {
+            guard let versionPackages = idDict[identifier] else {
+                continue
+            }
+            for versionPackage in versionPackages.values where !seenVersions.contains(versionPackage.version) {
+                seenVersions.insert(versionPackage.version)
+                allVersions.append(versionPackage)
+            }
+        }
+        return allVersions
+    }
+    
+    public func newestPackage(identifier: String, ignoreArch: Bool = false) -> Package? {
+        ignoreArch ? allNewestPackages[identifier] : preferredNewestPackages[identifier]
+    }
     
     public func reloadInstalled() {
-        if packageDict.isEmpty { installed = nil }
-        let installed = Array(PackageListManager.shared.installedPackages.values)
-        self.installed = installed.filter { installed -> Bool in
-            guard let package = packageDict[installed.packageID] else { return false }
-            if package.version == installed.version { return true }
-            return DpkgWrapper.isVersion(package.version, greaterThan: installed.version)
+        if packageDict.isEmpty {
+            installedPackages = nil
+            NotificationCenter.default.post(name: RepoManager.progressNotification, object: self)
+            return
+        }
+        
+        installedPackages = preferredNewestPackages.values.filter { package in
+            PackageListManager.shared.installedPackages.keys.contains(package.package)
         }
         NotificationCenter.default.post(name: RepoManager.progressNotification, object: self)
     }
@@ -154,5 +241,5 @@ final class Repo: Equatable {
 }
 
 func == (lhs: Repo, rhs: Repo) -> Bool {
-    lhs.rawURL == rhs.rawURL && lhs.suite == rhs.suite
+    lhs.rawURL == rhs.rawURL && lhs.suite == rhs.suite && Set(lhs.components) == Set(rhs.components)
 }

@@ -134,6 +134,7 @@ final public class MacRootWrapper {
 
     var fileActions: posix_spawn_file_actions_t?
     posix_spawn_file_actions_init(&fileActions)
+    defer { posix_spawn_file_actions_destroy(&fileActions) }
     posix_spawn_file_actions_addclose(&fileActions, pipestdout[0])
     posix_spawn_file_actions_addclose(&fileActions, pipestderr[0])
     posix_spawn_file_actions_adddup2(&fileActions, pipestdout[1], STDOUT_FILENO)
@@ -162,6 +163,7 @@ final public class MacRootWrapper {
         if root {
             var attr: posix_spawnattr_t?
             posix_spawnattr_init(&attr)
+            defer { posix_spawnattr_destroy(&attr) }
             posix_spawnattr_set_persona_np(&attr, 99, UInt32(POSIX_SPAWN_PERSONA_FLAGS_OVERRIDE))
             posix_spawnattr_set_persona_uid_np(&attr, 0)
             posix_spawnattr_set_persona_gid_np(&attr, 0)

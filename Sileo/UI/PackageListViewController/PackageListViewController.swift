@@ -17,7 +17,11 @@ var searchHistory: [String] {
     }
     
     set {
-        UserDefaults.standard.set(Array(Set(newValue)), forKey: "UserSearchHistory")
+        var newItems: [String] = []
+        for item in newValue where !newItems.contains(item) {
+            newItems.append(item)
+        }
+        UserDefaults.standard.set(newItems, forKey: "UserSearchHistory")
     }
 }
 
@@ -26,13 +30,13 @@ class PackageListViewController: SileoViewController, UIGestureRecognizerDelegat
     @IBOutlet final var downloadsButton: UIBarButtonItem?
     
     @IBInspectable final var showSearchField: Bool = false
-    @IBInspectable final var showUpdates: Bool = false
+    @IBInspectable final var showUpdates: Bool = false // = true in InterfaceBuild
     @IBInspectable final var showWishlist: Bool = false
-    @IBInspectable final public var loadProvisional: Bool = false
-     
+    @IBInspectable final var loadProvisional: Bool = false
+    @IBInspectable final var localizableTitle: String = ""
     @IBInspectable final public var packagesLoadIdentifier: String = ""
+    
     final public var repoContext: Repo?
-    final private var showProvisional: Bool = false
     
     final private var packages: [Package] = []
     final private var availableUpdates: [Package] = []
@@ -42,6 +46,15 @@ class PackageListViewController: SileoViewController, UIGestureRecognizerDelegat
     final private var cachedInstalled: [Package]?
     
     private var displaySettings = false
+    private var refreshPackages = UIRefreshControl()
+    
+    private var showProvisional: Bool = false
+    private var shouldShowUpdates: Bool = false
+    
+    private var canisterHeartbeat: Timer?
+    
+    public var searchController = UISearchController(searchResultsController: nil)
+    private var prevSearchText: String?
     
     private let searchingQueue = DispatchQueue(label: "Sileo.PackageList.Searching", qos: .userInitiated)
     private var updatingCount = 0 {
@@ -51,23 +64,17 @@ class PackageListViewController: SileoViewController, UIGestureRecognizerDelegat
             }
         }
     }
-    private var canisterHeartbeat: Timer?
-    
-    @IBInspectable var localizableTitle: String = ""
-    
-    var showSearchHistory: Bool {
+    private var showSearchHistory: Bool {
         // make sure we're on the search page
         guard let title = navigationItem.title, title == String(localizationKey: "Search_Page") else {
             return false
         }
-        return !searchHistory.isEmpty && (searchController?.searchBar.text?.isEmpty ?? false)
+        return !searchHistory.isEmpty && (searchController.searchBar.text?.isEmpty ?? false)
     }
-    
-    var searchController: UISearchController?
-    
+
     @objc func updateSileoColors() {
         self.statusBarStyle = .default
-        if let textField = searchController?.searchBar.value(forKey: "searchField") as? UITextField {
+        if let textField = searchController.searchBar.value(forKey: "searchField") as? UITextField {
             textField.textColor = .sileoLabel
         }
     }
@@ -106,21 +113,27 @@ class PackageListViewController: SileoViewController, UIGestureRecognizerDelegat
             }
         }
     }
+    
+    @objc func refreshInstalledPackages(_ sender: UIRefreshControl?) {
+        sender?.beginRefreshing()
+        PackageListManager.shared.reloadInstalled()
+        NotificationCenter.default.post(name: PackageListManager.stateChange, object: nil)
+        NotificationCenter.default.post(name: PackageListManager.installChange, object: nil)
+        sender?.endRefreshing()
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        
+        if showUpdates {
+            shouldShowUpdates = true
+        }
         
         if loadProvisional {
             showProvisional = UserDefaults.standard.bool(forKey: "ShowProvisional", fallback: true)
             _ = NotificationCenter.default.addObserver(forName: Notification.Name("ShowProvisional"), object: nil, queue: nil) { _ in
                 self.showProvisional = UserDefaults.standard.bool(forKey: "ShowProvisional", fallback: true)
                 self.collectionView?.reloadData()
-            }
-        }
-        
-        if showUpdates {
-            _ = NotificationCenter.default.addObserver(forName: Notification.Name("ShowIgnoredUpdates"), object: nil, queue: nil) { _ in
-                self.reloadUpdates()
             }
         }
 
@@ -140,20 +153,15 @@ class PackageListViewController: SileoViewController, UIGestureRecognizerDelegat
             self.title = String(localizationKey: localizableTitle)
         }
         
-        NotificationCenter.default.addObserver(self, selector: #selector(self.reloadData),
-                                               name: PackageListManager.reloadNotification,
-                                               object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(self.reloadData), name: PackageListManager.installChange, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(self.reloadData), name: PackageListManager.reloadNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(self.reloadStates(_:)), name: PackageListManager.stateChange, object: nil)
         if self.showUpdates {
-            NotificationCenter.default.addObserver(self, selector: #selector(self.reloadUpdates),
-                                                   name: PackageListManager.prefsNotification,
-                                                   object: nil)
-            NotificationCenter.default.addObserver(self, selector: #selector(self.reloadUpdates), name: PackageListManager.installChange, object: nil)
+            NotificationCenter.default.addObserver(self, selector: #selector(self.reloadDataWithUpdates), name: PackageListManager.prefsNotification, object: nil)
+            NotificationCenter.default.addObserver(self, selector: #selector(self.reloadDataWithUpdates), name: Notification.Name("ShowIgnoredUpdates"), object: nil)
         }
         if loadProvisional {
-            NotificationCenter.default.addObserver(self, selector: #selector(self.reloadData),
-                                                   name: CanisterResolver.refreshList,
-                                                   object: nil)
+            NotificationCenter.default.addObserver(self, selector: #selector(self.reloadData), name: CanisterResolver.refreshList, object: nil)
         }
         
         // A value of exactly 17.0 (the default) causes the text to auto-shrink
@@ -161,18 +169,17 @@ class PackageListViewController: SileoViewController, UIGestureRecognizerDelegat
             NSAttributedString.Key.font: UIFont.systemFont(ofSize: 17.01)
         ]
         
-        searchController = UISearchController(searchResultsController: nil)
-        searchController?.searchBar.placeholder = String(localizationKey: "Package_Search.Placeholder")
+        searchController.searchBar.placeholder = String(localizationKey: "Package_Search.Placeholder")
         if #available(iOS 13, *) {
-            searchController?.searchBar.searchTextField.semanticContentAttribute = (LanguageHelper.shared.isRtl ?? false) ? .forceRightToLeft : .forceLeftToRight
+            searchController.searchBar.searchTextField.semanticContentAttribute = (LanguageHelper.shared.isRtl ?? false) ? .forceRightToLeft : .forceLeftToRight
         } else {
-            let textfieldOfSearchBar = searchController?.searchBar.value(forKey: "searchField") as? UITextField
+            let textfieldOfSearchBar = searchController.searchBar.value(forKey: "searchField") as? UITextField
             textfieldOfSearchBar?.semanticContentAttribute = (LanguageHelper.shared.isRtl ?? false) ? .forceRightToLeft : .forceLeftToRight
         }
-        searchController?.searchBar.delegate = self
-        searchController?.searchResultsUpdater = self
-        searchController?.obscuresBackgroundDuringPresentation = false
-        searchController?.hidesNavigationBarDuringPresentation = true
+        searchController.searchBar.delegate = self
+        searchController.searchResultsUpdater = self
+        searchController.obscuresBackgroundDuringPresentation = false
+        searchController.hidesNavigationBarDuringPresentation = true
         
         self.navigationController?.navigationBar.superview?.tag = WHITE_BLUR_TAG
         
@@ -182,17 +189,21 @@ class PackageListViewController: SileoViewController, UIGestureRecognizerDelegat
         
         var sbTextField: UITextField?
         if #available(iOS 13, *) {
-            sbTextField = searchController?.searchBar.searchTextField
+            sbTextField = searchController.searchBar.searchTextField
         } else {
-            sbTextField = searchController?.searchBar.value(forKey: "_searchField") as? UITextField
+            sbTextField = searchController.searchBar.value(forKey: "_searchField") as? UITextField
         }
         sbTextField?.font = UIFont.systemFont(ofSize: 13)
         
-        let tapRecognizer = UITapGestureRecognizer(target: searchController?.searchBar, action: #selector(UISearchBar.resignFirstResponder))
+        let tapRecognizer = UITapGestureRecognizer(target: searchController.searchBar, action: #selector(UISearchBar.resignFirstResponder))
         tapRecognizer.cancelsTouchesInView = false
         tapRecognizer.delegate = self
         
         if let collectionView = collectionView {
+            if self.packagesLoadIdentifier == "--installed" {
+                refreshPackages.addTarget(self, action: #selector(refreshInstalledPackages(_:)), for: .valueChanged)
+                collectionView.refreshControl = refreshPackages
+            }
             collectionView.addGestureRecognizer(tapRecognizer)
             collectionView.register(UINib(nibName: "PackageCollectionViewCell", bundle: nil),
                                     forCellWithReuseIdentifier: "PackageListViewCellIdentifier")
@@ -215,12 +226,13 @@ class PackageListViewController: SileoViewController, UIGestureRecognizerDelegat
             let packageMan = PackageListManager.shared
             
             if !self.showSearchField {
-                let pkgs = packageMan.packageList(identifier: self.packagesLoadIdentifier, sortPackages: true, repoContext: self.repoContext)
+                let pkgs = packageMan.packageList(identifier: self.packagesLoadIdentifier,
+                                                  sortPackages: true,
+                                                  repoContext: self.repoContext,
+                                                  packagePrepend: self.packagesLoadIdentifier == "--contextInstalled" ? (self.repoContext?.installedPackages ?? []) : nil)
                 self.packages = pkgs
                 self.searchCache[""] = pkgs
-                if let controller = self.searchController {
-                    DispatchQueue.main.async { self.updateSearchResults(for: controller) }
-                }
+                DispatchQueue.main.async { self.updateSearchResults(for: self.searchController) }
             }
             if self.showUpdates {
                 let updates = packageMan.availableUpdates()
@@ -231,21 +243,20 @@ class PackageListViewController: SileoViewController, UIGestureRecognizerDelegat
             }
             
             DispatchQueue.main.async {
-                if !self.availableUpdates.isEmpty {
-                    self.navigationController?.tabBarItem.badgeValue = String(format: "%ld", self.availableUpdates.count)
+                let updates = self.availableUpdates
+                if !updates.isEmpty {
+                    self.navigationController?.tabBarItem.badgeValue = String(format: "%ld", updates.count)
                 } else {
                     self.navigationController?.tabBarItem.badgeValue = nil
                 }
-                
-                if let searchController = self.searchController {
-                    self.updateSearchResults(for: searchController)
-                }
+
+                self.updatePackageList()
             }
         }
     }
 
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-        searchController?.searchBar.isFirstResponder ?? false
+        searchController.searchBar.isFirstResponder
     }
     
     func controller(package: Package) -> PackageActions {
@@ -262,21 +273,24 @@ class PackageListViewController: SileoViewController, UIGestureRecognizerDelegat
         case .packages, .reallyBoringList: return controller(package: packages[indexPath.row])
         case .updates: return controller(package: availableUpdates[indexPath.row])
         case .searchHistoryList:
-            searchController?.searchBar.text = searchHistory[safe: indexPath.row]
+            searchController.searchBar.text = searchHistory[safe: indexPath.row]
             return nil
         }
     }
+    
+    private func updatePackageList() {
+        self.updateSearchResults(for: self.searchController)
+    }
 
     @objc func reloadData() {
+        if showUpdates {
+            self.reloadDataWithUpdates()
+            return
+        }
+        
         self.searchCache = [:]
         self.cachedInstalled = nil
-        if showUpdates {
-            self.reloadUpdates()
-        } else {
-            if let searchController = self.searchController {
-                self.updateSearchResults(for: searchController)
-            }
-        }
+        self.updatePackageList()
     }
     
     @objc func reloadStates(_ notification: Notification) {
@@ -292,30 +306,26 @@ class PackageListViewController: SileoViewController, UIGestureRecognizerDelegat
         }
     }
         
-    @objc func reloadUpdates() {
-        if showUpdates {
-            DispatchQueue.global(qos: .userInteractive).async {
-                let updates = PackageListManager.shared.availableUpdates()
-                self.availableUpdates = updates.filter({ $0.1?.wantInfo != .hold }).map({ $0.0 })
-                if UserDefaults.standard.bool(forKey: "ShowIgnoredUpdates", fallback: true) {
-                    self.ignoredUpdates = updates.filter({ $0.1?.wantInfo == .hold }).map({ $0.0 })
+    @objc func reloadDataWithUpdates() {
+        DispatchQueue.global(qos: .userInteractive).async {
+            let updates = PackageListManager.shared.availableUpdates()
+            self.availableUpdates = updates.filter({ $0.1?.wantInfo != .hold }).map({ $0.0 })
+            if UserDefaults.standard.bool(forKey: "ShowIgnoredUpdates", fallback: true) {
+                self.ignoredUpdates = updates.filter({ $0.1?.wantInfo == .hold }).map({ $0.0 })
+            } else {
+                self.ignoredUpdates.removeAll()
+            }
+            DispatchQueue.main.async {
+                if !self.availableUpdates.isEmpty {
+                    self.navigationController?.tabBarItem.badgeValue = String(format: "%ld", self.availableUpdates.count)
+                    UIApplication.shared.applicationIconBadgeNumber = self.availableUpdates.count
                 } else {
-                    self.ignoredUpdates.removeAll()
+                    self.navigationController?.tabBarItem.badgeValue = nil
+                    UIApplication.shared.applicationIconBadgeNumber = 0
                 }
-                DispatchQueue.main.async {
-                    if !self.availableUpdates.isEmpty {
-                        self.navigationController?.tabBarItem.badgeValue = String(format: "%ld", self.availableUpdates.count)
-                        UIApplication.shared.applicationIconBadgeNumber = self.availableUpdates.count
-                    } else {
-                        self.navigationController?.tabBarItem.badgeValue = nil
-                        UIApplication.shared.applicationIconBadgeNumber = 0
-                    }
-                    self.cachedInstalled = nil
-                    self.searchCache = [:]
-                    if let searchController = self.searchController {
-                        self.updateSearchResults(for: searchController)
-                    }
-                }
+                self.cachedInstalled = nil
+                self.searchCache = [:]
+                self.updatePackageList()
             }
         }
     }
@@ -415,27 +425,21 @@ class PackageListViewController: SileoViewController, UIGestureRecognizerDelegat
         
         let nameAction = UIAlertAction(title: String(localizationKey: "Sort_Name"), style: .default, handler: { _ in
             UserDefaults.standard.set("name", forKey: "InstallSortType")
-            if let searchController = self.searchController {
-                self.updateSearchResults(for: searchController)
-            }
+            self.updatePackageList()
             self.dismiss(animated: true, completion: nil)
         })
         alert.addAction(nameAction)
         
         let dateAction = UIAlertAction(title: String(localizationKey: "Sort_Date"), style: .default, handler: { _ in
             UserDefaults.standard.set("installdate", forKey: "InstallSortType")
-            if let searchController = self.searchController {
-                self.updateSearchResults(for: searchController)
-            }
+            self.updatePackageList()
             self.dismiss(animated: true, completion: nil)
         })
         alert.addAction(dateAction)
         
         let sizeAction = UIAlertAction(title: String(localizationKey: "Sort_Install_Size"), style: .default, handler: { _ in
             UserDefaults.standard.set("size", forKey: "InstallSortType")
-            if let searchController = self.searchController {
-                self.updateSearchResults(for: searchController)
-            }
+            self.updatePackageList()
             self.dismiss(animated: true, completion: nil)
         })
         alert.addAction(sizeAction)
@@ -462,7 +466,7 @@ extension PackageListViewController: UICollectionViewDataSource {
         if showSearchHistory { return 1 }
         var count = 0
         if !packages.isEmpty { count += 1 }
-        if showUpdates {
+        if shouldShowUpdates {
             if !availableUpdates.isEmpty { count += 1 }
             if !ignoredUpdates.isEmpty { count += 1 }
         }
@@ -477,7 +481,7 @@ extension PackageListViewController: UICollectionViewDataSource {
             return .searchHistoryList
         }
         
-        if showUpdates {
+        if shouldShowUpdates {
             if !availableUpdates.isEmpty && section == 0 {
                 return .updates
             } else if availableUpdates.isEmpty && !ignoredUpdates.isEmpty && section == 0 {
@@ -574,7 +578,7 @@ extension PackageListViewController: UICollectionViewDataSource {
             headerView.upgradeButton?.addTarget(self, action: #selector(self.upgradeAllClicked(_:)), for: .touchUpInside)
             return headerView
         case .packages:
-            if showUpdates {
+            if shouldShowUpdates {
                 headerView.label?.text = String(localizationKey: "Installed_Heading")
                 headerView.actionText = nil
                 headerView.sortContainer?.isHidden = false
@@ -613,6 +617,12 @@ extension PackageListViewController: UICollectionViewDelegate {
         collectionView.deselectItem(at: indexPath, animated: true)
         guard let pvc = self.controller(indexPath: indexPath) else { return }
         self.navigationController?.pushViewController(pvc, animated: true)
+        
+        guard UserDefaults.standard.bool(forKey: "ShowSearchHistory", fallback: true) else { return }
+        guard navigationItem.title == String(localizationKey: "Search_Page") else { return }
+        if let text = searchController.searchBar.text, !text.isEmpty {
+            searchHistory.insert(text, at: 0)
+        }
     }
 }
 
@@ -622,7 +632,7 @@ extension PackageListViewController: UICollectionViewDelegateFlowLayout {
         case .reallyBoringList: return .zero
         case .ignoredUpdates, .updates, .canister: return CGSize(width: collectionView.bounds.width, height: 65)
         case .packages, .searchHistoryList:
-            return (showUpdates && displaySettings) ? CGSize(width: collectionView.bounds.width, height: 109) : CGSize(width: collectionView.bounds.width, height: 65)
+            return (shouldShowUpdates && displaySettings) ? CGSize(width: collectionView.bounds.width, height: 109) : CGSize(width: collectionView.bounds.width, height: 65)
         }
     }
     
@@ -714,13 +724,13 @@ extension PackageListViewController: UISearchBarDelegate {
         }
         
         if UserDefaults.standard.bool(forKey: "ShowSearchHistory", fallback: true) {
-            searchHistory.append(text)
+            searchHistory.insert(text, at: 0)
         }
         
         CanisterResolver.shared.fetch(text) { change in
             guard change else { return }
             DispatchQueue.main.async {
-                self.updateSearchResults(for: self.searchController ?? UISearchController())
+                self.updateSearchResults(for: self.searchController)
             }
         }
     }
@@ -737,9 +747,9 @@ extension PackageListViewController: UISearchBarDelegate {
            return .nothing
        }
        
-       let text = (searchController?.searchBar.text ?? "").lowercased()
+       let text = (searchController.searchBar.text ?? "").lowercased()
        let oldEmpty = provisionalPackages.isEmpty
-       if text.count < 3 {
+       if text.lengthOfBytes(using: String.Encoding.utf8) < 2 {
            self.provisionalPackages.removeAll()
            return oldEmpty ? .nothing : .delete
        }
@@ -793,6 +803,11 @@ extension PackageListViewController: UISearchResultsUpdating {
         
         let searchBar = searchController.searchBar
         self.canisterHeartbeat?.invalidate()
+        
+        if (searchBar.text?.isEmpty ?? true) != (self.prevSearchText?.isEmpty ?? true) {
+            self.collectionView?.scrollRectToVisible(CGRect(x: 0, y: 0, width: 1, height: 1), animated: false)
+        }
+        self.prevSearchText = searchBar.text
     
         if searchBar.text?.isEmpty ?? true {
             if showSearchField {
@@ -822,36 +837,37 @@ extension PackageListViewController: UISearchResultsUpdating {
             let packageManager = PackageListManager.shared
             var packages: [Package] = []
 
-            self.showUpdates = query.isEmpty
+            if self.showUpdates {
+                self.shouldShowUpdates = query.isEmpty
+            }
             
             if let cachedPackages = self.searchCache[query.lowercased()] {
                 packages = cachedPackages
             } else if self.packagesLoadIdentifier == "--contextInstalled" {
-                guard let context = self.repoContext,
-                      let url = context.url else { return }
-                let betterContext = RepoManager.shared.repo(with: url) ?? context
+                guard let context = self.repoContext else { return }
+                let betterContext = RepoManager.shared.repo(with: context) ?? context
                 packages = packageManager.packageList(identifier: self.packagesLoadIdentifier,
                                                       search: query,
                                                       sortPackages: true,
                                                       repoContext: nil,
                                                       lookupTable: self.searchCache,
-                                                      packagePrepend: betterContext.installed ?? [])
+                                                      packagePrepend: betterContext.installedPackages ?? [])
                 self.searchCache[query.lowercased()] = packages
             } else {
                 packages = packageManager.packageList(identifier: self.packagesLoadIdentifier,
                                                       search: query,
-                                                      sortPackages: self.packagesLoadIdentifier != "--installed",
+                                                      sortPackages: true,
                                                       repoContext: self.repoContext,
                                                       lookupTable: self.searchCache)
                 self.searchCache[query.lowercased()] = packages
             }
             
-            if self.packagesLoadIdentifier == "--installed" {
+            if self.packagesLoadIdentifier == "--installed" && query.isEmpty {
                 switch SortMode() {
                 case .installdate:
                     packages = packages.sorted(by: { package1, package2 -> Bool in
-                        guard let date1 = package1.installDate,
-                              let date2 = package2.installDate else { return true }
+                        guard let date1 = package1.installDate else { return true }
+                        guard let date2 = package2.installDate else { return false }
                         return date2.compare(date1) == .orderedAscending
                     })
                 case .size:

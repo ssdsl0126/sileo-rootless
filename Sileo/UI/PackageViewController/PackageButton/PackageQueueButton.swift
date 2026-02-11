@@ -75,25 +75,31 @@ class PackageQueueButton: PackageButton {
         let downgradePrompt = UIAlertController(title: String(localizationKey: "Select Version"),
                                                 message: String(localizationKey: "Select the version of the package to install"),
                                                 preferredStyle: .actionSheet)
-        let allVersionsSorted = package.allVersions.sorted(by: { obj1, obj2 -> Bool in
-            if DpkgWrapper.isVersion(obj1.version, greaterThan: obj2.version) {
-                return true
+        var allVersions = [Package]()
+        if package.fromStatusFile {
+            for repo in RepoManager.shared.repoList {
+                allVersions += repo.allVersions(identifier: package.package, ignoreArch: true)
             }
-            return false
-        })
-        for package in allVersionsSorted {
-            if (package.sourceRepo?.rawURL.hasPrefix("https://") == true ||
-                package.sourceRepo?.rawURL.hasPrefix("http://") == true)
-                && package.filename != nil && package.size != nil {
-                downgradePrompt.addAction(UIAlertAction(title: package.version, style: .default, handler: { (_: UIAlertAction) in
+            allVersions = PackageListManager.shared.sortPackages(packages: allVersions, search: nil)
+        } else {
+            allVersions = package.allVersions(ignoreArch: true).sorted(by: { obj1, obj2 -> Bool in
+                DpkgWrapper.isVersion(obj1.version, greaterThan: obj2.version)
+            })
+        }
+        
+        for versionPackage in allVersions {
+            if (versionPackage.sourceRepo?.rawURL.hasPrefix("https://") == true ||
+                versionPackage.sourceRepo?.rawURL.hasPrefix("http://") == true)
+                && versionPackage.filename != nil && versionPackage.size != nil {
+                downgradePrompt.addAction(UIAlertAction(title: versionPackage.version, style: .default, handler: { (_: UIAlertAction) in
                     let downloadManager = DownloadManager.shared
-                    let queueFound = downloadManager.find(package: package)
+                    let queueFound = downloadManager.find(package: versionPackage)
                     if queueFound != .none {
                         // but it's a already queued! user changed their mind about installing this new package => nuke it from the queue
-                        downloadManager.remove(package: package, queue: queueFound)
+                        downloadManager.remove(package: versionPackage, queue: queueFound)
                     }
 
-                    downloadManager.add(package: package, queue: .installations)
+                    downloadManager.add(package: versionPackage, queue: .installations)
                     downloadManager.reloadData(recheckPackages: true)
                 }))
             }

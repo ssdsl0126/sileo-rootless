@@ -67,11 +67,11 @@ class ThemePickerCell: UITableViewCell, UIPickerViewDelegate, UIPickerViewDataSo
     }
     
     func pickerView(_ pickerView: UIPickerView, titleForRow row: Int, forComponent component: Int) -> String? {
-        values[row]
+        String(localizationKey: values[row])
     }
     
     func pickerView(_ pickerView: UIPickerView, didSelectRow row: Int, inComponent component: Int) {
-        subtitle.text = values[row]
+        subtitle.text = String(localizationKey: values[row])
         callback?.themeSelected(row)
     }
 }

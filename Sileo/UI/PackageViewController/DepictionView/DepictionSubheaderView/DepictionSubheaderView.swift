@@ -7,9 +7,51 @@
 //
 
 import Foundation
+import UIKit
+
+class CopyableLabel: UILabel {
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        sharedInit()
+    }
+
+    required init?(coder aDecoder: NSCoder) {
+        super.init(coder: aDecoder)
+        sharedInit()
+    }
+
+    private func sharedInit() {
+        isUserInteractionEnabled = true
+        addGestureRecognizer(UILongPressGestureRecognizer(target: self, action: #selector(showMenu)))
+    }
+
+    @objc private func showMenu(sender: AnyObject?) {
+        becomeFirstResponder()
+
+        let menu = UIMenuController.shared
+
+        if !menu.isMenuVisible {
+            menu.setTargetRect(bounds, in: self)
+            menu.setMenuVisible(true, animated: true)
+        }
+    }
+
+    override func copy(_ sender: Any?) {
+        UIPasteboard.general.string = text
+        UIMenuController.shared.setMenuVisible(false, animated: true)
+    }
+
+    override var canBecomeFirstResponder: Bool {
+        true
+    }
+
+    override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+        action == #selector(UIResponderStandardEditActions.copy)
+    }
+}
 
 class DepictionSubheaderView: DepictionBaseView {
-    var headerLabel: UILabel?
+    var headerLabel: CopyableLabel?
     let useMargins: Bool
     let useBottomMargin: Bool
 
@@ -20,7 +62,7 @@ class DepictionSubheaderView: DepictionBaseView {
         useMargins = (dictionary["useMargins"] as? Bool) ?? true
         useBottomMargin = (dictionary["useBottomMargin"] as? Bool) ?? true
 
-        headerLabel = UILabel(frame: .zero)
+        headerLabel = CopyableLabel(frame: .zero)
         super.init(dictionary: dictionary, viewController: viewController, tintColor: tintColor, isActionable: isActionable)
 
         let useBoldText = (dictionary["useBoldText"] as? Bool) ?? false

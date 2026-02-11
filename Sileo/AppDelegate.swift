@@ -264,6 +264,7 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate, UITabBarControllerDe
                 return false
             }
             let newURL = url.absoluteURL
+            tabBarController.closePopup(animated: true)
             tabBarController.selectedViewController = sourcesSVC
             sourcesVC.presentAddSourceEntryField(url: newURL)
         }
@@ -283,6 +284,7 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate, UITabBarControllerDe
         }
         
         if shortcutItem.type.hasSuffix(".UpgradeAll") {
+            tabBarController.closePopup(animated: true)
             tabBarController.selectedViewController = packageListNVC
             
             let title = String(localizationKey: "Sileo")
@@ -302,12 +304,15 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate, UITabBarControllerDe
                 })
             })
         } else if shortcutItem.type.hasSuffix(".Refresh") {
+            tabBarController.closePopup(animated: true)
             tabBarController.selectedViewController = sourcesSVC
             sourcesVC.refreshSources(forceUpdate: true, forceReload: true, isBackground: false, useRefreshControl: true, useErrorScreen: true, completion: nil)
         } else if shortcutItem.type.hasSuffix(".AddSource") {
+            tabBarController.closePopup(animated: true)
             tabBarController.selectedViewController = sourcesSVC
             sourcesVC.addSource(nil)
         } else if shortcutItem.type.hasSuffix(".Packages") {
+            tabBarController.closePopup(animated: true)
             tabBarController.selectedViewController = packageListNVC
         }
     }

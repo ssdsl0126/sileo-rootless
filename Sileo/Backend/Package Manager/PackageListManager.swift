@@ -16,7 +16,7 @@ final class PackageListManager {
     static let stateChange = Notification.Name("SileoStateChanged")
     static let prefsNotification = Notification.Name("SileoPackagePrefsChanged")
     
-    private(set) var installedPackages: [String: Package] {
+    private(set) var installedPackages = [String: Package]() {
         didSet {
             NotificationCenter.default.post(name: RepoManager.progressNotification, object: installedPackages.count)
         }
@@ -47,7 +47,7 @@ final class PackageListManager {
     public static let shared = PackageListManager()
     
     init() {
-        self.installedPackages = PackageListManager.readPackages(installed: true)
+        self.reloadInstalled()
         operationQueue.maxConcurrentOperationCount = (ProcessInfo.processInfo.processorCount * 2)
         
         packageListQueue.async { [self] in
@@ -101,15 +101,31 @@ final class PackageListManager {
         }
     }
     
-    public func installChange() {
-        installedPackages = PackageListManager.readPackages(installed: true)
+    public func reloadInstalled() {
+        var installedPackages = [String: Package]()
+        let installedDict = PackageListManager.readPackages(installed: true)
+        for (_, idDict) in installedDict {
+            for (identifier, versionPackages) in idDict {
+                if let preferredInstalled = versionPackages.values.max(by: { old, new in
+                    preferredPackage(old: old, new: new)
+                }) {
+                    installedPackages[identifier] = preferredInstalled
+                }
+            }
+        }
+        self.installedPackages = installedPackages
         repoInstallChange()
+    }
+    
+    // Kept for compatibility with existing call sites.
+    public func installChange() {
+        reloadInstalled()
     }
 
     public func availableUpdates() -> [(Package, Package?)] {
         var updatesAvailable: [(Package, Package?)] = []
         for package in installedPackages.values {
-            guard let latestPackage = self.newestPackage(identifier: package.packageID, repoContext: nil) else {
+            guard let latestPackage = self.newestPackage(identifier: package.package, repoContext: nil) else {
                 continue
             }
             if latestPackage.version != package.version {
@@ -118,7 +134,11 @@ final class PackageListManager {
                 }
             }
         }
-        return updatesAvailable
+        return updatesAvailable.sorted {
+            let lhs = $0.0.name ?? $0.0.package
+            let rhs = $1.0.name ?? $1.0.package
+            return lhs.localizedCaseInsensitiveCompare(rhs) == .orderedAscending
+        }
     }
 
     public class func humanReadableCategory(_ rawCategory: String?) -> String {
@@ -178,11 +198,11 @@ final class PackageListManager {
         return package
     }
 
-    public class func readPackages(repoContext: Repo? = nil, packagesFile: URL? = nil, installed: Bool = false) -> [String: Package] {
+    public class func readPackages(repoContext: Repo? = nil, packagesFile: URL? = nil, installed: Bool = false) -> [String?: [String: [String: Package]]] {
         let archs = DpkgWrapper.architecture
         var tmpPackagesFile: URL?
         var toWrite: URL?
-        var dict = [String: Package]()
+        var dict = [String?: [String: [String: Package]]]()
         if installed {
             tmpPackagesFile = CommandPath.dpkgDir.appendingPathComponent("status").resolvingSymlinksInPath()
             toWrite = tmpPackagesFile
@@ -251,6 +271,7 @@ final class PackageListManager {
             package.sourceFileURL = toWrite
             savedCount += packageData.count
             package.rawData = packageData
+            package.fromStatusFile = isStatusFile
             
             if isStatusFile {
                 var wantInfo: pkgwant = .install
@@ -277,19 +298,8 @@ final class PackageListManager {
                 let packageInstallPath = CommandPath.dpkgDir.appendingPathComponent("info/\(packageID).list")
                 let attr = try? FileManager.default.attributesOfItem(atPath: packageInstallPath.path)
                 package.installDate = attr?[FileAttributeKey.modificationDate] as? Date
-                dict[package.packageID] = package
-            } else {
-                if let otherPkg = dict[packageID] {
-                    if DpkgWrapper.isVersion(package.version, greaterThan: otherPkg.version) {
-                        package.addOld(from: otherPkg)
-                        dict[packageID] = package
-                    } else {
-                        otherPkg.addOld(from: package)
-                    }
-                } else {
-                    dict[packageID] = package
-                }
             }
+            dict[package.architecture, default: [:]][package.package, default: [:]][package.version] = package
         }
 
         return dict
@@ -330,10 +340,10 @@ final class PackageListManager {
             let index = identifier.index(identifier.startIndex, offsetBy: 7)
             let authorEmail = String(identifier[index...])
             packageList = packageList.filter {
-                guard let authorEmail = $0.author?.email else {
+                guard let packageAuthorEmail = $0.author?.email else {
                     return false
                 }
-                return authorEmail == authorEmail
+                return packageAuthorEmail == authorEmail
             }
         }
         if let searchQuery = search,
@@ -352,7 +362,7 @@ final class PackageListManager {
         var temp = [String: Package]()
         for package in packageList {
             if let existing = temp[package.packageID] {
-                if DpkgWrapper.isVersion(package.version, greaterThan: existing.version) {
+                if preferredPackage(old: existing, new: package) {
                     temp[package.packageID] = package
                 }
             } else {
@@ -416,14 +426,14 @@ final class PackageListManager {
             package.packageFileURL = url
             return package
         } else if let repoContext = repoContext {
-            return repoContext.packageDict[identifier.lowercased()]
+            return repoContext.newestPackage(identifier: identifier)
         } else {
             var newestPackage: Package?
             if var packages = packages {
-                packages = packages.filter { $0.packageID == identifier }
+                packages = packages.filter { $0.package == identifier }
                 for package in packages {
                     if let old = newestPackage {
-                        if DpkgWrapper.isVersion(package.version, greaterThan: old.version) {
+                        if preferredPackage(old: old, new: package) {
                             newestPackage = package
                         }
                     } else {
@@ -433,9 +443,9 @@ final class PackageListManager {
                 return newestPackage
             }
             for repo in RepoManager.shared.repoList {
-                if let package = repo.packageDict[identifier] {
+                if let package = repo.newestPackage(identifier: identifier) {
                     if let old = newestPackage {
-                        if DpkgWrapper.isVersion(package.version, greaterThan: old.version) {
+                        if preferredPackage(old: old, new: package) {
                             newestPackage = package
                         }
                     } else {
@@ -448,7 +458,7 @@ final class PackageListManager {
     }
     
     public func installedPackage(identifier: String) -> Package? {
-        installedPackages[identifier.lowercased()]
+        installedPackages[identifier]
     }
     
     public func package(url: URL) -> Package? {
@@ -492,17 +502,17 @@ final class PackageListManager {
     
     public func package(identifier: String, version: String, packages: [Package]? = nil) -> Package? {
         if let packages = packages {
-            return packages.first(where: { $0.packageID == identifier && $0.version == version })
+            return packages.first(where: { $0.package == identifier && $0.version == version })
         }
+        
+        if let package = localPackages[identifier], package.version == version {
+            return package
+        }
+        
         for repo in RepoManager.shared.repoList {
-            if let package = repo.packageDict[identifier],
-               let version = package.getVersion(version) {
-                return version
+            if let package = repo.getPackage(identifier: identifier, version: version, ignoreArch: true) {
+                return package
             }
-        }
-        if let package = localPackages[identifier],
-           let version = package.getVersion(version) {
-            return version
         }
         return nil
     }
@@ -540,4 +550,26 @@ final class PackageListManager {
             }
         }
     }
+}
+
+func preferredPackage(old: Package, new: Package) -> Bool {
+    if DpkgWrapper.isVersion(new.version, greaterThan: old.version) {
+        return true
+    }
+    if DpkgWrapper.isVersion(old.version, greaterThan: new.version) {
+        return false
+    }
+    
+    let preferredArch = DpkgWrapper.architecture.primary.rawValue
+    func score(_ package: Package) -> Int {
+        var score = 0
+        if package.architecture == preferredArch {
+            score += 2
+        }
+        if package.architecture == "all" {
+            score += 1
+        }
+        return score
+    }
+    return score(new) > score(old)
 }

@@ -6,14 +6,26 @@ name: Build
 jobs:
   make:
     name: Build and Upload Sileo
-    runs-on: macos-12
+    runs-on: macos-latest
     steps:
 
       - name: Checkout
-        uses: actions/checkout@master
+        uses: actions/checkout@v4
         with:
           submodules: recursive
           token: ${{ secrets.SILEO_PAT }}
+
+      - name: Select Xcode (latest stable)
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Show build environment
+        run: |
+          echo "Runner architecture: $RUNNER_ARCH"
+          xcodebuild -version
+          xcode-select -p
+
       - name: Import all certificates
         env:
           DEVELOPMENT_PASSWORD: ${{ secrets.DEVELOPMENT_PASSWORD }}
@@ -41,8 +53,15 @@ jobs:
 
       - name: Setup Procursus Bootstrap (install)
         run: |
-          wget https://apt.procurs.us/bootstraps/big_sur/bootstrap-darwin-amd64.tar.zst
-          sudo gtar --preserve-permissions -xkf ./bootstrap-darwin-amd64.tar.zst -C /
+          if [ "$RUNNER_ARCH" = "ARM64" ]; then
+            BOOTSTRAP_ARCH="darwin-arm64"
+          else
+            BOOTSTRAP_ARCH="darwin-amd64"
+          fi
+          BOOTSTRAP_FILE="bootstrap-${BOOTSTRAP_ARCH}.tar.zst"
+          curl -L --fail --retry 3 -o "$BOOTSTRAP_FILE" "https://apt.procurs.us/bootstraps/big_sur/$BOOTSTRAP_FILE"
+          TAR_BIN="$(command -v gtar || command -v tar)"
+          sudo "$TAR_BIN" --preserve-permissions -xkf "./$BOOTSTRAP_FILE" -C /
           echo '/opt/procursus/sbin:/opt/procursus/bin' >> $GITHUB_PATH
           PATH=/opt/procursus/sbin:/opt/procursus/bin:$PATH sudo /opt/procursus/bin/apt update
           sudo /opt/procursus/bin/apt -V full-upgrade -y --allow-downgrades -oDpkg::Options::=--force-confdef -oDpkg::Options::=--force-confnew 
@@ -59,10 +78,6 @@ jobs:
       - name: Add Procursus to PATH
         run: |
           echo '/opt/procursus/sbin:/opt/procursus/bin' >> $GITHUB_PATH
-
-      - name: Select Correct Xcode (14.2)
-        run: |
-          sudo xcode-select --switch /Applications/Xcode_14.2.app
 
       - name: Build Sileo Nightly (iphoneos-arm)
         run: |

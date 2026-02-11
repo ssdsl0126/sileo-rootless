@@ -33,10 +33,8 @@ final class Package: PackageProtocol {
     public var installedSize: Int?
     public var tags: PackageTags = .none
     public var nativeDepiction: URL?
-    
-    public var allVersionsInternal = [String: Package]()
     public var allVersions: [Package] {
-        [self] + Array(allVersionsInternal.values)
+        allVersions(ignoreArch: false)
     }
     
     public var fromStatusFile = false
@@ -94,23 +92,24 @@ final class Package: PackageProtocol {
         icon != nil
     }
 
-    public func addOld(_ packages: [Package]) {
-        for package in packages {
-            if package == self { continue }
-            allVersionsInternal[package.version] = package
+    public func allVersions(ignoreArch: Bool = false) -> [Package] {
+        if let repo = sourceRepo {
+            return repo.allVersions(identifier: package, ignoreArch: ignoreArch)
         }
+        return [self]
     }
     
+    // Kept for compatibility with legacy call sites.
+    public func addOld(_ packages: [Package]) {}
+    
+    // Kept for compatibility with legacy call sites.
     public func addOld(from package: Package) {
-        for package in package.allVersions {
-            if package == self { continue }
-            allVersionsInternal[package.version] = package
-        }
+        addOld(package.allVersions)
     }
     
     public func getVersion(_ version: String) -> Package? {
         if version == self.version { return self }
-        return allVersionsInternal[version]
+        return sourceRepo?.getPackage(identifier: package, version: version, ignoreArch: true)
     }
 }
 
