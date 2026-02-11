@@ -83,36 +83,6 @@ jobs:
           fi
           make package NIGHTLY=1 DEBUG=0 ALL_BOOTSTRAPS=1 SILEO_PLATFORM=iphoneos-arm64 IOS_DEPLOYMENT_TARGET=12.0
 
-      - name: Build Sileo Nightly (darwin-amd64)
-        run: |
-          make clean
-          xcodebuild -resolvePackageDependencies -project Sileo.xcodeproj -scheme Sileo -derivedDataPath "$TMPDIR/sileo"
-          ALDERIS_FILE="$TMPDIR/sileo/SourcePackages/checkouts/Alderis/Alderis/ColorPickerInnerViewController.swift"
-          if [ ! -f "$ALDERIS_FILE" ]; then
-            echo "Alderis source file not found: $ALDERIS_FILE"
-            exit 1
-          fi
-          if ! grep -q 'var pickerTab: ColorPickerTab' "$ALDERIS_FILE"; then
-            sed -i '' 's/var tab: ColorPickerTab/var pickerTab: ColorPickerTab/' "$ALDERIS_FILE"
-            sed -i '' 's/tab = configuration.initialTab/pickerTab = configuration.initialTab/' "$ALDERIS_FILE"
-          fi
-          make package NIGHTLY=1 DEBUG=0 AUTOMATION=1 SILEO_PLATFORM=darwin-amd64
-
-      - name: Build Sileo Nightly (darwin-arm64)
-        run: |
-          make clean
-          xcodebuild -resolvePackageDependencies -project Sileo.xcodeproj -scheme Sileo -derivedDataPath "$TMPDIR/sileo"
-          ALDERIS_FILE="$TMPDIR/sileo/SourcePackages/checkouts/Alderis/Alderis/ColorPickerInnerViewController.swift"
-          if [ ! -f "$ALDERIS_FILE" ]; then
-            echo "Alderis source file not found: $ALDERIS_FILE"
-            exit 1
-          fi
-          if ! grep -q 'var pickerTab: ColorPickerTab' "$ALDERIS_FILE"; then
-            sed -i '' 's/var tab: ColorPickerTab/var pickerTab: ColorPickerTab/' "$ALDERIS_FILE"
-            sed -i '' 's/tab = configuration.initialTab/pickerTab = configuration.initialTab/' "$ALDERIS_FILE"
-          fi
-          make package NIGHTLY=1 DEBUG=0 AUTOMATION=1 SILEO_PLATFORM=darwin-arm64
-
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
