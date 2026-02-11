@@ -15,11 +15,12 @@
 #include <stdlib.h>
 #include <limits.h>
 #include <ctype.h>
+#include <stdint.h>
 
 struct DpkgVersion {
     char *version;
     char *revision;
-    uint epoch;
+    unsigned int epoch;
     uint8_t requiresFree;
 };
 

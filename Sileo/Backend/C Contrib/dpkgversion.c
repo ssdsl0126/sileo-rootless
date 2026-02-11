@@ -11,7 +11,7 @@
 int order(char ch) {
     if (isalpha(ch)) {
         return ch;
-    } else if (ch == 126) {
+    } else if (ch == 126) { // '~'
         return -1;
     } else if (ch > 0) {
         return (int)ch + 256;
@@ -47,7 +47,7 @@ int verrevcmp(const char *val, const char *ref) {
         }
         
         // Skip past 0
-        while (*val == 48 && *val)
+        while (*val == 48 && *val) // '0'
             val++;
         while (*ref == 48 && *ref)
             ref++;
@@ -88,7 +88,8 @@ void parseVersion(char *version, int *length, char **error, struct DpkgVersion *
             *error = "epoch cannot be blank";
             return;
         }
-        char epochString[searchIdx];
+        char epochString[searchIdx + 1];
+        memset(epochString, 0, searchIdx + 1);
         memcpy(epochString, version, searchIdx);
         
         *length -= (searchIdx + 1);
@@ -100,9 +101,9 @@ void parseVersion(char *version, int *length, char **error, struct DpkgVersion *
         }
         
         errno = 0;
-        char *ret;
+        char *ret = NULL;
         epochNum = strtol(epochString, &ret, 10);
-        if (strcmp(ret, epochString) == 0) {
+        if (!ret || *ret != '\0') {
             *error = "epoch is not a number";
             return;
         }
@@ -121,7 +122,7 @@ void parseVersion(char *version, int *length, char **error, struct DpkgVersion *
     found = 0;
 
     for (; searchIdx >= 0; searchIdx--) {
-        if (version[searchIdx] == 45) {
+        if (version[searchIdx] == 45) { // '-'
             found = 1;
             break;
         }
@@ -174,8 +175,17 @@ int compareVersion(const char *version1, int version1Count, const char *version2
     if (strcmp(version1, version2) == 0)
         return 0;
 
-    char *_version1 = (char *)version1;
-    char *_version2 = (char *)version2;
+    size_t version1Size = strlen(version1) + 1;
+    size_t version2Size = strlen(version2) + 1;
+    char *_version1 = malloc(version1Size);
+    char *_version2 = malloc(version2Size);
+    if (!_version1 || !_version2) {
+        free(_version1);
+        free(_version2);
+        return 0;
+    }
+    memcpy(_version1, version1, version1Size);
+    memcpy(_version2, version2, version2Size);
 
     struct DpkgVersion package1 = { 0 };
     struct DpkgVersion package2 = { 0 };
@@ -218,5 +228,7 @@ cleanup:
         free(package2.version);
         free(package2.revision);
     }
+    free(_version1);
+    free(_version2);
     return cmp;
 }
