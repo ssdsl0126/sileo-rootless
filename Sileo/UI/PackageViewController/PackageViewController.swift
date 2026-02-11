@@ -331,7 +331,25 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
                 ]
             ]
         }
-        if let repo = package.sourceRepo {
+        var sourcePackages = [Package]()
+        for repo in RepoManager.shared.repoList {
+            if let repoPackage = repo.newestPackage(identifier: package.package, ignoreArch: true) {
+                sourcePackages.append(repoPackage)
+            }
+        }
+        sourcePackages.sort { lhs, rhs in
+            let lhsName = lhs.sourceRepo?.displayName ?? ""
+            let rhsName = rhs.sourceRepo?.displayName ?? ""
+            let nameOrder = lhsName.localizedCaseInsensitiveCompare(rhsName)
+            if nameOrder == .orderedSame {
+                return DpkgWrapper.isVersion(lhs.version, greaterThan: rhs.version)
+            }
+            return nameOrder == .orderedAscending
+        }
+        if sourcePackages.isEmpty, package.sourceRepo != nil {
+            sourcePackages = [package]
+        }
+        if !sourcePackages.isEmpty {
             views.insert([
                 "class": "DepictionSeparatorView"
             ], at: 0)
@@ -339,12 +357,31 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
                 "class": "DepictionHeaderView",
                 "title": String(localizationKey: "Repo")
             ], at: 1)
-            views.insert([
-                "class": "DepictionTableButtonView",
-                "title": repo.displayName,
-                "action": "showRepoContext",
-                "_repo": repo.url?.absoluteString as Any
-            ], at: 2)
+
+            if sourcePackages.count == 1, let repo = sourcePackages[0].sourceRepo {
+                views.insert([
+                    "class": "DepictionTableButtonView",
+                    "title": repo.displayName,
+                    "action": "showRepoContext",
+                    "context": repo as Any,
+                    "_repo": repo.url?.absoluteString as Any
+                ], at: 2)
+            } else {
+                var viewIndex = 2
+                for sourcePackage in sourcePackages {
+                    guard let repo = sourcePackage.sourceRepo else {
+                        continue
+                    }
+                    views.insert([
+                        "class": "DepictionTableButtonView",
+                        "title": "\(repo.displayName) (\(sourcePackage.version))",
+                        "action": "showPackage",
+                        "context": sourcePackage as Any,
+                        "_repo": repo.url?.absoluteString as Any
+                    ], at: viewIndex)
+                    viewIndex += 1
+                }
+            }
         }
         views.append([
             "class": "DepictionSubheaderView",

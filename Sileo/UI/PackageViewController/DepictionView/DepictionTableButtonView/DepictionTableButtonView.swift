@@ -17,6 +17,7 @@ class DepictionTableButtonView: DepictionBaseView, UIGestureRecognizerDelegate {
 
     private var action: String
     private var backupAction: String
+    private var context: Any?
 
     private let openExternal: Bool
 
@@ -35,6 +36,7 @@ class DepictionTableButtonView: DepictionBaseView, UIGestureRecognizerDelegate {
 
         self.action = action
         backupAction = (dictionary["backupAction"] as? String) ?? ""
+        context = dictionary["context"]
 
         openExternal = (dictionary["openExternal"] as? Bool) ?? false
 
@@ -146,6 +148,6 @@ class DepictionTableButtonView: DepictionBaseView, UIGestureRecognizerDelegate {
         if action.isEmpty {
             return false
         }
-        return DepictionButton.processAction(action, parentViewController: self.parentViewController, openExternal: openExternal)
+        return DepictionButton.processAction(action, parentViewController: self.parentViewController, openExternal: openExternal, context: context)
     }
 }

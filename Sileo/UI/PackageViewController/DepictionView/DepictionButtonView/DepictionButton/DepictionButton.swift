@@ -35,7 +35,7 @@ class DepictionButton: UIButton {
         }
     }
     
-    static func processAction(_ action: String, parentViewController: UIViewController?, openExternal: Bool) -> Bool {
+    static func processAction(_ action: String, parentViewController: UIViewController?, openExternal: Bool, context: Any? = nil) -> Bool {
         if action.hasPrefix("http"),
             let url = URL(string: action) {
             if openExternal {
@@ -57,8 +57,11 @@ class DepictionButton: UIButton {
                 return true
             }
         } else if action == "showRepoContext" {
-            if let packageViewController = parentViewController as? PackageViewController,
-               let repo = packageViewController.package?.sourceRepo {
+            if let packageViewController = parentViewController as? PackageViewController {
+                let repo = (context as? Repo) ?? packageViewController.package?.sourceRepo
+                guard let repo = repo else {
+                    return false
+                }
                 if let navController = packageViewController.navigationController as? SileoNavigationController {
                     for viewController in navController.viewControllers {
                         if viewController.isKind(of: CategoryViewController.self) {
@@ -74,6 +77,12 @@ class DepictionButton: UIButton {
                 categoryVC.repoContext = repo
                 categoryVC.title = repo.repoName
                 parentViewController?.navigationController?.pushViewController(categoryVC, animated: true)
+                return true
+            }
+        } else if action == "showPackage" {
+            if let package = context as? Package {
+                let packageVC = NativePackageViewController.viewController(for: package)
+                parentViewController?.navigationController?.pushViewController(packageVC, animated: true)
                 return true
             }
         } else if let url = URL(string: action) {

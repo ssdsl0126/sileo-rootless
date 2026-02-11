@@ -164,6 +164,20 @@ class PackageCollectionViewCell: SwipeCollectionViewCell {
 }
 
 extension PackageCollectionViewCell: SwipeCollectionViewCellDelegate {
+    private func packageForInstallActions(from package: Package) -> Package {
+        if package.package.contains("/") {
+            return package
+        }
+        if package.sourceRepo != nil, package.filename != nil {
+            return package
+        }
+        return PackageListManager.shared.newestPackage(identifier: package.package, repoContext: nil) ?? package
+    }
+
+    private func isDownloadablePackage(_ package: Package) -> Bool {
+        package.sourceRepo != nil && package.filename != nil
+    }
+
     func collectionView(_ collectionView: UICollectionView, editActionsForItemAt indexPath: IndexPath, for orientation: SwipeActionsOrientation) -> [SwipeAction]? {
         // Different actions depending on where we are headed
         // Also making sure that the set package actually exists
@@ -188,21 +202,21 @@ extension PackageCollectionViewCell: SwipeCollectionViewCellDelegate {
         }
         // Check if the package is actually installed
         if let installedPackage = PackageListManager.shared.installedPackage(identifier: package.package) {
-            let repo = RepoManager.shared.repoList.first(where: { $0.rawEntry == package.sourceFile })
+            let actionPackage = packageForInstallActions(from: package)
             // Check we have a repo for the package
             if queueFound != .uninstallations {
                 actions.append(uninstallAction(package))
             }
-            if package.filename != nil && repo != nil {
+            if isDownloadablePackage(actionPackage) {
                 // Check if can be updated
-                if DpkgWrapper.isVersion(package.version, greaterThan: installedPackage.version) {
+                if DpkgWrapper.isVersion(actionPackage.version, greaterThan: installedPackage.version) {
                     if queueFound != .upgrades {
-                        actions.append(upgradeAction(package))
+                        actions.append(upgradeAction(actionPackage))
                     }
                 } else {
                     // Only add re-install if it can't be updated
                     if queueFound != .installations {
-                        actions.append(reinstallAction(package))
+                        actions.append(reinstallAction(actionPackage))
                     }
                 }
             }

@@ -162,6 +162,20 @@ class PackageQueueButton: PackageButton {
     func updateButton(title: String) {
         self.setTitle(title.uppercased(), for: .normal)
     }
+
+    private func packageForInstallActions(from package: Package) -> Package {
+        if package.package.contains("/") {
+            return package
+        }
+        if package.sourceRepo != nil, package.filename != nil {
+            return package
+        }
+        return PackageListManager.shared.newestPackage(identifier: package.package, repoContext: nil) ?? package
+    }
+
+    private func isDownloadablePackage(_ package: Package) -> Bool {
+        package.sourceRepo != nil && package.filename != nil
+    }
     
     func actionItems() -> [CSActionItem] {
         guard let package = self.package else {
@@ -186,14 +200,10 @@ class PackageQueueButton: PackageButton {
 
         let queueFound = downloadManager.find(package: package)
         if let installedPackage = installedPackage {
+            let actionPackage = packageForInstallActions(from: package)
             if !package.commercial || (paymentInfo?.available ?? false) {
-                var repo: Repo?
-                for repoEntry in RepoManager.shared.repoList where
-                    repoEntry.rawEntry == package.sourceFile {
-                    repo = repoEntry
-                }
-                if package.filename != nil && repo != nil {
-                    if DpkgWrapper.isVersion(package.version, greaterThan: installedPackage.version) {
+                if isDownloadablePackage(actionPackage) {
+                    if DpkgWrapper.isVersion(actionPackage.version, greaterThan: installedPackage.version) {
                         let action = CSActionItem(title: String(localizationKey: "Package_Upgrade_Action"),
                                                   image: UIImage(systemNameOrNil: "icloud.and.arrow.down"),
                                                   style: .default) {
@@ -201,11 +211,11 @@ class PackageQueueButton: PackageButton {
                                 downloadManager.remove(package: package, queue: queueFound)
                             }
                             self.hapticResponse()
-                            downloadManager.add(package: package, queue: .upgrades)
+                            downloadManager.add(package: actionPackage, queue: .upgrades)
                             downloadManager.reloadData(recheckPackages: true)
                         }
                         actionItems.append(action)
-                    } else if package.version == installedPackage.version {
+                    } else if actionPackage.version == installedPackage.version {
                         let action = CSActionItem(title: String(localizationKey: "Package_Reinstall_Action"),
                                                   image: UIImage(systemNameOrNil: "arrow.clockwise.circle"),
                                                   style: .default) {
@@ -213,7 +223,7 @@ class PackageQueueButton: PackageButton {
                                 downloadManager.remove(package: package, queue: queueFound)
                             }
                             self.hapticResponse()
-                            downloadManager.add(package: package, queue: .installations)
+                            downloadManager.add(package: actionPackage, queue: .installations)
                             downloadManager.reloadData(recheckPackages: true)
                         }
                         actionItems.append(action)
@@ -298,26 +308,22 @@ class PackageQueueButton: PackageButton {
             TabBarController.singleton?.presentPopupController()
             downloadManager.reloadData(recheckPackages: true)
         } else if let installedPackage = installedPackage {
+            let actionPackage = packageForInstallActions(from: package)
             // road clear to modify an installed package, now we gotta decide what modification
             let downloadPopup: UIAlertController! = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
             if !package.commercial || (paymentInfo?.available ?? false) {
-                var repo: Repo?
-                for repoEntry in RepoManager.shared.repoList where
-                    repoEntry.rawEntry == package.sourceFile {
-                    repo = repoEntry
-                 }
-                if package.filename != nil && repo != nil {
-                    if DpkgWrapper.isVersion(package.version, greaterThan: installedPackage.version) {
+                if isDownloadablePackage(actionPackage) {
+                    if DpkgWrapper.isVersion(actionPackage.version, greaterThan: installedPackage.version) {
                         let upgradeAction = UIAlertAction(title: String(localizationKey: "Package_Upgrade_Action"),
                                                           style: .default) { _ in
-                            downloadManager.add(package: package, queue: .upgrades)
+                            downloadManager.add(package: actionPackage, queue: .upgrades)
                             downloadManager.reloadData(recheckPackages: true)
                         }
                         downloadPopup.addAction(upgradeAction)
-                    } else if package.version == installedPackage.version {
+                    } else if actionPackage.version == installedPackage.version {
                         let reinstallAction = UIAlertAction(title: String(localizationKey: "Package_Reinstall_Action"),
                                                             style: .default) { _ in
-                            downloadManager.add(package: package, queue: .installations)
+                            downloadManager.add(package: actionPackage, queue: .installations)
                             downloadManager.reloadData(recheckPackages: true)
                         }
                         downloadPopup.addAction(reinstallAction)

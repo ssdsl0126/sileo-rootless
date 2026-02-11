@@ -22,6 +22,10 @@ int order(char ch) {
 int validate(char *string, int *length) {
     for (int i = 0; i < *length; i++) {
         unsigned char character = (unsigned char)string[i];
+        if (character == '\0') {
+            // The parsed slice should only be null-terminated at the final byte.
+            return (i == (*length - 1)) ? 0 : 1;
+        }
         int isAllowedPunctuation = (character == '.') || (character == '-') || (character == '+') || (character == '~') || (character == ':');
         if (!(isdigit(character) || isalpha(character) || isAllowedPunctuation)) {
             return 1;
