@@ -293,7 +293,7 @@ extension CategoryViewController: UIViewControllerPreviewingDelegate {
     }
 }
 
-@available (iOS 13, *)
+@available(iOS 13, *)
 extension CategoryViewController {
     override func tableView(_ tableView: UITableView, contextMenuConfigurationForRowAt indexPath: IndexPath, point: CGPoint) -> UIContextMenuConfiguration? {
         let categoryVC = self.controller(indexPath: indexPath)

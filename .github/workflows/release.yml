@@ -68,7 +68,7 @@ jobs:
             sed -i '' 's/var tab: ColorPickerTab/var pickerTab: ColorPickerTab/' "$ALDERIS_FILE"
             sed -i '' 's/tab = configuration.initialTab/pickerTab = configuration.initialTab/' "$ALDERIS_FILE"
           fi
-          make package DEBUG=0 ALL_BOOTSTRAPS=1
+          make package DEBUG=0 ALL_BOOTSTRAPS=1 IOS_DEPLOYMENT_TARGET=12.0
 
       - name: Build Sileo (iphoneos-arm64)
         run: |
@@ -83,7 +83,7 @@ jobs:
             sed -i '' 's/var tab: ColorPickerTab/var pickerTab: ColorPickerTab/' "$ALDERIS_FILE"
             sed -i '' 's/tab = configuration.initialTab/pickerTab = configuration.initialTab/' "$ALDERIS_FILE"
           fi
-          make package DEBUG=0 ALL_BOOTSTRAPS=1 SILEO_PLATFORM=iphoneos-arm64
+          make package DEBUG=0 ALL_BOOTSTRAPS=1 SILEO_PLATFORM=iphoneos-arm64 IOS_DEPLOYMENT_TARGET=12.0
 
       - name: Build Sileo (darwin-amd64)
         run: |

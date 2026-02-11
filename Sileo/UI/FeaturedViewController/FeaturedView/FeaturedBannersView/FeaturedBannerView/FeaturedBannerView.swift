@@ -114,7 +114,7 @@ class FeaturedBannerView: UIButton, UIViewControllerPreviewingDelegate {
     }
 }
 
-@available (iOS 13, *)
+@available(iOS 13, *)
 class FeaturedBannerViewInteractionDelegate: NSObject, UIContextMenuInteractionDelegate {
     weak var bannerView: FeaturedBannerView!
     

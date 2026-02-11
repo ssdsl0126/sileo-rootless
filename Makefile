@@ -10,6 +10,7 @@ AUTOMATION         ?= 0
 ALL_BOOTSTRAPS     ?= 1
 
 DEBUG              ?= 0
+IOS_DEPLOYMENT_TARGET ?= 11.0
 
 TARGET_CODESIGN = $(shell which ldid)
 
@@ -194,7 +195,7 @@ stage: all
 	@echo $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP)
 	@set -o pipefail; \
 		xcodebuild -jobs $(shell sysctl -n hw.ncpu) -project 'Sileo.xcodeproj' -scheme "$(SCHEME)" -configuration $(BUILD_CONFIG) -arch $(ARCH) -sdk $(PLATFORM) -derivedDataPath $(SILEOTMP) \
-		CODE_SIGNING_ALLOWED=NO PRODUCT_BUNDLE_IDENTIFIER=$(PRODUCT_BUNDLE_IDENTIFIER) DISPLAY_NAME=$(DISPLAY_NAME) \
+		CODE_SIGNING_ALLOWED=NO IPHONEOS_DEPLOYMENT_TARGET=$(IOS_DEPLOYMENT_TARGET) PRODUCT_BUNDLE_IDENTIFIER=$(PRODUCT_BUNDLE_IDENTIFIER) DISPLAY_NAME=$(DISPLAY_NAME) \
 		DSTROOT=$(SILEOTMP)/install $(XCPRETTY) ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES=NO
 	@rm -rf $(SILEO_STAGE_DIR)/
 	@mkdir -p $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/

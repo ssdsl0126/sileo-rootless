@@ -9,7 +9,7 @@
 import UIKit
 
 protocol PackageActions: UIViewController {
-    @available (iOS 13.0, *)
+    @available(iOS 13.0, *)
     func actions() -> [UIAction]
 }
 
@@ -29,7 +29,7 @@ import Evander
 import SafariServices
 
 protocol PackageActions: UIViewController {
-    @available (iOS 13.0, *)
+    @available(iOS 13.0, *)
     func actions() -> [UIAction]
 }
 
@@ -350,7 +350,7 @@ class NativePackageViewController: SileoViewController, PackageActions {
         downloadButton.actionItems().map({ $0.previewAction() })
     }
     
-    @available (iOS 13.0, *)
+    @available(iOS 13.0, *)
     func actions() -> [UIAction] {
         _ = self.view
         return downloadButton.actionItems().map({ $0.action() })

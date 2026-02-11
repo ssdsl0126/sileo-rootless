@@ -91,7 +91,7 @@ extension NewsArticlesViewController { // 3D Touch
     }
 }
 
-@available (iOS 13, *)
+@available(iOS 13, *)
 extension NewsArticlesViewController {
     func collectionView(_ collectionView: UICollectionView, contextMenuConfigurationForItemAt indexPath: IndexPath, point: CGPoint) -> UIContextMenuConfiguration? {
         var presentModally = false

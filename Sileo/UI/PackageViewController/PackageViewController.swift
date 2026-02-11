@@ -690,7 +690,7 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
         downloadButton.actionItems().map({ $0.previewAction() })
     }
     
-    @available (iOS 13.0, *)
+    @available(iOS 13.0, *)
     func actions() -> [UIAction] {
         _ = self.view
         return downloadButton.actionItems().map({ $0.action() })
