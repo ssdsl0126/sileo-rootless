@@ -13,7 +13,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
-          token: ${{ secrets.SILEO_PAT }}
 
       - name: Select Xcode (latest stable)
         uses: maxim-lobanov/setup-xcode@v1
