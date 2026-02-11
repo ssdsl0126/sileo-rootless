@@ -3,6 +3,8 @@ on:
     types: [published]
 
 name: Build
+permissions:
+  contents: write
 jobs:
   make:
     name: Build and Upload Sileo
@@ -95,44 +97,8 @@ jobs:
         run: |
           make clean package DEBUG=0 AUTOMATION=1 SILEO_PLATFORM=darwin-arm64
       
-      - name: Import GPG key
-        id: import_gpg
-        uses: crazy-max/ghaction-import-gpg@v5
+      - name: Upload build artifacts to GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
-
-      - name: Push To Amy Repo
-        env:
-          AMY_GITHUB_TOKEN: ${{ secrets.AMY_GITHUB }}
-        run: |
-          git config --global user.name "Amy While (Automated)"
-          git config --global user.email "26681721+elihwyma@users.noreply.github.com"
-          git config --global credential.helper cache 
-
-          git clone https://${{ env.AMY_GITHUB_TOKEN }}@github.com/elihwyma/amy-repo.git
-          mv packages/* amy-repo/pool/
-          cd amy-repo
-          ./repo.sh
-          git add . 
-          git commit -m "build: sileo"
-          git push
-          cd ..
-          rm -rf amy-repo
-
-      - name: Push To Sileo Repo
-        env:
-          AMY_GITHUB_TOKEN: ${{ secrets.AMY_GITHUB }}
-        run: |
-          git config --global user.name "Amy While (Automated)"
-          git config --global user.email "26681721+elihwyma@users.noreply.github.com"
-          git config --global credential.helper cache 
-
-          git clone https://${{ env.AMY_GITHUB_TOKEN }}@github.com/sileo/repo.git
-          mv packages/* repo/pool/
-          cd repo
-          ./repo.sh
-          git add . 
-          git commit -m "build: sileo"
-          git push
-          cd ..
-          rm -rf repo
+          files: |
+            packages/*
