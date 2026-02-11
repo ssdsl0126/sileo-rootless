@@ -21,8 +21,9 @@ int order(char ch) {
 
 int validate(char *string, int *length) {
     for (int i = 0; i < *length; i++) {
-        char character = string[i];
-        if (!(isdigit(character) || isalpha(character) || strrchr(".-+~:", character))) {
+        unsigned char character = (unsigned char)string[i];
+        int isAllowedPunctuation = (character == '.') || (character == '-') || (character == '+') || (character == '~') || (character == ':');
+        if (!(isdigit(character) || isalpha(character) || isAllowedPunctuation)) {
             return 1;
         }
     }
