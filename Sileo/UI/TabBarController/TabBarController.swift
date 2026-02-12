@@ -33,6 +33,8 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
         
         downloadsController = UINavigationController(rootViewController: DownloadManager.shared.viewController)
         downloadsController?.isNavigationBarHidden = true
+        downloadsController?.view.backgroundColor = .clear
+        downloadsController?.view.isOpaque = false
         downloadsController?.popupItem.title = ""
         downloadsController?.popupItem.subtitle = ""
         
@@ -114,6 +116,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
         self.popupBar.progressViewStyle = .bottom
         self.popupContentView.popupCloseButtonStyle = UIDevice.current.userInterfaceIdiom == .phone ? .grabber : .chevron
         self.popupContentView.isTranslucent = true
+        self.popupContentView.backgroundColor = .clear
         self.popupInteractionStyle = preferredPopupInteractionStyle
         self.presentPopupBar(with: downloadsController, animated: true, completion: completion)
         
