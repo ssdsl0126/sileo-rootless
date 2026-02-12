@@ -9,9 +9,9 @@
 #if ! LNPopupControllerEnforceStrictClean
 
 #import "_LNPopupUIBarAppearanceProxy.h"
-#import "_LNPopupSwizzlingUtils.h"
-#import "_LNPopupBase64Utils.hh"
-#import "_LNPopupGlassUtils.h"
+#import "../Utils/_LNPopupSwizzlingUtils.h"
+#import "../Utils/_LNPopupBase64Utils.hh"
+#import "../Utils/_LNPopupGlassUtils.h"
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
