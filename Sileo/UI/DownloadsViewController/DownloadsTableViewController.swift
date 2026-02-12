@@ -241,8 +241,7 @@ class DownloadsTableViewController: SileoViewController {
         guard !text.isEmpty else { return }
         ensureInstallStatusContainer()
         guard let statusTextView = installStatusTextView else { return }
-        
-        let shouldScrollToBottom = shouldAutoScrollToBottom(statusTextView)
+
         installStatusEntries.append(text)
         
         let paragraphStyle = NSMutableParagraphStyle()
@@ -277,22 +276,20 @@ class DownloadsTableViewController: SileoViewController {
             ))
         }
         statusTextView.attributedText = attributedText
-        
-        if shouldScrollToBottom {
-            scrollTextViewToBottom(statusTextView, animated: true)
-        }
+        scrollTextViewToBottom(statusTextView, animated: true)
     }
     
-    private func shouldAutoScrollToBottom(_ textView: UITextView, threshold: CGFloat = 24) -> Bool {
-        let bottomInset = textView.adjustedContentInset.bottom
-        let visibleBottom = textView.contentOffset.y + textView.bounds.height - bottomInset
-        return visibleBottom >= textView.contentSize.height - threshold
-    }
-    
-    private func scrollTextViewToBottom(_ textView: UITextView, animated: Bool) {
+    private func scrollTextViewToBottom(_ textView: UITextView, animated: Bool, retryIfNeeded: Bool = true) {
         let contentHeight = textView.contentSize.height
         let visibleHeight = textView.bounds.height - textView.adjustedContentInset.top - textView.adjustedContentInset.bottom
-        guard visibleHeight > 0 else { return }
+        guard visibleHeight > 0 else {
+            guard retryIfNeeded else { return }
+            DispatchQueue.main.async { [weak self, weak textView] in
+                guard let self, let textView else { return }
+                self.scrollTextViewToBottom(textView, animated: false, retryIfNeeded: false)
+            }
+            return
+        }
         let offsetY = max(-textView.adjustedContentInset.top, contentHeight - visibleHeight - textView.adjustedContentInset.top)
         textView.setContentOffset(CGPoint(x: 0, y: offsetY), animated: animated)
     }
