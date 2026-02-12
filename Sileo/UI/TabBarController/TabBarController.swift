@@ -104,7 +104,9 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
         popupIsPresented = true
         self.popupContentView.popupCloseButtonAutomaticallyUnobstructsTopBars = false
         self.popupBar.toolbar.tag = WHITE_BLUR_TAG
-        self.popupBar.barStyle = .prominent
+        // Keep iPad behavior unchanged, but use floating style on iPhone
+        // to restore the layered queue sheet look.
+        self.popupBar.barStyle = UIDevice.current.userInterfaceIdiom == .phone ? .floating : .prominent
         
         self.updateSileoColors()
         
