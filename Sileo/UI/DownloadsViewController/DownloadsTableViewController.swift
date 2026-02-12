@@ -15,6 +15,10 @@ class DownloadsTableViewController: SileoViewController {
     @IBOutlet var confirmButton: UIButton?
     @IBOutlet var footerViewHeight: NSLayoutConstraint?
     @IBOutlet var tableView: UITableView?
+    @IBOutlet private var tableLeadingConstraint: NSLayoutConstraint?
+    @IBOutlet private var tableTrailingConstraint: NSLayoutConstraint?
+    @IBOutlet private var footerLeadingConstraint: NSLayoutConstraint?
+    @IBOutlet private var footerTrailingConstraint: NSLayoutConstraint?
     
     @IBOutlet var detailsView: UIView?
     @IBOutlet var detailsTextView: UITextView?
@@ -46,9 +50,44 @@ class DownloadsTableViewController: SileoViewController {
     private var hasErrored = false
     private var detailsAttributedString: NSMutableAttributedString?
     public var backgroundCallback: (() -> Void)?
+    private var sheetBackdropView: UIView?
+    private var sheetCardEffectView: UIVisualEffectView?
+    private var sheetCardTopConstraint: NSLayoutConstraint?
+    private var sheetCardWidthConstraint: NSLayoutConstraint?
     private var installStatusContainerView: UIView?
     private var installStatusTextView: UITextView?
     private var installStatusEntries: [String] = []
+    private var floatingContentHorizontalInset: CGFloat = 0
+    private var floatingContentVerticalOffset: CGFloat = 0
+    
+    private let cardMaxWidthPad: CGFloat = 720
+    private let sideMarginMin: CGFloat = 16
+    private let floatingCornerRadius: CGFloat = 18
+    
+    private var supportsFloatingSheetChrome: Bool {
+        let idiom = UIDevice.current.userInterfaceIdiom
+        return idiom == .phone || idiom == .pad
+    }
+    
+    private var floatingSheetVerticalOffset: CGFloat {
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            return max(24, view.safeAreaInsets.top + 4)
+        }
+        return max(20, view.safeAreaInsets.top - 8)
+    }
+    
+    private var floatingSheetTopInset: CGFloat {
+        max(12, floatingContentVerticalOffset - 6)
+    }
+    
+    private var floatingSheetHorizontalInset: CGFloat {
+        guard UIDevice.current.userInterfaceIdiom == .pad else {
+            return 0
+        }
+        let safeWidth = view.safeAreaLayoutGuide.layoutFrame.width
+        let targetWidth = min(cardMaxWidthPad, max(0, safeWidth - 32))
+        return max(sideMarginMin, (safeWidth - targetWidth) / 2)
+    }
     
     public class InstallOperation {
         
@@ -98,10 +137,8 @@ class DownloadsTableViewController: SileoViewController {
         self.tableView?.separatorColor = UIColor(red: 234/255, green: 234/255, blue: 236/255, alpha: 1)
         self.tableView?.isEditing = true
         self.tableView?.clipsToBounds = true
-        if UIDevice.current.userInterfaceIdiom == .phone {
+        if supportsFloatingSheetChrome {
             self.tableView?.contentInsetAdjustmentBehavior = .never
-            self.tableView?.contentInset = UIEdgeInsets(top: 43, left: 0, bottom: 0, right: 0)
-            self.tableView?.scrollIndicatorInsets.top = 43
         }
         
         confirmButton?.layer.cornerRadius = 10
@@ -124,11 +161,16 @@ class DownloadsTableViewController: SileoViewController {
         detailsTextView?.alwaysBounceVertical = true
         
         tableView?.register(DownloadsTableViewCell.self, forCellReuseIdentifier: "DownloadsTableViewCell")
+        applyFloatingLayoutMetrics(preserveTopPin: false)
+        updateFloatingSheetChrome()
         DownloadManager.shared.reloadData(recheckPackages: false)
     }
     
     public override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        applyFloatingLayoutMetrics(preserveTopPin: true)
+        updateFloatingSheetChrome()
+        updateDetailsViewFrameIfNeeded()
         
         guard let tableView = self.tableView,
             let cancelButton = self.cancelButton,
@@ -138,6 +180,7 @@ class DownloadsTableViewController: SileoViewController {
         }
         
         statusBarView.frame = CGRect(origin: .zero, size: CGSize(width: self.view.bounds.width, height: tableView.safeAreaInsets.top))
+        statusBarView.isHidden = supportsFloatingSheetChrome
         
         cancelButton.tintColor = confirmButton.tintColor
         cancelButton.isHighlighted = confirmButton.isHighlighted
@@ -154,6 +197,155 @@ class DownloadsTableViewController: SileoViewController {
  
         hideDetailsButton?.tintColor = UINavigationBar.appearance().tintColor
         hideDetailsButton?.isHighlighted = hideDetailsButton?.isHighlighted ?? false
+    }
+    
+    public override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        applyFloatingLayoutMetrics(preserveTopPin: true)
+        updateFloatingSheetChrome()
+        updateDetailsViewFrameIfNeeded()
+    }
+    
+    private func applyFloatingLayoutMetrics(preserveTopPin: Bool) {
+        guard let tableView = tableView else {
+            return
+        }
+        
+        let verticalOffset = supportsFloatingSheetChrome ? floatingSheetVerticalOffset : 0
+        let horizontalInset = supportsFloatingSheetChrome ? floatingSheetHorizontalInset : 0
+        
+        floatingContentVerticalOffset = verticalOffset
+        floatingContentHorizontalInset = horizontalInset
+        
+        tableLeadingConstraint?.constant = horizontalInset
+        tableTrailingConstraint?.constant = horizontalInset
+        footerLeadingConstraint?.constant = horizontalInset
+        footerTrailingConstraint?.constant = horizontalInset
+        
+        let newTopInset = 43 + verticalOffset
+        let oldTopInset = tableView.contentInset.top
+        let wasPinnedToTop = preserveTopPin && abs(tableView.contentOffset.y + oldTopInset) < 1
+        
+        var contentInset = tableView.contentInset
+        contentInset.top = newTopInset
+        tableView.contentInset = contentInset
+        
+        var scrollIndicatorInsets = tableView.scrollIndicatorInsets
+        scrollIndicatorInsets.top = newTopInset
+        tableView.scrollIndicatorInsets = scrollIndicatorInsets
+        
+        if wasPinnedToTop && abs(oldTopInset - newTopInset) > 0.5 {
+            tableView.setContentOffset(CGPoint(x: tableView.contentOffset.x, y: -newTopInset), animated: false)
+        }
+    }
+    
+    private func floatingDetailsFrame() -> CGRect {
+        let safeFrame = view.safeAreaLayoutGuide.layoutFrame
+        let width = max(0, safeFrame.width - floatingContentHorizontalInset * 2)
+        let x = safeFrame.minX + floatingContentHorizontalInset
+        let y = floatingSheetTopInset
+        let height = max(0, view.bounds.height - y)
+        return CGRect(x: x, y: y, width: width, height: height)
+    }
+    
+    private func updateDetailsViewFrameIfNeeded() {
+        guard let detailsView = detailsView,
+              detailsView.superview === view
+        else {
+            return
+        }
+        detailsView.frame = supportsFloatingSheetChrome ? floatingDetailsFrame() : view.bounds
+    }
+    
+    private func clearFloatingSheetChrome() {
+        sheetBackdropView?.removeFromSuperview()
+        sheetBackdropView = nil
+        sheetCardEffectView?.removeFromSuperview()
+        sheetCardEffectView = nil
+        sheetCardTopConstraint = nil
+        sheetCardWidthConstraint = nil
+        
+        view.backgroundColor = .sileoBackgroundColor
+        statusBarView?.isHidden = false
+    }
+    
+    private func updateFloatingSheetChrome() {
+        guard supportsFloatingSheetChrome else {
+            clearFloatingSheetChrome()
+            return
+        }
+        
+        view.backgroundColor = .clear
+        
+        let backdropView: UIView
+        if let existingBackdropView = sheetBackdropView {
+            backdropView = existingBackdropView
+        } else {
+            let createdView = UIView()
+            createdView.translatesAutoresizingMaskIntoConstraints = false
+            createdView.isUserInteractionEnabled = false
+            view.insertSubview(createdView, at: 0)
+            NSLayoutConstraint.activate([
+                createdView.topAnchor.constraint(equalTo: view.topAnchor),
+                createdView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+                createdView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+                createdView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+            ])
+            sheetBackdropView = createdView
+            backdropView = createdView
+        }
+        backdropView.backgroundColor = UIColor.black.withAlphaComponent(UIColor.isDarkModeEnabled ? 0.14 : 0.08)
+        
+        let cardView: UIVisualEffectView
+        if let existingCardView = sheetCardEffectView {
+            cardView = existingCardView
+        } else {
+            let createdView = UIVisualEffectView(effect: nil)
+            createdView.translatesAutoresizingMaskIntoConstraints = false
+            createdView.isUserInteractionEnabled = false
+            view.insertSubview(createdView, aboveSubview: backdropView)
+            let topConstraint = createdView.topAnchor.constraint(equalTo: view.topAnchor, constant: floatingSheetTopInset)
+            let widthConstraint = createdView.widthAnchor.constraint(equalTo: view.safeAreaLayoutGuide.widthAnchor, constant: -(floatingContentHorizontalInset * 2))
+            sheetCardTopConstraint = topConstraint
+            sheetCardWidthConstraint = widthConstraint
+            NSLayoutConstraint.activate([
+                topConstraint,
+                widthConstraint,
+                createdView.centerXAnchor.constraint(equalTo: view.safeAreaLayoutGuide.centerXAnchor),
+                createdView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+            ])
+            sheetCardEffectView = createdView
+            cardView = createdView
+        }
+        
+        sheetCardTopConstraint?.constant = floatingSheetTopInset
+        sheetCardWidthConstraint?.constant = -(floatingContentHorizontalInset * 2)
+        
+        if #available(iOS 13.0, *) {
+            cardView.effect = UIBlurEffect(style: .systemMaterial)
+        } else {
+            cardView.effect = UIBlurEffect(style: .light)
+        }
+        cardView.backgroundColor = UIColor.sileoBackgroundColor.withAlphaComponent(UIColor.isDarkModeEnabled ? 0.05 : 0.08)
+        cardView.layer.cornerRadius = floatingCornerRadius
+        if #available(iOS 13.0, *) {
+            cardView.layer.cornerCurve = .continuous
+        }
+        cardView.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+        cardView.layer.masksToBounds = true
+        cardView.layer.borderWidth = 0.5
+        cardView.layer.borderColor = UIColor.white.withAlphaComponent(UIColor.isDarkModeEnabled ? 0.08 : 0.22).cgColor
+        
+        if let tableView = tableView {
+            view.bringSubviewToFront(tableView)
+        }
+        if let footerView = footerView {
+            view.bringSubviewToFront(footerView)
+        }
+        if let statusBarView = statusBarView {
+            view.bringSubviewToFront(statusBarView)
+            statusBarView.isHidden = true
+        }
     }
 
     private func ensureInstallStatusContainer() {
@@ -822,7 +1014,17 @@ class DownloadsTableViewController: SileoViewController {
         detailsView.alpha = 0
         detailsView.transform = CGAffineTransform(translationX: 0, y: 10)
         detailsView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        detailsView.frame = self.view.bounds
+        detailsView.frame = supportsFloatingSheetChrome ? floatingDetailsFrame() : self.view.bounds
+        if supportsFloatingSheetChrome {
+            detailsView.layer.cornerRadius = floatingCornerRadius
+            if #available(iOS 13.0, *) {
+                detailsView.layer.cornerCurve = .continuous
+            }
+            detailsView.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+            detailsView.layer.masksToBounds = true
+        } else {
+            detailsView.layer.cornerRadius = 0
+        }
         
         self.view.addSubview(detailsView)
         

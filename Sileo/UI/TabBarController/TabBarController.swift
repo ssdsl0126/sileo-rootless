@@ -257,7 +257,13 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
     }
     
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
         updateSileoColors()
+        guard popupIsPresented else {
+            return
+        }
+        popupBar.barStyle = preferredPopupBarStyle
+        popupInteractionStyle = preferredPopupInteractionStyle
     }
     
     @objc func updateSileoColors() {

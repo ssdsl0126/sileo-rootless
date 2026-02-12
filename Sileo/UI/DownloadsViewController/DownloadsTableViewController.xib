@@ -20,9 +20,13 @@
                 <outlet property="doneToTop" destination="rha-rD-56N" id="Qen-rk-hjs"/>
                 <outlet property="footerView" destination="pjN-7s-mF9" id="RbK-Ma-Gbg"/>
                 <outlet property="footerViewHeight" destination="K05-0C-3LC" id="Uzg-6M-emy"/>
+                <outlet property="footerLeadingConstraint" destination="ZB1-RH-Veh" id="N8G-j6-R5k"/>
+                <outlet property="footerTrailingConstraint" destination="PFZ-hc-mwd" id="2j2-Dk-L5j"/>
                 <outlet property="hideDetailsButton" destination="n5a-hA-hXj" id="EzJ-CM-Rqd"/>
                 <outlet property="laterHeight" destination="Wt6-ko-BrE" id="r4H-dx-EMA"/>
                 <outlet property="showDetailsButton" destination="sPt-Lm-0nf" id="eNl-L5-U0r"/>
+                <outlet property="tableLeadingConstraint" destination="IMx-ir-88S" id="FPA-Lr-GA0"/>
+                <outlet property="tableTrailingConstraint" destination="fv6-cd-mCC" id="3h2-J4-lXo"/>
                 <outlet property="tableView" destination="KRs-py-Nfv" id="LlG-8q-Wfg"/>
                 <outlet property="view" destination="iN0-l3-epB" id="2Ja-mX-tSq"/>
             </connections>
