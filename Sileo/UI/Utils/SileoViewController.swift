@@ -50,11 +50,6 @@ public class SileoViewController: UIViewController {
             return
         }
 
-        if SileoRuntimeEnvironment.hasThirdPartyTweakInjection {
-            SileoRuntimeEnvironment.logLargeTitleMarginNormalizationDisabledByTweakInjectionIfNeeded()
-            return
-        }
-
         if navigationBar.insetsLayoutMarginsFromSafeArea != false {
             navigationBar.insetsLayoutMarginsFromSafeArea = false
         }
