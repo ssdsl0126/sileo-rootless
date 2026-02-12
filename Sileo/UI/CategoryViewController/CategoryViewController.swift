@@ -84,7 +84,7 @@ class CategoryViewController: SileoTableViewController {
                 installed = betterContext.installed
             } else {
                 packages = PackageListManager.shared.allPackagesArray
-                installed = nil
+                installed = Array(PackageListManager.shared.installedPackages.values)
             }
             
             for package in packages ?? [] {
@@ -97,7 +97,11 @@ class CategoryViewController: SileoTableViewController {
                 categoriesCountCache[loadIdentifier] = count + 1
             }
             categoriesCountCache["--allCategories"] = packages?.count ?? 0
-            categoriesCountCache["--contextInstalled"] = installed?.count ?? 0
+            if self.repoContext == nil {
+                categoriesCountCache["--installed"] = installed?.count ?? 0
+            } else {
+                categoriesCountCache["--contextInstalled"] = installed?.count ?? 0
+            }
             self.showInstalled = !(installed?.isEmpty ?? true)
             self.categoriesCountCache = categoriesCountCache
             self.categories = categories.sorted(by: { str1, str2 -> Bool in
@@ -223,7 +227,7 @@ class CategoryViewController: SileoTableViewController {
             return "--allCategories"
         }
         if self.isInstalled(indexPath: indexPath) {
-            return "--contextInstalled"
+            return (repoContext == nil) ? "--installed" : "--contextInstalled"
         }
         return "category:\(self.categoryName(indexPath: indexPath))"
     }
