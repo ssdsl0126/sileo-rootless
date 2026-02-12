@@ -51,6 +51,7 @@ class DownloadsTableViewController: SileoViewController {
     private var detailsAttributedString: NSMutableAttributedString?
     public var backgroundCallback: (() -> Void)?
     private var sheetBackdropView: UIView?
+    private var sheetBackdropTopConstraint: NSLayoutConstraint?
     private var sheetCardEffectView: UIVisualEffectView?
     private var sheetCardTopConstraint: NSLayoutConstraint?
     private var sheetCardWidthConstraint: NSLayoutConstraint?
@@ -260,6 +261,7 @@ class DownloadsTableViewController: SileoViewController {
     private func clearFloatingSheetChrome() {
         sheetBackdropView?.removeFromSuperview()
         sheetBackdropView = nil
+        sheetBackdropTopConstraint = nil
         sheetCardEffectView?.removeFromSuperview()
         sheetCardEffectView = nil
         sheetCardTopConstraint = nil
@@ -285,8 +287,10 @@ class DownloadsTableViewController: SileoViewController {
             createdView.translatesAutoresizingMaskIntoConstraints = false
             createdView.isUserInteractionEnabled = false
             view.insertSubview(createdView, at: 0)
+            let backdropTopConstraint = createdView.topAnchor.constraint(equalTo: view.topAnchor, constant: floatingSheetTopInset)
+            sheetBackdropTopConstraint = backdropTopConstraint
             NSLayoutConstraint.activate([
-                createdView.topAnchor.constraint(equalTo: view.topAnchor),
+                backdropTopConstraint,
                 createdView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
                 createdView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
                 createdView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
@@ -294,6 +298,7 @@ class DownloadsTableViewController: SileoViewController {
             sheetBackdropView = createdView
             backdropView = createdView
         }
+        sheetBackdropTopConstraint?.constant = floatingSheetTopInset
         backdropView.backgroundColor = UIColor.black.withAlphaComponent(UIColor.isDarkModeEnabled ? 0.14 : 0.08)
         
         let cardView: UIVisualEffectView
