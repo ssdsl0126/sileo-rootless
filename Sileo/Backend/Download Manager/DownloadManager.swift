@@ -427,9 +427,14 @@ final class DownloadManager {
         for operation in aptOutput.operations where operation.type == .remove {
             uninstallIdentifiers.append(operation.packageID)
         }
+        var seenUninstalls = Set<String>()
+        uninstallIdentifiers = uninstallIdentifiers.filter { seenUninstalls.insert($0).inserted }
         
         var uninstallations = uninstallations.raw
-        let rawUninstalls = PackageListManager.shared.packages(identifiers: uninstallIdentifiers, sorted: false, packages: Array(PackageListManager.shared.installedPackages.values))
+        let installedPackages = Array(PackageListManager.shared.installedPackages.values)
+        let rawUninstalls = uninstallIdentifiers.compactMap { identifier in
+            installedPackages.first(where: { $0.packageID == identifier })
+        }
         guard rawUninstalls.count == uninstallIdentifiers.count else {
             throw APTParserErrors.blankJsonOutput(error: "Uninstall Identifiers Mismatch")
         }
@@ -560,8 +565,11 @@ final class DownloadManager {
                     try self.recheckTotalOps()
                 } catch {
                     removeAllItems()
-                    viewController.cancelDownload(nil)
-                    TabBarController.singleton?.displayError(error.localizedDescription)
+                    let errorMessage = error.localizedDescription
+                    DispatchQueue.main.async {
+                        self.viewController.cancelDownload(nil)
+                        TabBarController.singleton?.displayError(errorMessage)
+                    }
                 }
             }
             DispatchQueue.main.async {
