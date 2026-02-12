@@ -46,7 +46,8 @@ class DownloadsTableViewController: SileoViewController {
     private var hasErrored = false
     private var detailsAttributedString: NSMutableAttributedString?
     public var backgroundCallback: (() -> Void)?
-    private var sheetCardEffectView: UIVisualEffectView?
+    private var sheetBackdropView: UIView?
+    private var sheetCardBackgroundView: SileoRootView?
     private var sheetCardTopConstraint: NSLayoutConstraint?
     private var installStatusContainerView: UIView?
     private var installStatusTextView: UITextView?
@@ -198,8 +199,10 @@ class DownloadsTableViewController: SileoViewController {
     
     private func updateFloatingSheetChrome() {
         guard UIDevice.current.userInterfaceIdiom == .phone else {
-            sheetCardEffectView?.removeFromSuperview()
-            sheetCardEffectView = nil
+            sheetBackdropView?.removeFromSuperview()
+            sheetBackdropView = nil
+            sheetCardBackgroundView?.removeFromSuperview()
+            sheetCardBackgroundView = nil
             sheetCardTopConstraint = nil
             view.backgroundColor = .sileoBackgroundColor
             statusBarView?.isHidden = false
@@ -208,14 +211,33 @@ class DownloadsTableViewController: SileoViewController {
         
         view.backgroundColor = .clear
         
-        let cardView: UIVisualEffectView
-        if let existing = sheetCardEffectView {
-            cardView = existing
+        let backdropView: UIView
+        if let existing = sheetBackdropView {
+            backdropView = existing
         } else {
-            let created = UIVisualEffectView(effect: nil)
+            let created = UIView()
             created.translatesAutoresizingMaskIntoConstraints = false
             created.isUserInteractionEnabled = false
             view.insertSubview(created, at: 0)
+            NSLayoutConstraint.activate([
+                created.topAnchor.constraint(equalTo: view.topAnchor),
+                created.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+                created.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+                created.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+            ])
+            sheetBackdropView = created
+            backdropView = created
+        }
+        backdropView.backgroundColor = UIColor.black.withAlphaComponent(UIColor.isDarkModeEnabled ? 0.14 : 0.08)
+        
+        let cardView: SileoRootView
+        if let existing = sheetCardBackgroundView {
+            cardView = existing
+        } else {
+            let created = SileoRootView(frame: .zero)
+            created.translatesAutoresizingMaskIntoConstraints = false
+            created.isUserInteractionEnabled = false
+            view.insertSubview(created, aboveSubview: backdropView)
             let topConstraint = created.topAnchor.constraint(equalTo: view.topAnchor, constant: floatingSheetTopInset)
             sheetCardTopConstraint = topConstraint
             NSLayoutConstraint.activate([
@@ -224,25 +246,18 @@ class DownloadsTableViewController: SileoViewController {
                 created.trailingAnchor.constraint(equalTo: view.trailingAnchor),
                 created.bottomAnchor.constraint(equalTo: view.bottomAnchor)
             ])
-            sheetCardEffectView = created
+            sheetCardBackgroundView = created
             cardView = created
         }
         sheetCardTopConstraint?.constant = floatingSheetTopInset
         
-        if #available(iOS 13.0, *) {
-            cardView.effect = UIBlurEffect(style: .systemMaterial)
-        } else {
-            cardView.effect = UIBlurEffect(style: .light)
-        }
-        cardView.backgroundColor = UIColor.sileoBackgroundColor.withAlphaComponent(UIColor.isDarkModeEnabled ? 0.05 : 0.08)
+        cardView.backgroundColor = UIColor.sileoBackgroundColor.withAlphaComponent(UIColor.isDarkModeEnabled ? 0.96 : 0.93)
         cardView.layer.cornerRadius = 18
         if #available(iOS 13.0, *) {
             cardView.layer.cornerCurve = .continuous
         }
         cardView.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
         cardView.layer.masksToBounds = true
-        cardView.layer.borderWidth = 0.5
-        cardView.layer.borderColor = UIColor.white.withAlphaComponent(UIColor.isDarkModeEnabled ? 0.06 : 0.22).cgColor
         
         if let tableView = tableView {
             view.bringSubviewToFront(tableView)
