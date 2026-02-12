@@ -46,6 +46,8 @@ class DownloadsTableViewController: SileoViewController {
     private var hasErrored = false
     private var detailsAttributedString: NSMutableAttributedString?
     public var backgroundCallback: (() -> Void)?
+    private var sheetBackdropView: UIView?
+    private var sheetCardBackgroundView: SileoRootView?
     private var installStatusContainerView: UIView?
     private var installStatusTextView: UITextView?
     private var installStatusEntries: [String] = []
@@ -123,11 +125,14 @@ class DownloadsTableViewController: SileoViewController {
         detailsTextView?.alwaysBounceVertical = true
         
         tableView?.register(DownloadsTableViewCell.self, forCellReuseIdentifier: "DownloadsTableViewCell")
+        updateFloatingSheetChrome()
         DownloadManager.shared.reloadData(recheckPackages: false)
     }
     
     public override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        
+        updateFloatingSheetChrome()
         
         guard let tableView = self.tableView,
             let cancelButton = self.cancelButton,
@@ -137,6 +142,7 @@ class DownloadsTableViewController: SileoViewController {
         }
         
         statusBarView.frame = CGRect(origin: .zero, size: CGSize(width: self.view.bounds.width, height: tableView.safeAreaInsets.top))
+        statusBarView.isHidden = UIDevice.current.userInterfaceIdiom == .phone
         
         cancelButton.tintColor = confirmButton.tintColor
         cancelButton.isHighlighted = confirmButton.isHighlighted
@@ -153,6 +159,80 @@ class DownloadsTableViewController: SileoViewController {
  
         hideDetailsButton?.tintColor = UINavigationBar.appearance().tintColor
         hideDetailsButton?.isHighlighted = hideDetailsButton?.isHighlighted ?? false
+    }
+    
+    public override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        updateFloatingSheetChrome()
+    }
+    
+    private func updateFloatingSheetChrome() {
+        guard UIDevice.current.userInterfaceIdiom == .phone else {
+            sheetBackdropView?.removeFromSuperview()
+            sheetBackdropView = nil
+            sheetCardBackgroundView?.removeFromSuperview()
+            sheetCardBackgroundView = nil
+            view.backgroundColor = .sileoBackgroundColor
+            statusBarView?.isHidden = false
+            return
+        }
+        
+        view.backgroundColor = .clear
+        
+        let backdropView: UIView
+        if let existing = sheetBackdropView {
+            backdropView = existing
+        } else {
+            let created = UIView()
+            created.translatesAutoresizingMaskIntoConstraints = false
+            created.isUserInteractionEnabled = false
+            view.insertSubview(created, at: 0)
+            NSLayoutConstraint.activate([
+                created.topAnchor.constraint(equalTo: view.topAnchor),
+                created.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+                created.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+                created.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+            ])
+            sheetBackdropView = created
+            backdropView = created
+        }
+        backdropView.backgroundColor = UIColor.black.withAlphaComponent(UIColor.isDarkModeEnabled ? 0.34 : 0.2)
+        
+        let cardView: SileoRootView
+        if let existing = sheetCardBackgroundView {
+            cardView = existing
+        } else {
+            let created = SileoRootView(frame: .zero)
+            created.translatesAutoresizingMaskIntoConstraints = false
+            created.isUserInteractionEnabled = false
+            view.insertSubview(created, aboveSubview: backdropView)
+            NSLayoutConstraint.activate([
+                created.topAnchor.constraint(equalTo: view.topAnchor, constant: 10),
+                created.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+                created.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+                created.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+            ])
+            sheetCardBackgroundView = created
+            cardView = created
+        }
+        
+        cardView.layer.cornerRadius = 18
+        if #available(iOS 13.0, *) {
+            cardView.layer.cornerCurve = .continuous
+        }
+        cardView.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+        cardView.layer.masksToBounds = true
+        
+        if let tableView = tableView {
+            view.bringSubviewToFront(tableView)
+        }
+        if let footerView = footerView {
+            view.bringSubviewToFront(footerView)
+        }
+        if let statusBarView = statusBarView {
+            view.bringSubviewToFront(statusBarView)
+            statusBarView.isHidden = true
+        }
     }
 
     private func ensureInstallStatusContainer() {
