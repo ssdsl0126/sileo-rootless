@@ -113,7 +113,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
         self.popupBar.barStyle = preferredPopupBarStyle
         self.popupBar.progressViewStyle = .bottom
         self.popupContentView.popupCloseButtonStyle = UIDevice.current.userInterfaceIdiom == .phone ? .grabber : .chevron
-        self.popupContentView.translucent = true
+        self.popupContentView.isTranslucent = true
         self.popupInteractionStyle = preferredPopupInteractionStyle
         self.presentPopupBar(with: downloadsController, animated: true, completion: completion)
         
