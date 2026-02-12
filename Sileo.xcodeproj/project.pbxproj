@@ -232,6 +232,7 @@
 		E128188826BBFAA500D2553B /* DepictionFormTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1C9025C263C852100569D1E /* DepictionFormTextView.swift */; };
 		E128188926BBFAA500D2553B /* FileNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = F13AEE7B22F76DE6004BAA05 /* FileNode.swift */; };
 		E128188A26BBFAA500D2553B /* SileoViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F170605B24CF4DFD001596A0 /* SileoViewController.swift */; };
+		E1281A0126BBFAA500D2553B /* SileoRuntimeEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1B3D7112BD5000100A77C11 /* SileoRuntimeEnvironment.swift */; };
 		E128188B26BBFAA500D2553B /* LanguageHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = E15A954126B981E4000DB10E /* LanguageHelper.swift */; };
 		E128188C26BBFAA500D2553B /* FlaggedSourceWarningViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 172B2ED622F09E8F000155B9 /* FlaggedSourceWarningViewController.swift */; };
 		E128188D26BBFAA500D2553B /* LanguageSelectionViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E15A954826B99104000DB10E /* LanguageSelectionViewController.swift */; };
@@ -835,6 +836,8 @@
 		F170600224CCC7E6001596A0 /* PackageQueueButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = F170600024CCC7E6001596A0 /* PackageQueueButton.swift */; };
 		F170605C24CF4DFD001596A0 /* SileoViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F170605B24CF4DFD001596A0 /* SileoViewController.swift */; };
 		F170605D24CF4DFD001596A0 /* SileoViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F170605B24CF4DFD001596A0 /* SileoViewController.swift */; };
+		F170607124CF4DFD001596A0 /* SileoRuntimeEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1B3D7112BD5000100A77C11 /* SileoRuntimeEnvironment.swift */; };
+		F170607224CF4DFD001596A0 /* SileoRuntimeEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1B3D7112BD5000100A77C11 /* SileoRuntimeEnvironment.swift */; };
 		F170605F24CF50C7001596A0 /* SileoNavigationController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F170605E24CF50C7001596A0 /* SileoNavigationController.swift */; };
 		F170606024CF50C7001596A0 /* SileoNavigationController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F170605E24CF50C7001596A0 /* SileoNavigationController.swift */; };
 		F170606224CF54E0001596A0 /* SileoTableViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F170606124CF54E0001596A0 /* SileoTableViewController.swift */; };
@@ -1415,6 +1418,7 @@
 		E1B3FBBB2601256500F2E07F /* pt-BR */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = "pt-BR"; path = "Sileo/pt-BR.lproj/Localizable.stringsdict"; sourceTree = "<group>"; };
 		E1B3FBBC2601256500F2E07F /* pt-BR */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "pt-BR"; path = "Sileo/pt-BR.lproj/Categories.strings"; sourceTree = "<group>"; };
 		E1B3FBBD2601256600F2E07F /* pt-BR */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "pt-BR"; path = "Sileo/pt-BR.lproj/Errors.strings"; sourceTree = "<group>"; };
+		E1B3D7112BD5000100A77C11 /* SileoRuntimeEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SileoRuntimeEnvironment.swift; sourceTree = "<group>"; };
 		E1B3FBCD2601467500F2E07F /* SettingsSwitchTableViewCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsSwitchTableViewCell.swift; sourceTree = "<group>"; };
 		E1BB50D9260E913A00F870B8 /* OG~ipad@3x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "OG~ipad@3x.png"; sourceTree = "<group>"; };
 		E1BB50DA260E913A00F870B8 /* OG@2x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "OG@2x.png"; sourceTree = "<group>"; };
@@ -2039,6 +2043,7 @@
 				F170606124CF54E0001596A0 /* SileoTableViewController.swift */,
 				FB208DC224D709B7000297FB /* SileoTheme.swift */,
 				FB208DC424D70A91000297FB /* SileoThemeManager.swift */,
+				E1B3D7112BD5000100A77C11 /* SileoRuntimeEnvironment.swift */,
 				F170605B24CF4DFD001596A0 /* SileoViewController.swift */,
 				F1AB912922ED09AE0054341B /* SourceProgressIndicatorView.swift */,
 				F1330EA82324F76C00971073 /* UIColor-ThemeColors.swift */,
@@ -4098,6 +4103,7 @@
 				E128188826BBFAA500D2553B /* DepictionFormTextView.swift in Sources */,
 				E128188926BBFAA500D2553B /* FileNode.swift in Sources */,
 				E128188A26BBFAA500D2553B /* SileoViewController.swift in Sources */,
+				E1281A0126BBFAA500D2553B /* SileoRuntimeEnvironment.swift in Sources */,
 				E128188B26BBFAA500D2553B /* LanguageHelper.swift in Sources */,
 				E128188C26BBFAA500D2553B /* FlaggedSourceWarningViewController.swift in Sources */,
 				E128188D26BBFAA500D2553B /* LanguageSelectionViewController.swift in Sources */,
@@ -4315,6 +4321,7 @@
 				E1A0646429EB05CD00B9E0B1 /* Jailbreak.swift in Sources */,
 				E1F10B1F2663A60100DA726E /* SourcesTableViewFooter.swift in Sources */,
 				F170605D24CF4DFD001596A0 /* SileoViewController.swift in Sources */,
+				F170607224CF4DFD001596A0 /* SileoRuntimeEnvironment.swift in Sources */,
 				F139D0B022EA9209007F5C0D /* Hash.swift in Sources */,
 				FBBD003D240C31B4008E11B2 /* NewsViewController.swift in Sources */,
 				E13BD78A2646C706006A5EF2 /* GithubSocialCell.swift in Sources */,
@@ -4492,6 +4499,7 @@
 				E13488E829CC842300B0A8D5 /* Maintainer.swift in Sources */,
 				F13AEE7C22F76DE6004BAA05 /* FileNode.swift in Sources */,
 				F170605C24CF4DFD001596A0 /* SileoViewController.swift in Sources */,
+				F170607124CF4DFD001596A0 /* SileoRuntimeEnvironment.swift in Sources */,
 				E15A954226B981E4000DB10E /* LanguageHelper.swift in Sources */,
 				172B2ED722F09E8F000155B9 /* FlaggedSourceWarningViewController.swift in Sources */,
 				E15A954926B99104000DB10E /* LanguageSelectionViewController.swift in Sources */,

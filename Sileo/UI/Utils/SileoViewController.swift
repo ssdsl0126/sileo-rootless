@@ -38,21 +38,32 @@ public class SileoViewController: UIViewController {
     }
     
     func normalizeLargeTitleLayoutMargins(leading: CGFloat = 20) {
-        guard #available(iOS 11.0, *),
-              let navigationBar = navigationController?.navigationBar else {
+        guard Thread.isMainThread,
+              #available(iOS 11.0, *),
+              let navigationBar = navigationController?.navigationBar,
+              navigationBar.prefersLargeTitles else {
             return
         }
-        navigationBar.insetsLayoutMarginsFromSafeArea = false
-        var layoutMargins = navigationBar.layoutMargins
-        layoutMargins.left = leading
-        layoutMargins.right = leading
-        navigationBar.layoutMargins = layoutMargins
-        if #available(iOS 11.0, *) {
-            var directionalMargins = navigationBar.directionalLayoutMargins
-            directionalMargins.leading = leading
-            directionalMargins.trailing = leading
-            navigationBar.directionalLayoutMargins = directionalMargins
+
+        if SileoRuntimeEnvironment.isLargeTitleMarginNormalizationDisabled {
+            SileoRuntimeEnvironment.logLargeTitleMarginNormalizationDisabledByUserDefaultsIfNeeded()
+            return
         }
-        navigationBar.layoutIfNeeded()
+
+        if SileoRuntimeEnvironment.hasThirdPartyTweakInjection {
+            SileoRuntimeEnvironment.logLargeTitleMarginNormalizationDisabledByTweakInjectionIfNeeded()
+            return
+        }
+
+        if navigationBar.insetsLayoutMarginsFromSafeArea != true {
+            navigationBar.insetsLayoutMarginsFromSafeArea = true
+        }
+
+        var layoutMargins = navigationBar.layoutMargins
+        if layoutMargins.left != leading || layoutMargins.right != leading {
+            layoutMargins.left = leading
+            layoutMargins.right = leading
+            navigationBar.layoutMargins = layoutMargins
+        }
     }
 }
