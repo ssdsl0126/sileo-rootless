@@ -71,6 +71,12 @@ jobs:
             echo "LNPopup source file not found: $LNPOPUP_FILE"
             exit 1
           fi
+          LNPOPUP_DIR="$(dirname "$LNPOPUP_FILE")"
+          chmod -R u+w "$LNPOPUP_DIR" || true
+          if [ -f "$LNPOPUP_FILE" ] && [ ! -w "$LNPOPUP_FILE" ]; then
+            chmod u+w "$LNPOPUP_FILE" || true
+          fi
+          rm -f "$LNPOPUP_FILE"
           cp .github/patches/_LNPopupUIBarAppearanceProxy.mm "$LNPOPUP_FILE"
           if ! grep -q '#import <objc/message.h>' "$LNPOPUP_FILE"; then
             echo "LNPopup patch verification failed (objc/message.h missing)."
