@@ -179,14 +179,18 @@ class DownloadsTableViewController: SileoViewController {
         statusTextView.alwaysBounceVertical = true
         statusTextView.showsVerticalScrollIndicator = false
         statusTextView.showsHorizontalScrollIndicator = false
+        statusTextView.textContainer.lineBreakMode = .byTruncatingTail
         statusTextView.textContainerInset = UIEdgeInsets(top: 8, left: 0, bottom: 8, right: 0)
         statusTextView.textContainer.lineFragmentPadding = 0
         statusContainer.addSubview(statusTextView)
+        let preferredWidthConstraint = statusContainer.widthAnchor.constraint(equalTo: view.safeAreaLayoutGuide.widthAnchor, constant: -32)
+        preferredWidthConstraint.priority = .defaultHigh
         
         NSLayoutConstraint.activate([
             statusContainer.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             statusContainer.centerYAnchor.constraint(equalTo: view.centerYAnchor, constant: -20),
-            statusContainer.widthAnchor.constraint(equalToConstant: 320),
+            preferredWidthConstraint,
+            statusContainer.widthAnchor.constraint(lessThanOrEqualToConstant: 480),
             statusContainer.heightAnchor.constraint(equalToConstant: 180),
             statusTextView.topAnchor.constraint(equalTo: statusContainer.topAnchor),
             statusTextView.leadingAnchor.constraint(equalTo: statusContainer.leadingAnchor),
@@ -244,6 +248,7 @@ class DownloadsTableViewController: SileoViewController {
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.alignment = .center
         paragraphStyle.paragraphSpacing = 4
+        paragraphStyle.lineBreakMode = .byTruncatingTail
         
         let attributedText = NSMutableAttributedString()
         for (index, entry) in installStatusEntries.enumerated() {
