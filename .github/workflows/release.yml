@@ -68,6 +68,23 @@ jobs:
             sed -i '' 's/var tab: ColorPickerTab/var pickerTab: ColorPickerTab/' "$ALDERIS_FILE"
             sed -i '' 's/tab = configuration.initialTab/pickerTab = configuration.initialTab/' "$ALDERIS_FILE"
           fi
+          LNPOPUP_PRIVATE_DIR="$TMPDIR/sileo/SourcePackages/checkouts/LNPopupController/LNPopupController/LNPopupController/Private"
+          if [ ! -d "$LNPOPUP_PRIVATE_DIR" ]; then
+            echo "LNPopup private directory not found: $LNPOPUP_PRIVATE_DIR"
+            exit 1
+          fi
+          chmod -R u+w "$LNPOPUP_PRIVATE_DIR" || true
+          for d in "$LNPOPUP_PRIVATE_DIR" "$LNPOPUP_PRIVATE_DIR"/*; do
+            if [ -d "$d" ] && [ "$(basename "$d")" != "Utils" ]; then
+              rel="Utils"
+              if [ "$d" != "$LNPOPUP_PRIVATE_DIR" ]; then
+                rel="../Utils"
+              fi
+              ln -sf "$rel/_LNPopupBase64Utils.hh" "$d/_LNPopupBase64Utils.hh"
+              ln -sf "$rel/_LNPopupSwizzlingUtils.h" "$d/_LNPopupSwizzlingUtils.h"
+              ln -sf "$rel/_LNPopupGlassUtils.h" "$d/_LNPopupGlassUtils.h"
+            fi
+          done
           LNPOPUP_FILE="$TMPDIR/sileo/SourcePackages/checkouts/LNPopupController/LNPopupController/LNPopupController/Private/Appearance/_LNPopupUIBarAppearanceProxy.mm"
           if [ ! -f "$LNPOPUP_FILE" ]; then
             echo "LNPopup source file not found: $LNPOPUP_FILE"
@@ -103,6 +120,23 @@ jobs:
             sed -i '' 's/var tab: ColorPickerTab/var pickerTab: ColorPickerTab/' "$ALDERIS_FILE"
             sed -i '' 's/tab = configuration.initialTab/pickerTab = configuration.initialTab/' "$ALDERIS_FILE"
           fi
+          LNPOPUP_PRIVATE_DIR="$TMPDIR/sileo/SourcePackages/checkouts/LNPopupController/LNPopupController/LNPopupController/Private"
+          if [ ! -d "$LNPOPUP_PRIVATE_DIR" ]; then
+            echo "LNPopup private directory not found: $LNPOPUP_PRIVATE_DIR"
+            exit 1
+          fi
+          chmod -R u+w "$LNPOPUP_PRIVATE_DIR" || true
+          for d in "$LNPOPUP_PRIVATE_DIR" "$LNPOPUP_PRIVATE_DIR"/*; do
+            if [ -d "$d" ] && [ "$(basename "$d")" != "Utils" ]; then
+              rel="Utils"
+              if [ "$d" != "$LNPOPUP_PRIVATE_DIR" ]; then
+                rel="../Utils"
+              fi
+              ln -sf "$rel/_LNPopupBase64Utils.hh" "$d/_LNPopupBase64Utils.hh"
+              ln -sf "$rel/_LNPopupSwizzlingUtils.h" "$d/_LNPopupSwizzlingUtils.h"
+              ln -sf "$rel/_LNPopupGlassUtils.h" "$d/_LNPopupGlassUtils.h"
+            fi
+          done
           LNPOPUP_FILE="$TMPDIR/sileo/SourcePackages/checkouts/LNPopupController/LNPopupController/LNPopupController/Private/Appearance/_LNPopupUIBarAppearanceProxy.mm"
           if [ ! -f "$LNPOPUP_FILE" ]; then
             echo "LNPopup source file not found: $LNPOPUP_FILE"
