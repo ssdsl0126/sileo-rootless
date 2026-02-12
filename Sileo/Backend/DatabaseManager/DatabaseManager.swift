@@ -82,7 +82,7 @@ class DatabaseManager {
         
         try? database.transaction {
             for tmp in packages {
-                var stub = PackageStub(from: tmp)
+                let stub = PackageStub(from: tmp)
                 let count = try? database.scalar(table.filter(guid == stub.guid).count)
                 guard count ?? 0 == 0 else { continue }
                 _ = try? database.run(table.insert(
@@ -110,7 +110,6 @@ class DatabaseManager {
 
         try? database.transaction {
             for stub in stubs {
-                var stub = stub
                 let count = try? database.scalar(table.filter(guid == stub.guid).count)
                 guard count ?? 0 == 0 else { continue }
                 _ = try? database.run(table.insert(

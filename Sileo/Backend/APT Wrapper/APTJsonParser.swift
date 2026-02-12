@@ -162,7 +162,7 @@ extension APTWrapper {
             throw APTParserErrors.blankRequest
         }
         
-        var queryArguments = [
+        let queryArguments = [
             "-sqf",
             "--allow-remove-essential",
             "--allow-change-held-packages",
