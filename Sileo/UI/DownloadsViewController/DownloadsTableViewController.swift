@@ -67,8 +67,7 @@ class DownloadsTableViewController: SileoViewController {
     private let floatingCornerRadius: CGFloat = 18
     
     private var supportsFloatingSheetChrome: Bool {
-        let idiom = UIDevice.current.userInterfaceIdiom
-        return idiom == .phone || idiom == .pad
+        false
     }
     
     private var floatingSheetVerticalOffset: CGFloat {
@@ -142,8 +141,8 @@ class DownloadsTableViewController: SileoViewController {
         self.tableView?.separatorColor = UIColor(red: 234/255, green: 234/255, blue: 236/255, alpha: 1)
         self.tableView?.isEditing = true
         self.tableView?.clipsToBounds = true
-        self.tableView?.backgroundColor = .clear
-        self.tableView?.isOpaque = false
+        self.tableView?.backgroundColor = .sileoBackgroundColor
+        self.tableView?.isOpaque = true
         if supportsFloatingSheetChrome {
             self.tableView?.contentInsetAdjustmentBehavior = .never
         }
@@ -231,7 +230,14 @@ class DownloadsTableViewController: SileoViewController {
         footerLeadingConstraint?.constant = horizontalInset
         footerTrailingConstraint?.constant = horizontalInset
         
-        let newTopInset = 43 + verticalOffset
+        let newTopInset: CGFloat
+        if supportsFloatingSheetChrome {
+            newTopInset = 43 + verticalOffset
+        } else if UIDevice.current.userInterfaceIdiom == .phone {
+            newTopInset = 43
+        } else {
+            newTopInset = 0
+        }
         let oldTopInset = tableView.contentInset.top
         let wasPinnedToTop = preserveTopPin && abs(tableView.contentOffset.y + oldTopInset) < 1
         

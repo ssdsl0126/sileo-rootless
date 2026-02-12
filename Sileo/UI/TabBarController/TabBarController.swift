@@ -21,10 +21,6 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
         UIDevice.current.userInterfaceIdiom == .phone ? .snap : .drag
     }
     
-    private var preferredPopupBarStyle: LNPopupBar.Style {
-        UIDevice.current.userInterfaceIdiom == .phone ? .floating : .prominent
-    }
-    
     override func viewDidLoad() {
         super.viewDidLoad()
         
@@ -33,8 +29,8 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
         
         downloadsController = UINavigationController(rootViewController: DownloadManager.shared.viewController)
         downloadsController?.isNavigationBarHidden = true
-        downloadsController?.view.backgroundColor = .clear
-        downloadsController?.view.isOpaque = false
+        downloadsController?.view.backgroundColor = .sileoBackgroundColor
+        downloadsController?.view.isOpaque = true
         downloadsController?.popupItem.title = ""
         downloadsController?.popupItem.subtitle = ""
         
@@ -112,11 +108,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
         }
         
         popupIsPresented = true
-        self.popupBar.barStyle = preferredPopupBarStyle
         self.popupBar.progressViewStyle = .bottom
-        self.popupContentView.popupCloseButtonStyle = UIDevice.current.userInterfaceIdiom == .phone ? .grabber : .chevron
-        self.popupContentView.isTranslucent = true
-        self.popupContentView.backgroundColor = .clear
         self.popupInteractionStyle = preferredPopupInteractionStyle
         self.presentPopupBar(with: downloadsController, animated: true, completion: completion)
         
@@ -265,7 +257,6 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
         guard popupIsPresented else {
             return
         }
-        popupBar.barStyle = preferredPopupBarStyle
         popupInteractionStyle = preferredPopupInteractionStyle
     }
     
