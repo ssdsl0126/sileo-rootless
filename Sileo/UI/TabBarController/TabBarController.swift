@@ -17,6 +17,10 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
     private var shouldSelectIndex = -1
     private var fuckedUpSources = false
     
+    private var preferredPopupInteractionStyle: LNPopupInteractionStyle {
+        UIDevice.current.userInterfaceIdiom == .phone ? .snap : .drag
+    }
+    
     override func viewDidLoad() {
         super.viewDidLoad()
         
@@ -104,9 +108,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
         popupIsPresented = true
         self.popupContentView.popupCloseButtonAutomaticallyUnobstructsTopBars = false
         self.popupBar.toolbar.tag = WHITE_BLUR_TAG
-        // Keep iPad behavior unchanged, but use floating style on iPhone
-        // to restore the layered queue sheet look.
-        self.popupBar.barStyle = UIDevice.current.userInterfaceIdiom == .phone ? .floating : .prominent
+        self.popupBar.barStyle = .prominent
         
         self.updateSileoColors()
         
@@ -117,7 +119,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
             self.popupBar.tabBarHeight += 1
         }
         self.popupBar.progressViewStyle = .bottom
-        self.popupInteractionStyle = .drag
+        self.popupInteractionStyle = preferredPopupInteractionStyle
         self.presentPopupBar(withContentViewController: downloadsController, animated: true, completion: completion)
         
         self.updateSileoColors()
@@ -161,8 +163,8 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
             popupLock.signal()
         }
         
-        self.popupInteractionStyle = .drag
-        self.popupContent?.popupInteractionStyle = .drag
+        self.popupInteractionStyle = preferredPopupInteractionStyle
+        self.popupContent?.popupInteractionStyle = preferredPopupInteractionStyle
         self.openPopup(animated: true, completion: completion)
     }
     
