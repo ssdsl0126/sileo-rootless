@@ -135,7 +135,7 @@ class DownloadsTableViewController: SileoViewController {
         self.view.addSubview(statusBarView)
         self.statusBarView = statusBarView
         
-        self.statusBarStyle = UIDevice.current.userInterfaceIdiom == .pad ? .default : .lightContent
+        self.statusBarStyle = .default
         
         self.tableView?.separatorStyle = .none
         self.tableView?.separatorColor = UIColor(red: 234/255, green: 234/255, blue: 236/255, alpha: 1)
@@ -188,6 +188,7 @@ class DownloadsTableViewController: SileoViewController {
         
         statusBarView.frame = CGRect(origin: .zero, size: CGSize(width: self.view.bounds.width, height: tableView.safeAreaInsets.top))
         statusBarView.isHidden = supportsFloatingSheetChrome && UIDevice.current.userInterfaceIdiom != .phone
+        statusBarView.backgroundColor = .sileoBackgroundColor
         
         cancelButton.tintColor = confirmButton.tintColor
         cancelButton.isHighlighted = confirmButton.isHighlighted
@@ -1124,6 +1125,7 @@ class DownloadsTableViewController: SileoViewController {
             self.detailsView?.transform = .identity
             
             self.statusBarStyle = .lightContent
+            self.setNeedsStatusBarAppearanceUpdate()
         })
     }
     
@@ -1132,7 +1134,8 @@ class DownloadsTableViewController: SileoViewController {
             self.detailsView?.alpha = 0
             self.detailsView?.transform = CGAffineTransform(translationX: 0, y: 10)
             
-            self.statusBarStyle = UIDevice.current.userInterfaceIdiom == .pad ? .default : .lightContent
+            self.statusBarStyle = .default
+            self.setNeedsStatusBarAppearanceUpdate()
         }, completion: { _ in
             self.detailsView?.transform = .identity
             self.detailsView?.removeFromSuperview()
