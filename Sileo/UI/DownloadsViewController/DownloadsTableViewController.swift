@@ -78,6 +78,9 @@ class DownloadsTableViewController: SileoViewController {
     }
     
     private var floatingSheetTopInset: CGFloat {
+        if UIDevice.current.userInterfaceIdiom == .phone {
+            return 0
+        }
         max(12, floatingContentVerticalOffset - 6)
     }
     
@@ -253,6 +256,16 @@ class DownloadsTableViewController: SileoViewController {
         return CGRect(x: x, y: y, width: width, height: height)
     }
     
+    private func resolvedFloatingCornerRadius() -> CGFloat {
+        let candidates: [CGFloat] = [
+            view.layer.cornerRadius,
+            view.superview?.layer.cornerRadius ?? 0,
+            view.superview?.superview?.layer.cornerRadius ?? 0
+        ]
+        let inheritedCornerRadius = candidates.max() ?? 0
+        return inheritedCornerRadius > 0 ? inheritedCornerRadius : floatingCornerRadius
+    }
+    
     private func updateDetailsViewFrameIfNeeded() {
         guard let detailsView = detailsView,
               detailsView.superview === view
@@ -283,10 +296,11 @@ class DownloadsTableViewController: SileoViewController {
         else {
             return
         }
+        let cornerRadius = resolvedFloatingCornerRadius()
         let path = UIBezierPath(
             roundedRect: cardContainer.bounds,
             byRoundingCorners: [.topLeft, .topRight],
-            cornerRadii: CGSize(width: floatingCornerRadius, height: floatingCornerRadius)
+            cornerRadii: CGSize(width: cornerRadius, height: cornerRadius)
         )
         cardContainer.layer.shadowPath = path.cgPath
     }
@@ -361,6 +375,7 @@ class DownloadsTableViewController: SileoViewController {
         
         sheetCardTopConstraint?.constant = floatingSheetTopInset
         sheetCardWidthConstraint?.constant = -(floatingContentHorizontalInset * 2)
+        let cornerRadius = resolvedFloatingCornerRadius()
         
         if #available(iOS 13.0, *) {
             cardView.effect = UIBlurEffect(style: .systemMaterial)
@@ -368,7 +383,7 @@ class DownloadsTableViewController: SileoViewController {
             cardView.effect = UIBlurEffect(style: .light)
         }
         cardView.backgroundColor = UIColor.sileoBackgroundColor.withAlphaComponent(UIColor.isDarkModeEnabled ? 0.05 : 0.08)
-        cardView.layer.cornerRadius = floatingCornerRadius
+        cardView.layer.cornerRadius = cornerRadius
         if #available(iOS 13.0, *) {
             cardView.layer.cornerCurve = .continuous
         }
@@ -377,17 +392,17 @@ class DownloadsTableViewController: SileoViewController {
         cardView.layer.borderWidth = 0.5
         cardView.layer.borderColor = UIColor.white.withAlphaComponent(UIColor.isDarkModeEnabled ? 0.08 : 0.22).cgColor
         
-        cardContainer.layer.cornerRadius = floatingCornerRadius
+        cardContainer.layer.cornerRadius = cornerRadius
         if #available(iOS 13.0, *) {
             cardContainer.layer.cornerCurve = .continuous
         }
         cardContainer.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
         cardContainer.layer.masksToBounds = false
         cardContainer.layer.shadowColor = UIColor.black.cgColor
-        cardContainer.layer.shadowOpacity = UIColor.isDarkModeEnabled ? 0.28 : 0.18
-        cardContainer.layer.shadowRadius = 18
-        cardContainer.layer.shadowOffset = CGSize(width: 0, height: -2)
-        updateFloatingCardShadowPath()
+        cardContainer.layer.shadowOpacity = 0
+        cardContainer.layer.shadowRadius = 0
+        cardContainer.layer.shadowOffset = .zero
+        cardContainer.layer.shadowPath = nil
         
         if let tableView = tableView {
             view.bringSubviewToFront(tableView)
