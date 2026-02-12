@@ -228,7 +228,7 @@ class DownloadsTableViewController: SileoViewController {
             sheetBackdropView = created
             backdropView = created
         }
-        backdropView.backgroundColor = UIColor.black.withAlphaComponent(UIColor.isDarkModeEnabled ? 0.34 : 0.2)
+        backdropView.backgroundColor = UIColor.black.withAlphaComponent(UIColor.isDarkModeEnabled ? 0.14 : 0.08)
         
         let cardView: SileoRootView
         if let existing = sheetCardBackgroundView {
@@ -251,6 +251,7 @@ class DownloadsTableViewController: SileoViewController {
         }
         sheetCardTopConstraint?.constant = floatingSheetTopInset
         
+        cardView.backgroundColor = UIColor.sileoBackgroundColor.withAlphaComponent(UIColor.isDarkModeEnabled ? 0.96 : 0.93)
         cardView.layer.cornerRadius = 18
         if #available(iOS 13.0, *) {
             cardView.layer.cornerCurve = .continuous
