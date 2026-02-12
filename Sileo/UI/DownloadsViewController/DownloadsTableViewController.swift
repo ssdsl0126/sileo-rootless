@@ -276,10 +276,12 @@ class DownloadsTableViewController: SileoViewController {
             ))
         }
         statusTextView.attributedText = attributedText
-        scrollTextViewToBottom(statusTextView, animated: true)
+        scrollTextViewToBottom(statusTextView, animated: false)
     }
     
     private func scrollTextViewToBottom(_ textView: UITextView, animated: Bool, retryIfNeeded: Bool = true) {
+        textView.layoutIfNeeded()
+        textView.layoutManager.ensureLayout(for: textView.textContainer)
         let contentHeight = textView.contentSize.height
         let visibleHeight = textView.bounds.height - textView.adjustedContentInset.top - textView.adjustedContentInset.bottom
         guard visibleHeight > 0 else {
@@ -292,6 +294,12 @@ class DownloadsTableViewController: SileoViewController {
         }
         let offsetY = max(-textView.adjustedContentInset.top, contentHeight - visibleHeight - textView.adjustedContentInset.top)
         textView.setContentOffset(CGPoint(x: 0, y: offsetY), animated: animated)
+        
+        guard retryIfNeeded else { return }
+        DispatchQueue.main.async { [weak self, weak textView] in
+            guard let self, let textView else { return }
+            self.scrollTextViewToBottom(textView, animated: false, retryIfNeeded: false)
+        }
     }
     
     public func loadData(_ main: @escaping () -> Void) {
