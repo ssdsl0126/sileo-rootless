@@ -69,6 +69,9 @@ class PackageListViewController: SileoViewController, UIGestureRecognizerDelegat
         guard let title = navigationItem.title, title == String(localizationKey: "Search_Page") else {
             return false
         }
+        guard UserDefaults.standard.bool(forKey: "ShowSearchHistory", fallback: true) else {
+            return false
+        }
         return !searchHistory.isEmpty && (searchController.searchBar.text?.isEmpty ?? false)
     }
 
@@ -162,6 +165,9 @@ class PackageListViewController: SileoViewController, UIGestureRecognizerDelegat
         }
         if loadProvisional {
             NotificationCenter.default.addObserver(self, selector: #selector(self.reloadData), name: CanisterResolver.refreshList, object: nil)
+        }
+        if showSearchField {
+            NotificationCenter.default.addObserver(self, selector: #selector(self.reloadData), name: Notification.Name("ShowSearchHistory"), object: nil)
         }
         
         // A value of exactly 17.0 (the default) causes the text to auto-shrink

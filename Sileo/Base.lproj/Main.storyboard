@@ -14,7 +14,7 @@
             <objects>
                 <navigationController title="Featured" id="aoU-cU-uDP" customClass="SileoNavigationController" customModule="Sileo" customModuleProvider="target" sceneMemberID="viewController">
                     <tabBarItem key="tabBarItem" systemItem="featured" id="QoU-8J-jlp"/>
-                    <navigationBar key="navigationBar" contentMode="scaleToFill" insetsLayoutMarginsFromSafeArea="NO" largeTitles="YES" id="pOb-by-WJs">
+                    <navigationBar key="navigationBar" contentMode="scaleToFill" insetsLayoutMarginsFromSafeArea="YES" largeTitles="YES" id="pOb-by-WJs">
                         <rect key="frame" x="0.0" y="44" width="375" height="96"/>
                         <autoresizingMask key="autoresizingMask"/>
                     </navigationBar>
@@ -97,7 +97,7 @@
             <objects>
                 <navigationController title="Packages" id="SDC-ph-txK" customClass="SileoNavigationController" customModule="Sileo" customModuleProvider="target" sceneMemberID="viewController">
                     <tabBarItem key="tabBarItem" title="Packages" image="Packages" id="yLs-ci-P0e"/>
-                    <navigationBar key="navigationBar" contentMode="scaleToFill" insetsLayoutMarginsFromSafeArea="NO" largeTitles="YES" id="l6t-Ht-pve">
+                    <navigationBar key="navigationBar" contentMode="scaleToFill" insetsLayoutMarginsFromSafeArea="YES" largeTitles="YES" id="l6t-Ht-pve">
                         <rect key="frame" x="0.0" y="44" width="375" height="96"/>
                         <autoresizingMask key="autoresizingMask"/>
                     </navigationBar>
@@ -114,7 +114,7 @@
             <objects>
                 <navigationController title="Search" id="US1-iP-5oM" customClass="SileoNavigationController" customModule="Sileo" customModuleProvider="target" sceneMemberID="viewController">
                     <tabBarItem key="tabBarItem" systemItem="search" id="TKd-KU-El9"/>
-                    <navigationBar key="navigationBar" contentMode="scaleToFill" insetsLayoutMarginsFromSafeArea="NO" largeTitles="YES" id="3ZO-Oe-W2h">
+                    <navigationBar key="navigationBar" contentMode="scaleToFill" insetsLayoutMarginsFromSafeArea="YES" largeTitles="YES" id="3ZO-Oe-W2h">
                         <rect key="frame" x="0.0" y="44" width="375" height="96"/>
                         <autoresizingMask key="autoresizingMask"/>
                     </navigationBar>
@@ -163,7 +163,7 @@
             <objects>
                 <navigationController title="News" id="sZb-Xb-euS" customClass="SileoNavigationController" customModule="Sileo" customModuleProvider="target" sceneMemberID="viewController">
                     <tabBarItem key="tabBarItem" title="News" image="News" id="KPo-mv-n2J"/>
-                    <navigationBar key="navigationBar" contentMode="scaleToFill" insetsLayoutMarginsFromSafeArea="NO" largeTitles="YES" id="nhP-mj-UHO">
+                    <navigationBar key="navigationBar" contentMode="scaleToFill" insetsLayoutMarginsFromSafeArea="YES" largeTitles="YES" id="nhP-mj-UHO">
                         <rect key="frame" x="0.0" y="44" width="375" height="96"/>
                         <autoresizingMask key="autoresizingMask"/>
                     </navigationBar>

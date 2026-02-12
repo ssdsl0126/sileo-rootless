@@ -46,6 +46,9 @@ class DownloadsTableViewController: SileoViewController {
     private var hasErrored = false
     private var detailsAttributedString: NSMutableAttributedString?
     public var backgroundCallback: (() -> Void)?
+    private var installStatusContainerView: UIView?
+    private var installStatusLabels: [SileoLabelView] = []
+    private let maxInstallStatusLines = 6
     
     public class InstallOperation {
         
@@ -147,6 +150,102 @@ class DownloadsTableViewController: SileoViewController {
  
         hideDetailsButton?.tintColor = UINavigationBar.appearance().tintColor
         hideDetailsButton?.isHighlighted = hideDetailsButton?.isHighlighted ?? false
+
+        layoutInstallStatusLabels(animated: false)
+    }
+
+    private func ensureInstallStatusContainer() {
+        if installStatusContainerView != nil {
+            return
+        }
+        let statusContainer = UIView()
+        statusContainer.translatesAutoresizingMaskIntoConstraints = false
+        statusContainer.backgroundColor = .clear
+        statusContainer.isUserInteractionEnabled = false
+        statusContainer.alpha = 0
+        statusContainer.isHidden = true
+        view.addSubview(statusContainer)
+        NSLayoutConstraint.activate([
+            statusContainer.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            statusContainer.centerYAnchor.constraint(equalTo: view.centerYAnchor, constant: -20),
+            statusContainer.widthAnchor.constraint(equalToConstant: 320),
+            statusContainer.heightAnchor.constraint(equalToConstant: 180)
+        ])
+        installStatusContainerView = statusContainer
+    }
+    
+    private func setInstallStatusVisible(_ visible: Bool) {
+        ensureInstallStatusContainer()
+        guard let statusContainer = installStatusContainerView else { return }
+        
+        if visible {
+            tableView?.alpha = 0
+            statusContainer.isHidden = false
+            view.bringSubviewToFront(statusContainer)
+            if let footerView = footerView {
+                view.bringSubviewToFront(footerView)
+            }
+            FRUIView.animate(withDuration: 0.2) {
+                statusContainer.alpha = 1
+            }
+            return
+        }
+        
+        tableView?.alpha = 1
+        FRUIView.animate(withDuration: 0.2, animations: {
+            statusContainer.alpha = 0
+        }, completion: { _ in
+            statusContainer.isHidden = true
+        })
+    }
+    
+    private func clearInstallStatusLines() {
+        installStatusLabels.forEach { $0.removeFromSuperview() }
+        installStatusLabels.removeAll()
+    }
+    
+    private func pushInstallStatus(_ text: String) {
+        guard !text.isEmpty else { return }
+        ensureInstallStatusContainer()
+        guard let statusContainer = installStatusContainerView else { return }
+        
+        let label = SileoLabelView(frame: .zero)
+        label.text = text
+        label.font = UIFont.systemFont(ofSize: 14, weight: .semibold)
+        label.textColor = .sileoLabel
+        label.textAlignment = .center
+        label.adjustsFontSizeToFitWidth = true
+        label.minimumScaleFactor = 0.8
+        label.alpha = 0.5
+        statusContainer.addSubview(label)
+        installStatusLabels.append(label)
+        
+        while installStatusLabels.count > maxInstallStatusLines {
+            installStatusLabels.removeFirst().removeFromSuperview()
+        }
+        
+        layoutInstallStatusLabels(animated: true)
+    }
+    
+    private func layoutInstallStatusLabels(animated: Bool) {
+        guard let statusContainer = installStatusContainerView else { return }
+        var frame = CGRect(x: 0, y: statusContainer.bounds.height - 44, width: statusContainer.bounds.width, height: 20)
+        var alpha: CGFloat = 1.0
+        let applyLayout = {
+            for label in self.installStatusLabels.reversed() {
+                label.frame = frame
+                label.alpha = max(0.15, alpha)
+                frame.origin.y -= 24
+                alpha -= 0.17
+            }
+        }
+        if animated {
+            FRUIView.animate(withDuration: 0.2) {
+                applyLayout()
+            }
+        } else {
+            applyLayout()
+        }
     }
     
     public func loadData(_ main: @escaping () -> Void) {
@@ -301,6 +400,8 @@ class DownloadsTableViewController: SileoViewController {
         returnButtonAction = .back
         refreshSileo = false
         hasErrored = false
+        setInstallStatusVisible(false)
+        clearInstallStatusLines()
         tableView?.setEditing(true, animated: true)
         self.actions.removeAll()
         
@@ -318,6 +419,8 @@ class DownloadsTableViewController: SileoViewController {
         returnButtonAction = .back
         refreshSileo = false
         hasErrored = false
+        setInstallStatusVisible(false)
+        clearInstallStatusLines()
         tableView?.setEditing(true, animated: true)
         self.actions.removeAll()
         
@@ -384,6 +487,8 @@ class DownloadsTableViewController: SileoViewController {
         }
         
         detailsAttributedString = NSMutableAttributedString(string: "")
+        clearInstallStatusLines()
+        setInstallStatusVisible(true)
         let installs = installations + upgrades + installdeps
         if UserDefaults.standard.bool(forKey: "CanisterIngest", fallback: false) {
             CanisterResolver.shared.ingest(packages: installs.map { $0.package })
@@ -401,6 +506,9 @@ class DownloadsTableViewController: SileoViewController {
             cell.operation = action
             cell.setEditing(false, animated: true)
         }
+        if UserDefaults.standard.bool(forKey: "AlwaysShowLog", fallback: false) {
+            showDetails(nil)
+        }
         if !earlyBreak {
             startInstall()
         }
@@ -413,10 +521,12 @@ class DownloadsTableViewController: SileoViewController {
             }
             return
         }
-        guard let action = actions.first(where: { $0.package.packageID == package }) else { return }
-        action.progressCounter += 1
-        action.status = status
-        action.cell?.operation = action
+        if let action = actions.first(where: { $0.package.packageID == package }) {
+            action.progressCounter += 1
+            action.status = status
+            action.cell?.operation = action
+        }
+        pushInstallStatus(status)
     }
     
     @IBAction func completeButtonTapped(_ sender: Any?) {
@@ -466,6 +576,8 @@ class DownloadsTableViewController: SileoViewController {
         returnButtonAction = .back
         refreshSileo = false
         hasErrored = false
+        setInstallStatusVisible(false)
+        clearInstallStatusLines()
         tableView?.setEditing(true, animated: true)
         actions.removeAll()
 
