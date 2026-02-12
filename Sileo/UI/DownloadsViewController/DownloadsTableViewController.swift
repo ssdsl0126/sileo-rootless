@@ -51,6 +51,7 @@ class DownloadsTableViewController: SileoViewController {
     private var detailsAttributedString: NSMutableAttributedString?
     public var backgroundCallback: (() -> Void)?
     private var sheetBackdropView: UIView?
+    private var sheetBackdropTopConstraint: NSLayoutConstraint?
     private var sheetCardContainerView: UIView?
     private var sheetCardEffectView: UIVisualEffectView?
     private var sheetCardTopConstraint: NSLayoutConstraint?
@@ -79,7 +80,7 @@ class DownloadsTableViewController: SileoViewController {
     
     private var floatingSheetTopInset: CGFloat {
         if UIDevice.current.userInterfaceIdiom == .phone {
-            return 0
+            return 12
         }
         return max(12, floatingContentVerticalOffset - 6)
     }
@@ -278,6 +279,7 @@ class DownloadsTableViewController: SileoViewController {
     private func clearFloatingSheetChrome() {
         sheetBackdropView?.removeFromSuperview()
         sheetBackdropView = nil
+        sheetBackdropTopConstraint = nil
         sheetCardContainerView?.removeFromSuperview()
         sheetCardContainerView = nil
         sheetCardEffectView?.removeFromSuperview()
@@ -321,8 +323,10 @@ class DownloadsTableViewController: SileoViewController {
             createdView.translatesAutoresizingMaskIntoConstraints = false
             createdView.isUserInteractionEnabled = false
             view.insertSubview(createdView, at: 0)
+            let topConstraint = createdView.topAnchor.constraint(equalTo: view.topAnchor, constant: floatingSheetTopInset)
+            sheetBackdropTopConstraint = topConstraint
             NSLayoutConstraint.activate([
-                createdView.topAnchor.constraint(equalTo: view.topAnchor),
+                topConstraint,
                 createdView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
                 createdView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
                 createdView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
@@ -330,7 +334,8 @@ class DownloadsTableViewController: SileoViewController {
             sheetBackdropView = createdView
             backdropView = createdView
         }
-        backdropView.backgroundColor = UIColor.black.withAlphaComponent(UIColor.isDarkModeEnabled ? 0.12 : 0.06)
+        sheetBackdropTopConstraint?.constant = floatingSheetTopInset
+        backdropView.backgroundColor = UIColor.black.withAlphaComponent(UIColor.isDarkModeEnabled ? 0.1 : 0.05)
         
         let cardContainer: UIView
         if let existingCardContainer = sheetCardContainerView {
