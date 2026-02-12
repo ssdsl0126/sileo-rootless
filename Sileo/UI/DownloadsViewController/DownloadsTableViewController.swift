@@ -360,7 +360,7 @@ class DownloadsTableViewController: SileoViewController {
             }, completion: { _ in
                 self.transferToInstall()
                 TabBarController.singleton?.popupContent?.popupInteractionStyle = .drag
-            }
+            })
         }
         if manager.errors.isEmpty {
             self.confirmButton?.isEnabled = true
