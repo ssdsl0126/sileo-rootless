@@ -74,9 +74,7 @@ jobs:
             exit 1
           fi
           if ! grep -q '#import <objc/message.h>' "$LNPOPUP_FILE"; then
-            sed -i '' '/#import <objc\/runtime.h>/a\
-#import <objc/message.h>
-' "$LNPOPUP_FILE"
+            perl -0777 -i -pe 's@#import <objc/runtime\.h>@#import <objc/runtime.h>\n#import <objc/message.h>@' "$LNPOPUP_FILE"
           fi
           sed -i '' 's/struct objc_super super = {\.receiver = self, \.super_class = superclass};/struct objc_super superStruct; superStruct.receiver = self; superStruct.super_class = superclass;/' "$LNPOPUP_FILE"
           sed -i '' 's/return super_class(&super, _cmd);/return super_class(\&superStruct, _cmd);/' "$LNPOPUP_FILE"
@@ -101,9 +99,7 @@ jobs:
             exit 1
           fi
           if ! grep -q '#import <objc/message.h>' "$LNPOPUP_FILE"; then
-            sed -i '' '/#import <objc\/runtime.h>/a\
-#import <objc/message.h>
-' "$LNPOPUP_FILE"
+            perl -0777 -i -pe 's@#import <objc/runtime\.h>@#import <objc/runtime.h>\n#import <objc/message.h>@' "$LNPOPUP_FILE"
           fi
           sed -i '' 's/struct objc_super super = {\.receiver = self, \.super_class = superclass};/struct objc_super superStruct; superStruct.receiver = self; superStruct.super_class = superclass;/' "$LNPOPUP_FILE"
           sed -i '' 's/return super_class(&super, _cmd);/return super_class(\&superStruct, _cmd);/' "$LNPOPUP_FILE"
