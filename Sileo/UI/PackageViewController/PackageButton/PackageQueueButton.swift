@@ -122,7 +122,7 @@ class PackageQueueButton: PackageButton {
             self.isEnabled = false
             return
         }
-        installedPackage = PackageListManager.shared.installedPackage(identifier: package.package)
+        installedPackage = PackageListManager.shared.installedPackage(identifier: package.packageID)
             
         purchased = paymentInfo?.purchased ?? false
         

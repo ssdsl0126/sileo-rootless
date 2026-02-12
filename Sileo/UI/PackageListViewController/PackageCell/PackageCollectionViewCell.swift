@@ -147,14 +147,14 @@ class PackageCollectionViewCell: SwipeCollectionViewCell {
         let queueState = DownloadManager.shared.find(package: targetPackage)
         switch queueState {
         case .installations:
-            let isInstalled = PackageListManager.shared.installedPackage(identifier: targetPackage.package) != nil
+            let isInstalled = PackageListManager.shared.installedPackage(identifier: targetPackage.packageID) != nil
             stateBadgeView?.state = isInstalled ? .reinstallQueued : .installQueued
         case .upgrades:
             stateBadgeView?.state = .updateQueued
         case .uninstallations:
             stateBadgeView?.state = .deleteQueued
         default:
-            let isInstalled = PackageListManager.shared.installedPackage(identifier: targetPackage.package) != nil
+            let isInstalled = PackageListManager.shared.installedPackage(identifier: targetPackage.packageID) != nil
             stateBadgeView?.state = .installed
             stateBadgeView?.isHidden = !isInstalled
         }
@@ -200,7 +200,7 @@ extension PackageCollectionViewCell: SwipeCollectionViewCellDelegate {
             return actions
         }
         // Check if the package is actually installed
-        if let installedPackage = PackageListManager.shared.installedPackage(identifier: package.package) {
+        if let installedPackage = PackageListManager.shared.installedPackage(identifier: package.packageID) {
             let actionPackage = packageForInstallActions(from: package)
             // Check we have a repo for the package
             if queueFound != .uninstallations {
@@ -256,7 +256,7 @@ extension PackageCollectionViewCell: SwipeCollectionViewCellDelegate {
     
     private func cancelAction(_ package: Package) -> SwipeAction {
         let cancel = SwipeAction(style: .destructive, title: String(localizationKey: "Cancel")) { _, _ in
-            DownloadManager.shared.remove(package: package.package)
+            DownloadManager.shared.remove(package: package.packageID)
             DownloadManager.shared.reloadData(recheckPackages: true)
             self.hapticResponse()
             self.hideSwipe(animated: true)
@@ -269,7 +269,7 @@ extension PackageCollectionViewCell: SwipeCollectionViewCellDelegate {
         let uninstall = SwipeAction(style: .destructive, title: String(localizationKey: "Package_Uninstall_Action")) { _, _ in
             let queueFound = DownloadManager.shared.find(package: package)
             if queueFound != .none {
-                DownloadManager.shared.remove(package: package.package)
+                DownloadManager.shared.remove(package: package.packageID)
             }
             DownloadManager.shared.add(package: package, queue: .uninstallations)
             DownloadManager.shared.reloadData(recheckPackages: true)
@@ -284,7 +284,7 @@ extension PackageCollectionViewCell: SwipeCollectionViewCellDelegate {
         let update = SwipeAction(style: .default, title: String(localizationKey: "Package_Upgrade_Action")) { _, _ in
             let queueFound = DownloadManager.shared.find(package: package)
             if queueFound != .none {
-                DownloadManager.shared.remove(package: package.package)
+                DownloadManager.shared.remove(package: package.packageID)
             }
             DownloadManager.shared.add(package: package, queue: .upgrades)
             DownloadManager.shared.reloadData(recheckPackages: true)
@@ -300,7 +300,7 @@ extension PackageCollectionViewCell: SwipeCollectionViewCellDelegate {
         let reinstall = SwipeAction(style: .default, title: String(localizationKey: "Package_Reinstall_Action")) { _, _ in
             let queueFound = DownloadManager.shared.find(package: package)
             if queueFound != .none {
-                DownloadManager.shared.remove(package: package.package)
+                DownloadManager.shared.remove(package: package.packageID)
             }
             DownloadManager.shared.add(package: package, queue: .installations)
             DownloadManager.shared.reloadData(recheckPackages: true)
@@ -316,7 +316,7 @@ extension PackageCollectionViewCell: SwipeCollectionViewCellDelegate {
         let install = SwipeAction(style: .default, title: String(localizationKey: "Package_Get_Action")) { _, _ in
             let queueFound = DownloadManager.shared.find(package: package)
             if queueFound != .none {
-                DownloadManager.shared.remove(package: package.package)
+                DownloadManager.shared.remove(package: package.packageID)
             }
             if package.sourceRepo != nil && !package.package.contains("/") {
                 if !package.commercial {

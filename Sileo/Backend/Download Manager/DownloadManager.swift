@@ -589,31 +589,31 @@ final class DownloadManager {
     }
     
     public func find(package: String) -> DownloadManagerQueue {
-        if installations.contains(where: { $0.package.package == package }) {
+        if installations.contains(where: { $0.package.packageID == package }) {
             return .installations
-        } else if uninstallations.contains(where: { $0.package.package == package }) {
+        } else if uninstallations.contains(where: { $0.package.packageID == package }) {
             return .uninstallations
-        } else if upgrades.contains(where: { $0.package.package == package }) {
+        } else if upgrades.contains(where: { $0.package.packageID == package }) {
             return .upgrades
-        } else if installdeps.contains(where: { $0.package.package == package }) {
+        } else if installdeps.contains(where: { $0.package.packageID == package }) {
             return .installdeps
-        } else if uninstalldeps.contains(where: { $0.package.package == package }) {
+        } else if uninstalldeps.contains(where: { $0.package.packageID == package }) {
             return .uninstalldeps
         }
         return .none
     }
     
     public func remove(package: String) {
-        installations.remove { $0.package.package == package }
-        upgrades.remove { $0.package.package == package }
-        installdeps.remove { $0.package.package == package }
-        uninstallations.remove { $0.package.package == package }
-        uninstalldeps.remove { $0.package.package == package }
+        installations.remove { $0.package.packageID == package }
+        upgrades.remove { $0.package.packageID == package }
+        installdeps.remove { $0.package.packageID == package }
+        uninstallations.remove { $0.package.packageID == package }
+        uninstalldeps.remove { $0.package.packageID == package }
     }
 
     public func add(package: Package, queue: DownloadManagerQueue, approved: Bool = false) {
         let downloadPackage = DownloadPackage(package: package)
-        let found = find(package: package.package)
+        let found = find(package: package.packageID)
         if found == queue { return }
         remove(downloadPackage: downloadPackage, queue: found)
 
@@ -656,7 +656,7 @@ final class DownloadManager {
             packages.removeAll { mapped.contains($0.package) }
             for package in packages {
                 let downloadPackage = DownloadPackage(package: package)
-                let found = find(package: package.package)
+                let found = find(package: package.packageID)
                 if found == .upgrades { continue }
                 remove(downloadPackage: downloadPackage, queue: found)
                 upgrades.insert(downloadPackage)

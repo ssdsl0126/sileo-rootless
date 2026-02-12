@@ -16,7 +16,7 @@ final class DownloadPackage: Hashable {
     }
     
     func hash(into hasher: inout Hasher) {
-        hasher.combine(package)
+        hasher.combine(package.packageID)
     }
 }
 

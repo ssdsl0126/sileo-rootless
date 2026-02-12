@@ -227,7 +227,7 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
             }
         }
 
-        let installedPackage = PackageListManager.shared.installedPackage(identifier: package.package)
+        let installedPackage = PackageListManager.shared.installedPackage(identifier: package.packageID)
         self.installedPackage = installedPackage
 
         packageName.text = package.name

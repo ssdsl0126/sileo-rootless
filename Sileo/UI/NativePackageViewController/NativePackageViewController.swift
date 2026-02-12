@@ -287,7 +287,7 @@ class NativePackageViewController: SileoViewController, PackageActions {
             }
         }
 
-        let installedPackage = PackageListManager.shared.installedPackage(identifier: package.package)
+        let installedPackage = PackageListManager.shared.installedPackage(identifier: package.packageID)
         self.installedPackage = installedPackage
         
         if let headerURL = package.rawControl["header"],
