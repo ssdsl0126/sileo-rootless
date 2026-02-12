@@ -5830,7 +5830,7 @@
 			repositoryURL = "https://github.com/LeoNatan/LNPopupController.git";
 			requirement = {
 				kind = revision;
-				revision = 6f4bfa89a32cc7254599869b4bca8d2638e74671;
+				revision = 1609e4c6473c6f854b9e24ca6547af33da9014c8;
 			};
 		};
 		E128181826BBFAA500D2553B /* XCRemoteSwiftPackageReference "Alderis" */ = {
@@ -5894,7 +5894,7 @@
 			repositoryURL = "https://github.com/LeoNatan/LNPopupController.git";
 			requirement = {
 				kind = revision;
-				revision = 6f4bfa89a32cc7254599869b4bca8d2638e74671;
+				revision = 1609e4c6473c6f854b9e24ca6547af33da9014c8;
 			};
 		};
 		E1D90DBE2A30E77400F8CBAF /* XCRemoteSwiftPackageReference "Onboarding" */ = {
