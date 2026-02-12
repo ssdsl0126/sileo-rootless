@@ -48,9 +48,22 @@ class DownloadsTableViewController: SileoViewController {
     public var backgroundCallback: (() -> Void)?
     private var sheetBackdropView: UIView?
     private var sheetCardBackgroundView: SileoRootView?
+    private var sheetCardTopConstraint: NSLayoutConstraint?
     private var installStatusContainerView: UIView?
     private var installStatusTextView: UITextView?
     private var installStatusEntries: [String] = []
+    
+    private var floatingSheetVerticalOffset: CGFloat {
+        max(20, view.safeAreaInsets.top - 8)
+    }
+    
+    private var floatingSheetTopInset: CGFloat {
+        max(12, floatingSheetVerticalOffset - 6)
+    }
+    
+    private var queueContentTopInset: CGFloat {
+        43 + floatingSheetVerticalOffset
+    }
     
     public class InstallOperation {
         
@@ -102,7 +115,8 @@ class DownloadsTableViewController: SileoViewController {
         self.tableView?.clipsToBounds = true
         if UIDevice.current.userInterfaceIdiom == .phone {
             self.tableView?.contentInsetAdjustmentBehavior = .never
-            self.tableView?.contentInset = UIEdgeInsets(top: 43, left: 0, bottom: 0, right: 0)
+            self.tableView?.contentInset = UIEdgeInsets(top: queueContentTopInset, left: 0, bottom: 0, right: 0)
+            self.tableView?.scrollIndicatorInsets.top = queueContentTopInset
         }
         
         confirmButton?.layer.cornerRadius = 10
@@ -159,6 +173,23 @@ class DownloadsTableViewController: SileoViewController {
  
         hideDetailsButton?.tintColor = UINavigationBar.appearance().tintColor
         hideDetailsButton?.isHighlighted = hideDetailsButton?.isHighlighted ?? false
+        
+        if UIDevice.current.userInterfaceIdiom == .phone {
+            let oldTopInset = tableView.contentInset.top
+            let newTopInset = queueContentTopInset
+            if abs(oldTopInset - newTopInset) > 0.5 {
+                let wasPinnedToTop = abs(tableView.contentOffset.y + oldTopInset) < 1
+                var newInsets = tableView.contentInset
+                newInsets.top = newTopInset
+                tableView.contentInset = newInsets
+                var newIndicatorInsets = tableView.scrollIndicatorInsets
+                newIndicatorInsets.top = newTopInset
+                tableView.scrollIndicatorInsets = newIndicatorInsets
+                if wasPinnedToTop {
+                    tableView.setContentOffset(CGPoint(x: tableView.contentOffset.x, y: -newTopInset), animated: false)
+                }
+            }
+        }
     }
     
     public override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
@@ -172,6 +203,7 @@ class DownloadsTableViewController: SileoViewController {
             sheetBackdropView = nil
             sheetCardBackgroundView?.removeFromSuperview()
             sheetCardBackgroundView = nil
+            sheetCardTopConstraint = nil
             view.backgroundColor = .sileoBackgroundColor
             statusBarView?.isHidden = false
             return
@@ -206,8 +238,10 @@ class DownloadsTableViewController: SileoViewController {
             created.translatesAutoresizingMaskIntoConstraints = false
             created.isUserInteractionEnabled = false
             view.insertSubview(created, aboveSubview: backdropView)
+            let topConstraint = created.topAnchor.constraint(equalTo: view.topAnchor, constant: floatingSheetTopInset)
+            sheetCardTopConstraint = topConstraint
             NSLayoutConstraint.activate([
-                created.topAnchor.constraint(equalTo: view.topAnchor, constant: 10),
+                topConstraint,
                 created.leadingAnchor.constraint(equalTo: view.leadingAnchor),
                 created.trailingAnchor.constraint(equalTo: view.trailingAnchor),
                 created.bottomAnchor.constraint(equalTo: view.bottomAnchor)
@@ -215,6 +249,7 @@ class DownloadsTableViewController: SileoViewController {
             sheetCardBackgroundView = created
             cardView = created
         }
+        sheetCardTopConstraint?.constant = floatingSheetTopInset
         
         cardView.layer.cornerRadius = 18
         if #available(iOS 13.0, *) {
