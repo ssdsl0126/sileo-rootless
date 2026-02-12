@@ -47,8 +47,8 @@ class DownloadsTableViewController: SileoViewController {
     private var detailsAttributedString: NSMutableAttributedString?
     public var backgroundCallback: (() -> Void)?
     private var installStatusContainerView: UIView?
-    private var installStatusLabels: [SileoLabelView] = []
-    private let maxInstallStatusLines = 6
+    private var installStatusTextView: UITextView?
+    private var installStatusEntries: [String] = []
     
     public class InstallOperation {
         
@@ -119,6 +119,9 @@ class DownloadsTableViewController: SileoViewController {
         cancelDownload?.layer.cornerRadius = 10
         showDetailsButton?.isHidden = true
         
+        detailsTextView?.isScrollEnabled = true
+        detailsTextView?.alwaysBounceVertical = true
+        
         tableView?.register(DownloadsTableViewCell.self, forCellReuseIdentifier: "DownloadsTableViewCell")
         DownloadManager.shared.reloadData(recheckPackages: false)
     }
@@ -150,8 +153,6 @@ class DownloadsTableViewController: SileoViewController {
  
         hideDetailsButton?.tintColor = UINavigationBar.appearance().tintColor
         hideDetailsButton?.isHighlighted = hideDetailsButton?.isHighlighted ?? false
-
-        layoutInstallStatusLabels(animated: false)
     }
 
     private func ensureInstallStatusContainer() {
@@ -161,16 +162,38 @@ class DownloadsTableViewController: SileoViewController {
         let statusContainer = UIView()
         statusContainer.translatesAutoresizingMaskIntoConstraints = false
         statusContainer.backgroundColor = .clear
-        statusContainer.isUserInteractionEnabled = false
+        statusContainer.isUserInteractionEnabled = true
         statusContainer.alpha = 0
         statusContainer.isHidden = true
         view.addSubview(statusContainer)
+        
+        let statusTextView = UITextView()
+        statusTextView.translatesAutoresizingMaskIntoConstraints = false
+        statusTextView.backgroundColor = .clear
+        statusTextView.textColor = .sileoLabel
+        statusTextView.font = UIFont.systemFont(ofSize: 14, weight: .semibold)
+        statusTextView.textAlignment = .center
+        statusTextView.isEditable = false
+        statusTextView.isSelectable = false
+        statusTextView.isScrollEnabled = true
+        statusTextView.alwaysBounceVertical = true
+        statusTextView.showsVerticalScrollIndicator = false
+        statusTextView.showsHorizontalScrollIndicator = false
+        statusTextView.textContainerInset = UIEdgeInsets(top: 8, left: 0, bottom: 8, right: 0)
+        statusTextView.textContainer.lineFragmentPadding = 0
+        statusContainer.addSubview(statusTextView)
+        
         NSLayoutConstraint.activate([
             statusContainer.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             statusContainer.centerYAnchor.constraint(equalTo: view.centerYAnchor, constant: -20),
             statusContainer.widthAnchor.constraint(equalToConstant: 320),
-            statusContainer.heightAnchor.constraint(equalToConstant: 180)
+            statusContainer.heightAnchor.constraint(equalToConstant: 180),
+            statusTextView.topAnchor.constraint(equalTo: statusContainer.topAnchor),
+            statusTextView.leadingAnchor.constraint(equalTo: statusContainer.leadingAnchor),
+            statusTextView.trailingAnchor.constraint(equalTo: statusContainer.trailingAnchor),
+            statusTextView.bottomAnchor.constraint(equalTo: statusContainer.bottomAnchor)
         ])
+        installStatusTextView = statusTextView
         installStatusContainerView = statusContainer
     }
     
@@ -205,52 +228,68 @@ class DownloadsTableViewController: SileoViewController {
     }
     
     private func clearInstallStatusLines() {
-        installStatusLabels.forEach { $0.removeFromSuperview() }
-        installStatusLabels.removeAll()
+        installStatusEntries.removeAll()
+        installStatusTextView?.attributedText = nil
+        installStatusTextView?.setContentOffset(CGPoint(x: 0, y: 0), animated: false)
     }
     
     private func pushInstallStatus(_ text: String) {
         guard !text.isEmpty else { return }
         ensureInstallStatusContainer()
-        guard let statusContainer = installStatusContainerView else { return }
+        guard let statusTextView = installStatusTextView else { return }
         
-        let label = SileoLabelView(frame: .zero)
-        label.text = text
-        label.font = UIFont.systemFont(ofSize: 14, weight: .semibold)
-        label.textColor = .sileoLabel
-        label.textAlignment = .center
-        label.adjustsFontSizeToFitWidth = true
-        label.minimumScaleFactor = 0.8
-        label.alpha = 0.5
-        statusContainer.addSubview(label)
-        installStatusLabels.append(label)
+        let shouldScrollToBottom = shouldAutoScrollToBottom(statusTextView)
+        installStatusEntries.append(text)
         
-        while installStatusLabels.count > maxInstallStatusLines {
-            installStatusLabels.removeFirst().removeFromSuperview()
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.alignment = .center
+        paragraphStyle.paragraphSpacing = 4
+        
+        let attributedText = NSMutableAttributedString()
+        for (index, entry) in installStatusEntries.enumerated() {
+            if index > 0 {
+                attributedText.append(NSAttributedString(string: "\n"))
+            }
+            let offsetFromEnd = installStatusEntries.count - index
+            let alpha: CGFloat
+            switch offsetFromEnd {
+            case 1:
+                alpha = 1.0
+            case 2:
+                alpha = 0.8
+            case 3:
+                alpha = 0.65
+            default:
+                alpha = 0.45
+            }
+            attributedText.append(NSAttributedString(
+                string: entry,
+                attributes: [
+                    .font: UIFont.systemFont(ofSize: 14, weight: .semibold),
+                    .foregroundColor: UIColor.sileoLabel.withAlphaComponent(alpha),
+                    .paragraphStyle: paragraphStyle
+                ]
+            ))
         }
+        statusTextView.attributedText = attributedText
         
-        layoutInstallStatusLabels(animated: true)
+        if shouldScrollToBottom {
+            scrollTextViewToBottom(statusTextView, animated: true)
+        }
     }
     
-    private func layoutInstallStatusLabels(animated: Bool) {
-        guard let statusContainer = installStatusContainerView else { return }
-        var frame = CGRect(x: 0, y: statusContainer.bounds.height - 44, width: statusContainer.bounds.width, height: 20)
-        var alpha: CGFloat = 1.0
-        let applyLayout = {
-            for label in self.installStatusLabels.reversed() {
-                label.frame = frame
-                label.alpha = max(0.15, alpha)
-                frame.origin.y -= 24
-                alpha -= 0.17
-            }
-        }
-        if animated {
-            FRUIView.animate(withDuration: 0.2) {
-                applyLayout()
-            }
-        } else {
-            applyLayout()
-        }
+    private func shouldAutoScrollToBottom(_ textView: UITextView, threshold: CGFloat = 24) -> Bool {
+        let bottomInset = textView.adjustedContentInset.bottom
+        let visibleBottom = textView.contentOffset.y + textView.bounds.height - bottomInset
+        return visibleBottom >= textView.contentSize.height - threshold
+    }
+    
+    private func scrollTextViewToBottom(_ textView: UITextView, animated: Bool) {
+        let contentHeight = textView.contentSize.height
+        let visibleHeight = textView.bounds.height - textView.adjustedContentInset.top - textView.adjustedContentInset.bottom
+        guard visibleHeight > 0 else { return }
+        let offsetY = max(-textView.adjustedContentInset.top, contentHeight - visibleHeight - textView.adjustedContentInset.top)
+        textView.setContentOffset(CGPoint(x: 0, y: offsetY), animated: animated)
     }
     
     public func loadData(_ main: @escaping () -> Void) {
@@ -694,10 +733,13 @@ class DownloadsTableViewController: SileoViewController {
                 guard let detailsAttributedString = self.detailsAttributedString else {
                     return
                 }
+                let shouldScrollToBottom = self.detailsTextView.map { self.shouldAutoScrollToBottom($0) } ?? true
                 
                 self.detailsTextView?.attributedText = self.transform(attributedString: detailsAttributedString)
                 
-                self.detailsTextView?.scrollRangeToVisible(NSRange(location: detailsAttributedString.string.count - 1, length: 1))
+                if shouldScrollToBottom, let detailsTextView = self.detailsTextView {
+                    self.scrollTextViewToBottom(detailsTextView, animated: false)
+                }
             }
         }, completionCallback: { _, finish, refresh in
             PackageListManager.shared.reloadInstalled()
