@@ -183,7 +183,7 @@ class DownloadsTableViewController: SileoViewController {
         statusTextView.textContainerInset = UIEdgeInsets(top: 8, left: 0, bottom: 8, right: 0)
         statusTextView.textContainer.lineFragmentPadding = 0
         statusContainer.addSubview(statusTextView)
-        let preferredWidthConstraint = statusContainer.widthAnchor.constraint(equalTo: view.safeAreaLayoutGuide.widthAnchor, constant: -32)
+        let preferredWidthConstraint = statusContainer.widthAnchor.constraint(equalTo: view.safeAreaLayoutGuide.widthAnchor, constant: -56)
         preferredWidthConstraint.priority = .defaultHigh
         
         NSLayoutConstraint.activate([

@@ -55,8 +55,8 @@ public class SileoViewController: UIViewController {
             return
         }
 
-        if navigationBar.insetsLayoutMarginsFromSafeArea != true {
-            navigationBar.insetsLayoutMarginsFromSafeArea = true
+        if navigationBar.insetsLayoutMarginsFromSafeArea != false {
+            navigationBar.insetsLayoutMarginsFromSafeArea = false
         }
 
         var layoutMargins = navigationBar.layoutMargins
@@ -65,5 +65,14 @@ public class SileoViewController: UIViewController {
             layoutMargins.right = leading
             navigationBar.layoutMargins = layoutMargins
         }
+        
+        var directionalMargins = navigationBar.directionalLayoutMargins
+        if directionalMargins.leading != leading || directionalMargins.trailing != leading {
+            directionalMargins.leading = leading
+            directionalMargins.trailing = leading
+            navigationBar.directionalLayoutMargins = directionalMargins
+        }
+        
+        navigationBar.layoutIfNeeded()
     }
 }
