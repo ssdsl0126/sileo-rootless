@@ -81,7 +81,7 @@ class DownloadsTableViewController: SileoViewController {
         if UIDevice.current.userInterfaceIdiom == .phone {
             return 0
         }
-        max(12, floatingContentVerticalOffset - 6)
+        return max(12, floatingContentVerticalOffset - 6)
     }
     
     private var floatingSheetHorizontalInset: CGFloat {
