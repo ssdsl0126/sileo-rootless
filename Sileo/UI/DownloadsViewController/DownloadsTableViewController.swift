@@ -80,7 +80,7 @@ class DownloadsTableViewController: SileoViewController {
     
     private var floatingSheetTopInset: CGFloat {
         if UIDevice.current.userInterfaceIdiom == .phone {
-            return 12
+            return max(44, view.safeAreaInsets.top + 10)
         }
         return max(12, floatingContentVerticalOffset - 6)
     }
@@ -188,7 +188,7 @@ class DownloadsTableViewController: SileoViewController {
         }
         
         statusBarView.frame = CGRect(origin: .zero, size: CGSize(width: self.view.bounds.width, height: tableView.safeAreaInsets.top))
-        statusBarView.isHidden = supportsFloatingSheetChrome
+        statusBarView.isHidden = supportsFloatingSheetChrome && UIDevice.current.userInterfaceIdiom != .phone
         
         cancelButton.tintColor = confirmButton.tintColor
         cancelButton.isHighlighted = confirmButton.isHighlighted
@@ -288,6 +288,7 @@ class DownloadsTableViewController: SileoViewController {
         sheetCardWidthConstraint = nil
         
         view.backgroundColor = .sileoBackgroundColor
+        statusBarView?.backgroundColor = .sileoBackgroundColor
         statusBarView?.isHidden = false
     }
     
@@ -335,7 +336,7 @@ class DownloadsTableViewController: SileoViewController {
             backdropView = createdView
         }
         sheetBackdropTopConstraint?.constant = floatingSheetTopInset
-        backdropView.backgroundColor = UIColor.black.withAlphaComponent(UIColor.isDarkModeEnabled ? 0.1 : 0.05)
+        backdropView.backgroundColor = UIColor.black.withAlphaComponent(UIColor.isDarkModeEnabled ? 0.14 : 0.08)
         
         let cardContainer: UIView
         if let existingCardContainer = sheetCardContainerView {
@@ -417,7 +418,13 @@ class DownloadsTableViewController: SileoViewController {
         }
         if let statusBarView = statusBarView {
             view.bringSubviewToFront(statusBarView)
-            statusBarView.isHidden = true
+            if UIDevice.current.userInterfaceIdiom == .phone {
+                statusBarView.backgroundColor = .black
+                statusBarView.isHidden = false
+            } else {
+                statusBarView.backgroundColor = .sileoBackgroundColor
+                statusBarView.isHidden = true
+            }
         }
     }
 
