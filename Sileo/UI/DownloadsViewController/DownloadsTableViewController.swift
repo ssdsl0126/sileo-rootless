@@ -738,11 +738,9 @@ class DownloadsTableViewController: SileoViewController {
                 guard let detailsAttributedString = self.detailsAttributedString else {
                     return
                 }
-                let shouldScrollToBottom = self.detailsTextView.map { self.shouldAutoScrollToBottom($0) } ?? true
-                
                 self.detailsTextView?.attributedText = self.transform(attributedString: detailsAttributedString)
                 
-                if shouldScrollToBottom, let detailsTextView = self.detailsTextView {
+                if let detailsTextView = self.detailsTextView {
                     self.scrollTextViewToBottom(detailsTextView, animated: false)
                 }
             }
@@ -823,6 +821,10 @@ class DownloadsTableViewController: SileoViewController {
         self.view.addSubview(detailsView)
         
         self.view.bringSubviewToFront(detailsView)
+        detailsView.layoutIfNeeded()
+        if let detailsTextView = self.detailsTextView {
+            self.scrollTextViewToBottom(detailsTextView, animated: false)
+        }
         FRUIView.animate(withDuration: 0.24, delay: 0, options: [.beginFromCurrentState, .curveEaseOut], animations: {
             self.detailsView?.alpha = 1
             self.detailsView?.transform = .identity
