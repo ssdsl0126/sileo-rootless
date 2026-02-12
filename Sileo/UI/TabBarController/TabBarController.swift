@@ -17,8 +17,12 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
     private var shouldSelectIndex = -1
     private var fuckedUpSources = false
     
-    private var preferredPopupInteractionStyle: LNPopupInteractionStyle {
+    private var preferredPopupInteractionStyle: UIViewController.PopupInteractionStyle {
         UIDevice.current.userInterfaceIdiom == .phone ? .snap : .drag
+    }
+    
+    private var preferredPopupBarStyle: LNPopupBar.Style {
+        UIDevice.current.userInterfaceIdiom == .phone ? .floating : .prominent
     }
     
     override func viewDidLoad() {
@@ -106,21 +110,12 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
         }
         
         popupIsPresented = true
-        self.popupContentView.popupCloseButtonAutomaticallyUnobstructsTopBars = false
-        self.popupBar.toolbar.tag = WHITE_BLUR_TAG
-        self.popupBar.barStyle = .prominent
-        
-        self.updateSileoColors()
-        
-        self.popupBar.toolbar.setBackgroundImage(nil, forToolbarPosition: .any, barMetrics: .default)
-        self.popupBar.tabBarHeight = self.tabBar.frame.height
-        if UIDevice.current.userInterfaceIdiom == .pad {
-            self.popupBar.isInlineWithTabBar = true
-            self.popupBar.tabBarHeight += 1
-        }
+        self.popupBar.barStyle = preferredPopupBarStyle
         self.popupBar.progressViewStyle = .bottom
+        self.popupContentView.popupCloseButtonStyle = UIDevice.current.userInterfaceIdiom == .phone ? .grabber : .chevron
+        self.popupContentView.translucent = true
         self.popupInteractionStyle = preferredPopupInteractionStyle
-        self.presentPopupBar(withContentViewController: downloadsController, animated: true, completion: completion)
+        self.presentPopupBar(with: downloadsController, animated: true, completion: completion)
         
         self.updateSileoColors()
     }
@@ -164,7 +159,6 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
         }
         
         self.popupInteractionStyle = preferredPopupInteractionStyle
-        self.popupContent?.popupInteractionStyle = preferredPopupInteractionStyle
         self.openPopup(animated: true, completion: completion)
     }
     
@@ -267,13 +261,8 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
     }
     
     @objc func updateSileoColors() {
-        if UIColor.isDarkModeEnabled {
-            self.popupBar.systemBarStyle = .black
-            self.popupBar.toolbar.barStyle = .black
-        } else {
-            self.popupBar.systemBarStyle = .default
-            self.popupBar.toolbar.barStyle = .default
-        }
+        self.popupBar.tintColor = UINavigationBar.appearance().tintColor
+        self.setNeedsPopupBarAppearanceUpdate()
     }
     
     override func viewDidLayoutSubviews() {

@@ -46,24 +46,9 @@ class DownloadsTableViewController: SileoViewController {
     private var hasErrored = false
     private var detailsAttributedString: NSMutableAttributedString?
     public var backgroundCallback: (() -> Void)?
-    private var sheetBackdropView: UIView?
-    private var sheetCardBackgroundView: SileoRootView?
-    private var sheetCardTopConstraint: NSLayoutConstraint?
     private var installStatusContainerView: UIView?
     private var installStatusTextView: UITextView?
     private var installStatusEntries: [String] = []
-    
-    private var floatingSheetVerticalOffset: CGFloat {
-        max(20, view.safeAreaInsets.top - 8)
-    }
-    
-    private var floatingSheetTopInset: CGFloat {
-        max(12, floatingSheetVerticalOffset - 6)
-    }
-    
-    private var queueContentTopInset: CGFloat {
-        43 + floatingSheetVerticalOffset
-    }
     
     public class InstallOperation {
         
@@ -115,8 +100,8 @@ class DownloadsTableViewController: SileoViewController {
         self.tableView?.clipsToBounds = true
         if UIDevice.current.userInterfaceIdiom == .phone {
             self.tableView?.contentInsetAdjustmentBehavior = .never
-            self.tableView?.contentInset = UIEdgeInsets(top: queueContentTopInset, left: 0, bottom: 0, right: 0)
-            self.tableView?.scrollIndicatorInsets.top = queueContentTopInset
+            self.tableView?.contentInset = UIEdgeInsets(top: 43, left: 0, bottom: 0, right: 0)
+            self.tableView?.scrollIndicatorInsets.top = 43
         }
         
         confirmButton?.layer.cornerRadius = 10
@@ -139,14 +124,11 @@ class DownloadsTableViewController: SileoViewController {
         detailsTextView?.alwaysBounceVertical = true
         
         tableView?.register(DownloadsTableViewCell.self, forCellReuseIdentifier: "DownloadsTableViewCell")
-        updateFloatingSheetChrome()
         DownloadManager.shared.reloadData(recheckPackages: false)
     }
     
     public override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        
-        updateFloatingSheetChrome()
         
         guard let tableView = self.tableView,
             let cancelButton = self.cancelButton,
@@ -156,7 +138,6 @@ class DownloadsTableViewController: SileoViewController {
         }
         
         statusBarView.frame = CGRect(origin: .zero, size: CGSize(width: self.view.bounds.width, height: tableView.safeAreaInsets.top))
-        statusBarView.isHidden = UIDevice.current.userInterfaceIdiom == .phone
         
         cancelButton.tintColor = confirmButton.tintColor
         cancelButton.isHighlighted = confirmButton.isHighlighted
@@ -173,102 +154,6 @@ class DownloadsTableViewController: SileoViewController {
  
         hideDetailsButton?.tintColor = UINavigationBar.appearance().tintColor
         hideDetailsButton?.isHighlighted = hideDetailsButton?.isHighlighted ?? false
-        
-        if UIDevice.current.userInterfaceIdiom == .phone {
-            let oldTopInset = tableView.contentInset.top
-            let newTopInset = queueContentTopInset
-            if abs(oldTopInset - newTopInset) > 0.5 {
-                let wasPinnedToTop = abs(tableView.contentOffset.y + oldTopInset) < 1
-                var newInsets = tableView.contentInset
-                newInsets.top = newTopInset
-                tableView.contentInset = newInsets
-                var newIndicatorInsets = tableView.scrollIndicatorInsets
-                newIndicatorInsets.top = newTopInset
-                tableView.scrollIndicatorInsets = newIndicatorInsets
-                if wasPinnedToTop {
-                    tableView.setContentOffset(CGPoint(x: tableView.contentOffset.x, y: -newTopInset), animated: false)
-                }
-            }
-        }
-    }
-    
-    public override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
-        super.traitCollectionDidChange(previousTraitCollection)
-        updateFloatingSheetChrome()
-    }
-    
-    private func updateFloatingSheetChrome() {
-        guard UIDevice.current.userInterfaceIdiom == .phone else {
-            sheetBackdropView?.removeFromSuperview()
-            sheetBackdropView = nil
-            sheetCardBackgroundView?.removeFromSuperview()
-            sheetCardBackgroundView = nil
-            sheetCardTopConstraint = nil
-            view.backgroundColor = .sileoBackgroundColor
-            statusBarView?.isHidden = false
-            return
-        }
-        
-        view.backgroundColor = .clear
-        
-        let backdropView: UIView
-        if let existing = sheetBackdropView {
-            backdropView = existing
-        } else {
-            let created = UIView()
-            created.translatesAutoresizingMaskIntoConstraints = false
-            created.isUserInteractionEnabled = false
-            view.insertSubview(created, at: 0)
-            NSLayoutConstraint.activate([
-                created.topAnchor.constraint(equalTo: view.topAnchor),
-                created.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-                created.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-                created.bottomAnchor.constraint(equalTo: view.bottomAnchor)
-            ])
-            sheetBackdropView = created
-            backdropView = created
-        }
-        backdropView.backgroundColor = UIColor.black.withAlphaComponent(UIColor.isDarkModeEnabled ? 0.14 : 0.08)
-        
-        let cardView: SileoRootView
-        if let existing = sheetCardBackgroundView {
-            cardView = existing
-        } else {
-            let created = SileoRootView(frame: .zero)
-            created.translatesAutoresizingMaskIntoConstraints = false
-            created.isUserInteractionEnabled = false
-            view.insertSubview(created, aboveSubview: backdropView)
-            let topConstraint = created.topAnchor.constraint(equalTo: view.topAnchor, constant: floatingSheetTopInset)
-            sheetCardTopConstraint = topConstraint
-            NSLayoutConstraint.activate([
-                topConstraint,
-                created.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-                created.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-                created.bottomAnchor.constraint(equalTo: view.bottomAnchor)
-            ])
-            sheetCardBackgroundView = created
-            cardView = created
-        }
-        sheetCardTopConstraint?.constant = floatingSheetTopInset
-        
-        cardView.backgroundColor = UIColor.sileoBackgroundColor.withAlphaComponent(UIColor.isDarkModeEnabled ? 0.96 : 0.93)
-        cardView.layer.cornerRadius = 18
-        if #available(iOS 13.0, *) {
-            cardView.layer.cornerCurve = .continuous
-        }
-        cardView.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
-        cardView.layer.masksToBounds = true
-        
-        if let tableView = tableView {
-            view.bringSubviewToFront(tableView)
-        }
-        if let footerView = footerView {
-            view.bringSubviewToFront(footerView)
-        }
-        if let statusBarView = statusBarView {
-            view.bringSubviewToFront(statusBarView)
-            statusBarView.isHidden = true
-        }
     }
 
     private func ensureInstallStatusContainer() {
@@ -524,7 +409,7 @@ class DownloadsTableViewController: SileoViewController {
                 self.footerView?.alpha = 0
             }, completion: { _ in
                 self.transferToInstall()
-                TabBarController.singleton?.popupContent?.popupInteractionStyle = UIDevice.current.userInterfaceIdiom == .phone ? .snap : .drag
+                TabBarController.singleton?.popupInteractionStyle = UIDevice.current.userInterfaceIdiom == .phone ? .snap : .drag
             })
         }
         if manager.errors.isEmpty {
@@ -645,7 +530,7 @@ class DownloadsTableViewController: SileoViewController {
             return
         }
         isInstalling = true
-        TabBarController.singleton?.popupContent?.popupInteractionStyle = UIDevice.current.userInterfaceIdiom == .phone ? .snap : .drag
+        TabBarController.singleton?.popupInteractionStyle = UIDevice.current.userInterfaceIdiom == .phone ? .snap : .drag
         var earlyBreak = false
         if UIApplication.shared.applicationState == .background || UIApplication.shared.applicationState == .inactive,
            let completion = backgroundCallback {
@@ -753,7 +638,7 @@ class DownloadsTableViewController: SileoViewController {
         tableView?.setEditing(true, animated: true)
         actions.removeAll()
 
-        TabBarController.singleton?.popupContent?.popupInteractionStyle = UIDevice.current.userInterfaceIdiom == .phone ? .snap : .drag
+        TabBarController.singleton?.popupInteractionStyle = UIDevice.current.userInterfaceIdiom == .phone ? .snap : .drag
         DownloadManager.shared.lockedForInstallation = false
         DownloadManager.shared.queueStarted = false
         DownloadManager.aptQueue.async {
@@ -933,7 +818,7 @@ class DownloadsTableViewController: SileoViewController {
         guard let detailsView = self.detailsView else {
             return
         }
-        TabBarController.singleton?.popupContent?.popupInteractionStyle = UIDevice.current.userInterfaceIdiom == .phone ? .snap : .drag
+        TabBarController.singleton?.popupInteractionStyle = UIDevice.current.userInterfaceIdiom == .phone ? .snap : .drag
         detailsView.alpha = 0
         detailsView.transform = CGAffineTransform(translationX: 0, y: 10)
         detailsView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
