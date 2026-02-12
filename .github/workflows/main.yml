@@ -66,6 +66,18 @@ jobs:
             sed -i '' 's/var tab: ColorPickerTab/var pickerTab: ColorPickerTab/' "$ALDERIS_FILE"
             sed -i '' 's/tab = configuration.initialTab/pickerTab = configuration.initialTab/' "$ALDERIS_FILE"
           fi
+          LNPOPUP_FILE="$TMPDIR/sileo/SourcePackages/checkouts/LNPopupController/LNPopupController/LNPopupController/Private/Appearance/_LNPopupUIBarAppearanceProxy.mm"
+          if [ ! -f "$LNPOPUP_FILE" ]; then
+            echo "LNPopup source file not found: $LNPOPUP_FILE"
+            exit 1
+          fi
+          if ! grep -q '#import <objc/message.h>' "$LNPOPUP_FILE"; then
+            sed -i '' '/#import <objc\/runtime.h>/a\
+#import <objc/message.h>
+' "$LNPOPUP_FILE"
+          fi
+          sed -i '' 's/struct objc_super super = {\.receiver = self, \.super_class = superclass};/struct objc_super superStruct; superStruct.receiver = self; superStruct.super_class = superclass;/' "$LNPOPUP_FILE"
+          sed -i '' 's/return super_class(&super, _cmd);/return super_class(\&superStruct, _cmd);/' "$LNPOPUP_FILE"
           make package NIGHTLY=1 DEBUG=0 ALL_BOOTSTRAPS=1 SILEO_PLATFORM=iphoneos-arm64 IOS_DEPLOYMENT_TARGET=13.0
 
       - name: Upload build artifacts
