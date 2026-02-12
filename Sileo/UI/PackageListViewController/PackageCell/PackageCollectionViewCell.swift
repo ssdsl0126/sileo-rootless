@@ -174,7 +174,11 @@ extension PackageCollectionViewCell: SwipeCollectionViewCellDelegate {
     }
 
     private func isDownloadablePackage(_ package: Package) -> Bool {
-        package.sourceRepo != nil && package.filename != nil
+        if package.package.contains("/") {
+            // Local deb imports do not have repo/filename metadata, but are installable.
+            return true
+        }
+        return package.sourceRepo != nil && package.filename != nil
     }
 
     func collectionView(_ collectionView: UICollectionView, editActionsForItemAt indexPath: IndexPath, for orientation: SwipeActionsOrientation) -> [SwipeAction]? {

@@ -174,7 +174,11 @@ class PackageQueueButton: PackageButton {
     }
 
     private func isDownloadablePackage(_ package: Package) -> Bool {
-        package.sourceRepo != nil && package.filename != nil
+        if package.package.contains("/") {
+            // Local deb imports do not have repo/filename metadata, but are installable.
+            return true
+        }
+        return package.sourceRepo != nil && package.filename != nil
     }
     
     func actionItems() -> [CSActionItem] {
