@@ -13,8 +13,7 @@ class FeaturedButton: DepictionButton {
         super.init(frame: frame)
         self.setTitleColor(UIColor(red: 44/255.0, green: 177/255.0, blue: 190/255.0, alpha: 1), for: .normal)
         
-        weak var weakSelf = self
-        NotificationCenter.default.addObserver(weakSelf as Any,
+        NotificationCenter.default.addObserver(self,
                                                selector: #selector(updateHighlight),
                                                name: SileoThemeManager.sileoChangedThemeNotification,
                                                object: nil)

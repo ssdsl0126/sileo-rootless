@@ -130,8 +130,7 @@ class PaymentProviderTableViewCell: UITableViewCell {
         stackView.leftAnchor.constraint(equalTo: self.contentView.layoutMarginsGuide.leftAnchor).isActive = true
         stackView.rightAnchor.constraint(equalTo: self.contentView.layoutMarginsGuide.rightAnchor).isActive = true
         
-        weak var weakSelf = self
-        NotificationCenter.default.addObserver(weakSelf as Any,
+        NotificationCenter.default.addObserver(self,
                                                selector: #selector(updateSileoColors),
                                                name: SileoThemeManager.sileoChangedThemeNotification,
                                                object: nil)

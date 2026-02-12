@@ -54,8 +54,7 @@ class DepictionMarkdownView: DepictionBaseView, CSTextViewActionHandler {
             textView.bottomAnchor.constraint(equalTo: self.bottomAnchor, constant: -bottomSpacing)
         ])
         
-        weak var weakSelf = self
-        NotificationCenter.default.addObserver(weakSelf as Any,
+        NotificationCenter.default.addObserver(self,
                                                selector: #selector(reloadMarkdown),
                                                name: SileoThemeManager.sileoChangedThemeNotification,
                                                object: nil)

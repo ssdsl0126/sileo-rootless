@@ -21,8 +21,7 @@ final class SourcesViewController: SileoViewController {
         
         RepoManager.shared.checkUpdatesInBackground()
         
-        weak var weakSelf: SourcesViewController? = self
-        NotificationCenter.default.addObserver(weakSelf as Any,
+        NotificationCenter.default.addObserver(self,
                                                selector: #selector(self.reloadRepo(_:)),
                                                name: RepoManager.progressNotification,
                                                object: nil)
@@ -72,8 +71,7 @@ final class SourcesViewController: SileoViewController {
         tableView?.register(SourcesTableViewFooter.self, forHeaderFooterViewReuseIdentifier: "Sileo.SourcesTableViewFooter")
         
         updateSileoColors()
-        weak var weakSelf = self
-        NotificationCenter.default.addObserver(weakSelf as Any,
+        NotificationCenter.default.addObserver(self,
                                                selector: #selector(self.updateSileoColors),
                                                name: SileoThemeManager.sileoChangedThemeNotification,
                                                object: nil)
@@ -92,7 +90,7 @@ final class SourcesViewController: SileoViewController {
         nav.leftBarButtonItem = UIBarButtonItem(title: "Refresh", style: .done, target: self, action: #selector(refreshSources(_:)))
         #endif
     
-        NotificationCenter.default.addObserver(weakSelf as Any, selector: #selector(handleImageUpdate(_:)), name: SourcesTableViewCell.repoImageUpdate, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(handleImageUpdate(_:)), name: SourcesTableViewCell.repoImageUpdate, object: nil)
     }
     
     override var keyCommands: [UIKeyCommand]? {
@@ -120,6 +118,7 @@ final class SourcesViewController: SileoViewController {
     
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        normalizeLargeTitleLayoutMargins()
         self.navigationController?.navigationBar._hidesShadow = true
         self.tableView?.backgroundColor = .sileoBackgroundColor
     }

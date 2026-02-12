@@ -12,8 +12,7 @@ class SileoLabelView: UILabel {
     required init?(coder aDecoder: NSCoder) {
         super.init(coder: aDecoder)
         
-        weak var weakSelf = self
-        NotificationCenter.default.addObserver(weakSelf as Any,
+        NotificationCenter.default.addObserver(self,
                                                selector: #selector(updateSileoColors),
                                                name: SileoThemeManager.sileoChangedThemeNotification,
                                                object: nil)
@@ -23,8 +22,7 @@ class SileoLabelView: UILabel {
     override init(frame: CGRect) {
         super.init(frame: frame)
         
-        weak var weakSelf = self
-        NotificationCenter.default.addObserver(weakSelf as Any,
+        NotificationCenter.default.addObserver(self,
                                                selector: #selector(updateSileoColors),
                                                name: SileoThemeManager.sileoChangedThemeNotification,
                                                object: nil)

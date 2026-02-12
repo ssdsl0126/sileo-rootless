@@ -24,8 +24,7 @@ class SileoTeamViewController: UITableViewController {
         self.tableView.tableFooterView = UIView()
         self.loadSocials()
         
-        weak var weakSelf = self
-        NotificationCenter.default.addObserver(weakSelf as Any,
+        NotificationCenter.default.addObserver(self,
                                                selector: #selector(updateSileoColors),
                                                name: SileoThemeManager.sileoChangedThemeNotification,
                                                object: nil)

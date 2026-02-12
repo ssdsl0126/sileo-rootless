@@ -354,7 +354,6 @@ class DownloadsTableViewController: SileoViewController {
                 self.footerView?.alpha = 0
             }
             transferToInstall()
-            TabBarController.singleton?.presentPopupController()
         }
         if manager.errors.isEmpty {
             self.confirmButton?.isEnabled = true

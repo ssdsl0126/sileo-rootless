@@ -24,12 +24,11 @@ final class FeaturedViewController: SileoViewController, UIScrollViewDelegate, F
         
         self.setupProfileButton()
         
-        weak var weakSelf = self
-        NotificationCenter.default.addObserver(weakSelf as Any,
+        NotificationCenter.default.addObserver(self,
                                                selector: #selector(updateSileoColors),
                                                name: SileoThemeManager.sileoChangedThemeNotification,
                                                object: nil)
-        NotificationCenter.default.addObserver(weakSelf as Any,
+        NotificationCenter.default.addObserver(self,
                                                selector: #selector(updatePicture),
                                                name: Notification.Name("iCloudProfile"),
                                                object: nil)
@@ -244,6 +243,7 @@ final class FeaturedViewController: SileoViewController, UIScrollViewDelegate, F
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        normalizeLargeTitleLayoutMargins()
         
         self.navigationItem.hidesSearchBarWhenScrolling = true
         scrollView?.contentInsetAdjustmentBehavior = .always

@@ -93,6 +93,7 @@ class PackageListViewController: SileoViewController, UIGestureRecognizerDelegat
     
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        normalizeLargeTitleLayoutMargins()
         self.navigationController?.navigationBar._hidesShadow = true
         
         guard #available(iOS 13, *) else {

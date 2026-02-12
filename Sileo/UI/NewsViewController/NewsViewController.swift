@@ -66,16 +66,15 @@ class NewsViewController: SileoViewController, UICollectionViewDataSource, UICol
 
         self.registerForPreviewing(with: self, sourceView: self.collectionView)
         
-        weak var weakSelf = self
-        NotificationCenter.default.addObserver(weakSelf as Any,
+        NotificationCenter.default.addObserver(self,
                                                selector: #selector(updateSileoColors),
                                                name: SileoThemeManager.sileoChangedThemeNotification,
                                                object: nil)
-        NotificationCenter.default.addObserver(weakSelf as Any,
+        NotificationCenter.default.addObserver(self,
                                                selector: #selector(reloadData),
                                                name: NewsViewController.reloadNotification,
                                                object: nil)
-        NotificationCenter.default.addObserver(weakSelf as Any, selector: #selector(self.reloadStates(_:)), name: PackageListManager.stateChange, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(self.reloadStates(_:)), name: PackageListManager.stateChange, object: nil)
     }
     
     @objc func reloadStates(_ notification: Notification) {
@@ -107,6 +106,7 @@ class NewsViewController: SileoViewController, UICollectionViewDataSource, UICol
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        normalizeLargeTitleLayoutMargins()
 
         self.navigationController?.navigationBar.superview?.tag = WHITE_BLUR_TAG
         self.navigationController?.navigationBar._hidesShadow = true

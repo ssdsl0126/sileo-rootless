@@ -31,8 +31,7 @@ open class BaseSubtitleTableViewCell: UITableViewCell {
         
         self.backgroundColor = .clear
         
-        weak var weakSelf = self
-        NotificationCenter.default.addObserver(weakSelf as Any,
+        NotificationCenter.default.addObserver(self,
                                                selector: #selector(updateSileoColors),
                                                name: SileoThemeManager.sileoChangedThemeNotification,
                                                object: nil)

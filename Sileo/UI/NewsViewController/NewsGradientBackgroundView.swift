@@ -24,8 +24,7 @@ class NewsGradientBackgroundView: UIView {
         layer?.colors = [ UIColor.white.cgColor, UIColor(white: 247.0 / 255.0, alpha: 1).cgColor ]
         self.traitCollectionDidChange(self.traitCollection)
         
-        weak var weakSelf = self
-        NotificationCenter.default.addObserver(weakSelf as Any,
+        NotificationCenter.default.addObserver(self,
                                                selector: #selector(updateColors),
                                                name: SileoThemeManager.sileoChangedThemeNotification,
                                                object: nil)

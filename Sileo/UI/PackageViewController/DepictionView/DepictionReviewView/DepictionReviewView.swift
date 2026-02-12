@@ -73,8 +73,7 @@ class DepictionReviewView: DepictionBaseView {
         backgroundView?.layer.cornerRadius = 10
         self.addSubview(backgroundView!)
         
-        weak var weakSelf = self
-        NotificationCenter.default.addObserver(weakSelf as Any,
+        NotificationCenter.default.addObserver(self,
                                                selector: #selector(SileoContentView.updateSileoColors),
                                                name: SileoThemeManager.sileoChangedThemeNotification,
                                                object: nil)

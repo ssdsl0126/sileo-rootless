@@ -122,8 +122,7 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
         
         weakNavController = self.navigationController
         
-        weak var weakSelf = self
-        NotificationCenter.default.addObserver(weakSelf as Any,
+        NotificationCenter.default.addObserver(self,
                                                selector: #selector(updateSileoColors),
                                                name: SileoThemeManager.sileoChangedThemeNotification,
                                                object: nil)
