@@ -179,22 +179,27 @@ class DownloadsTableViewController: SileoViewController {
         guard let statusContainer = installStatusContainerView else { return }
         
         if visible {
-            tableView?.alpha = 0
             statusContainer.isHidden = false
+            statusContainer.alpha = 0
+            statusContainer.transform = CGAffineTransform(translationX: 0, y: 12)
             view.bringSubviewToFront(statusContainer)
             if let footerView = footerView {
                 view.bringSubviewToFront(footerView)
             }
-            FRUIView.animate(withDuration: 0.2) {
+            FRUIView.animate(withDuration: 0.28, delay: 0, options: [.beginFromCurrentState, .curveEaseOut], animations: {
+                self.tableView?.alpha = 0
                 statusContainer.alpha = 1
-            }
+                statusContainer.transform = .identity
+            })
             return
         }
         
-        tableView?.alpha = 1
-        FRUIView.animate(withDuration: 0.2, animations: {
+        FRUIView.animate(withDuration: 0.22, delay: 0, options: [.beginFromCurrentState, .curveEaseIn], animations: {
+            self.tableView?.alpha = 1
             statusContainer.alpha = 0
+            statusContainer.transform = CGAffineTransform(translationX: 0, y: 8)
         }, completion: { _ in
+            statusContainer.transform = .identity
             statusContainer.isHidden = true
         })
     }
@@ -349,11 +354,13 @@ class DownloadsTableViewController: SileoViewController {
             manager.lockedForInstallation = true
             isDownloading = false
             cancelDownload?.isHidden = true
-            FRUIView.animate(withDuration: 0.25) {
+            FRUIView.animate(withDuration: 0.24, delay: 0, options: [.beginFromCurrentState, .curveEaseInOut], animations: {
                 self.footerViewHeight?.constant = 0
                 self.footerView?.alpha = 0
+            }, completion: { _ in
+                self.transferToInstall()
+                TabBarController.singleton?.popupContent?.popupInteractionStyle = .drag
             }
-            transferToInstall()
         }
         if manager.errors.isEmpty {
             self.confirmButton?.isEnabled = true
@@ -473,6 +480,7 @@ class DownloadsTableViewController: SileoViewController {
             return
         }
         isInstalling = true
+        TabBarController.singleton?.popupContent?.popupInteractionStyle = .drag
         var earlyBreak = false
         if UIApplication.shared.applicationState == .background || UIApplication.shared.applicationState == .inactive,
            let completion = backgroundCallback {
@@ -580,7 +588,7 @@ class DownloadsTableViewController: SileoViewController {
         tableView?.setEditing(true, animated: true)
         actions.removeAll()
 
-        TabBarController.singleton?.popupContent?.popupInteractionStyle = .default
+        TabBarController.singleton?.popupContent?.popupInteractionStyle = .drag
         DownloadManager.shared.lockedForInstallation = false
         DownloadManager.shared.queueStarted = false
         DownloadManager.aptQueue.async {
@@ -759,26 +767,31 @@ class DownloadsTableViewController: SileoViewController {
         guard let detailsView = self.detailsView else {
             return
         }
+        TabBarController.singleton?.popupContent?.popupInteractionStyle = .drag
         detailsView.alpha = 0
+        detailsView.transform = CGAffineTransform(translationX: 0, y: 10)
         detailsView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         detailsView.frame = self.view.bounds
         
         self.view.addSubview(detailsView)
         
         self.view.bringSubviewToFront(detailsView)
-        FRUIView.animate(withDuration: 0.25) {
+        FRUIView.animate(withDuration: 0.24, delay: 0, options: [.beginFromCurrentState, .curveEaseOut], animations: {
             self.detailsView?.alpha = 1
+            self.detailsView?.transform = .identity
             
             self.statusBarStyle = .lightContent
-        }
+        })
     }
     
     @IBAction func hideDetails(_ sender: Any?) {
-        FRUIView.animate(withDuration: 0.25, animations: {
+        FRUIView.animate(withDuration: 0.2, delay: 0, options: [.beginFromCurrentState, .curveEaseIn], animations: {
             self.detailsView?.alpha = 0
+            self.detailsView?.transform = CGAffineTransform(translationX: 0, y: 10)
             
             self.statusBarStyle = UIDevice.current.userInterfaceIdiom == .pad ? .default : .lightContent
         }, completion: { _ in
+            self.detailsView?.transform = .identity
             self.detailsView?.removeFromSuperview()
         })
     }

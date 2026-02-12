@@ -37,16 +37,22 @@ public class SileoViewController: UIViewController {
         return statusBarStyle
     }
     
-    func normalizeLargeTitleLayoutMargins(leading: CGFloat = 16) {
+    func normalizeLargeTitleLayoutMargins(leading: CGFloat = 20) {
         guard #available(iOS 11.0, *),
-              let navigationBar = navigationController?.navigationBar,
-              navigationBar.prefersLargeTitles else {
+              let navigationBar = navigationController?.navigationBar else {
             return
         }
-        navigationBar.insetsLayoutMarginsFromSafeArea = true
+        navigationBar.insetsLayoutMarginsFromSafeArea = false
         var layoutMargins = navigationBar.layoutMargins
         layoutMargins.left = leading
         layoutMargins.right = leading
         navigationBar.layoutMargins = layoutMargins
+        if #available(iOS 11.0, *) {
+            var directionalMargins = navigationBar.directionalLayoutMargins
+            directionalMargins.leading = leading
+            directionalMargins.trailing = leading
+            navigationBar.directionalLayoutMargins = directionalMargins
+        }
+        navigationBar.layoutIfNeeded()
     }
 }

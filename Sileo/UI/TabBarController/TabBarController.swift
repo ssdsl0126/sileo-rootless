@@ -159,6 +159,8 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
             popupLock.signal()
         }
         
+        self.popupInteractionStyle = .drag
+        self.popupContent?.popupInteractionStyle = .drag
         self.openPopup(animated: true, completion: completion)
     }
     
