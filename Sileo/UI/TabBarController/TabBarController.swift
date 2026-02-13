@@ -17,6 +17,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     private var shouldSelectIndex = -1
     private var fuckedUpSources = false
     private var popupTapGesture: UITapGestureRecognizer?
+    private var popupTapCatcher: UIControl?
     private var isPresentingQueueSheet = false
     private var isQueueSheetVisible = false
     
@@ -306,6 +307,8 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
 
     private func configurePopupTapIfNeeded() {
         guard usesFloatingQueueCardOnPhone else {
+            popupTapCatcher?.removeFromSuperview()
+            popupTapCatcher = nil
             return
         }
 
@@ -320,6 +323,21 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
             gesture.cancelsTouchesInView = true
             popupTapGesture = gesture
             popupBar.addGestureRecognizer(gesture)
+        }
+
+        if popupTapCatcher == nil {
+            let catcher = UIControl(frame: popupBar.bounds)
+            catcher.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            catcher.backgroundColor = .clear
+            catcher.addTarget(self, action: #selector(handlePopupBarTap), for: .touchUpInside)
+            popupTapCatcher = catcher
+        }
+        if let popupTapCatcher = popupTapCatcher {
+            popupTapCatcher.frame = popupBar.bounds
+            if popupTapCatcher.superview !== popupBar {
+                popupBar.addSubview(popupTapCatcher)
+            }
+            popupBar.bringSubviewToFront(popupTapCatcher)
         }
     }
 
@@ -393,6 +411,9 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         super.viewDidLayoutSubviews()
         
         self.tabBar.itemPositioning = .centered
+        if usesFloatingQueueCardOnPhone {
+            configurePopupTapIfNeeded()
+        }
         if UIDevice.current.userInterfaceIdiom == .pad {
             self.updatePopup()
         }
