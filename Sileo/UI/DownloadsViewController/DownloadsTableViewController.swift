@@ -243,7 +243,7 @@ class DownloadsTableViewController: SileoViewController {
         
         let newTopInset: CGFloat
         if usesSystemQueueSheetPresentation && UIDevice.current.userInterfaceIdiom == .phone {
-            newTopInset = 14
+            newTopInset = 24
         } else if supportsFloatingSheetChrome {
             newTopInset = 43 + verticalOffset
         } else if UIDevice.current.userInterfaceIdiom == .phone {
@@ -279,16 +279,18 @@ class DownloadsTableViewController: SileoViewController {
         if let existing = queueSheetHandleImageView {
             handleImageView = existing
         } else {
-            let imageView = UIImageView(image: UIImage(systemName: "chevron.compact.down"))
+            let symbolConfig = UIImage.SymbolConfiguration(pointSize: 30, weight: .bold, scale: .large)
+            let symbolImage = UIImage(systemName: "chevron.compact.down", withConfiguration: symbolConfig)
+            let imageView = UIImageView(image: symbolImage)
             imageView.translatesAutoresizingMaskIntoConstraints = false
             imageView.contentMode = .scaleAspectFit
-            imageView.tintColor = UIColor.systemGray2
+            imageView.tintColor = UIColor.systemGray
             view.addSubview(imageView)
             NSLayoutConstraint.activate([
                 imageView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-                imageView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 4),
-                imageView.widthAnchor.constraint(equalToConstant: 24),
-                imageView.heightAnchor.constraint(equalToConstant: 12)
+                imageView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 6),
+                imageView.widthAnchor.constraint(equalToConstant: 44),
+                imageView.heightAnchor.constraint(equalToConstant: 20)
             ])
             queueSheetHandleImageView = imageView
             handleImageView = imageView
