@@ -381,6 +381,7 @@ private final class QueueFloatingCardController: UIViewController, UIGestureReco
     private var didAnimateIn = false
     private var isDismissing = false
     private let baseDimmingAlpha: CGFloat = 0.72
+    private weak var primaryScrollView: UIScrollView?
     var onDismiss: (() -> Void)?
 
     init(contentController: UIViewController) {
@@ -420,6 +421,7 @@ private final class QueueFloatingCardController: UIViewController, UIGestureReco
         cardContainerView.addSubview(grabberView)
 
         let panGesture = UIPanGestureRecognizer(target: self, action: #selector(handleCardPan(_:)))
+        panGesture.cancelsTouchesInView = false
         panGesture.delegate = self
         cardContainerView.addGestureRecognizer(panGesture)
         self.panGesture = panGesture
@@ -453,6 +455,40 @@ private final class QueueFloatingCardController: UIViewController, UIGestureReco
 
         cardContainerView.transform = CGAffineTransform(translationX: 0, y: 180)
         cardContainerView.alpha = 0
+        primaryScrollView = findPrimaryScrollView(in: contentController.view)
+    }
+
+    private func findPrimaryScrollView(in rootView: UIView?) -> UIScrollView? {
+        guard let rootView = rootView else {
+            return nil
+        }
+        if let scrollView = rootView as? UIScrollView {
+            return scrollView
+        }
+        for subview in rootView.subviews {
+            if let scrollView = findPrimaryScrollView(in: subview) {
+                return scrollView
+            }
+        }
+        return nil
+    }
+
+    private func isScrollViewPinnedToTop(_ scrollView: UIScrollView?) -> Bool {
+        guard let scrollView = scrollView else {
+            return true
+        }
+        let topOffset = -scrollView.adjustedContentInset.top
+        return scrollView.contentOffset.y <= topOffset + 1
+    }
+
+    private func pinScrollViewToTop(_ scrollView: UIScrollView?) {
+        guard let scrollView = scrollView else {
+            return
+        }
+        let topOffset = -scrollView.adjustedContentInset.top
+        if scrollView.contentOffset.y > topOffset {
+            scrollView.contentOffset = CGPoint(x: scrollView.contentOffset.x, y: topOffset)
+        }
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -478,12 +514,25 @@ private final class QueueFloatingCardController: UIViewController, UIGestureReco
         let translation = gesture.translation(in: view)
         let offsetY = max(0, translation.y)
         let progress = min(1, offsetY / 220)
+        let scrollView = primaryScrollView
+        let canDragCardDown = isScrollViewPinnedToTop(scrollView)
 
         switch gesture.state {
         case .changed:
+            if offsetY <= 0 {
+                return
+            }
+
+            guard canDragCardDown || cardContainerView.transform.ty > 0 else {
+                return
+            }
+            pinScrollViewToTop(scrollView)
             cardContainerView.transform = CGAffineTransform(translationX: 0, y: offsetY)
             dimmingView.alpha = baseDimmingAlpha * (1 - (progress * 0.85))
         case .ended, .cancelled:
+            if cardContainerView.transform.ty <= 0 {
+                return
+            }
             let velocityY = gesture.velocity(in: view).y
             let shouldDismiss = offsetY > 140 || velocityY > 1250
             if shouldDismiss {
@@ -510,7 +559,7 @@ private final class QueueFloatingCardController: UIViewController, UIGestureReco
         guard velocity.y > abs(velocity.x), velocity.y > 0 else {
             return false
         }
-        return true
+        return isScrollViewPinnedToTop(primaryScrollView) || cardContainerView.transform.ty > 0
     }
 
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
