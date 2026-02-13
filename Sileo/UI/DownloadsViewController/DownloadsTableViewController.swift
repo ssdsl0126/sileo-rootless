@@ -1057,7 +1057,7 @@ class DownloadsTableViewController: SileoViewController {
                 self.isFinishedInstalling = true
                 self.reloadControlsOnly()
                 
-                if !(TabBarController.singleton?.popupIsPresented ?? false) {
+                if !(TabBarController.singleton?.isQueuePresentationVisible ?? false) {
                     self.completeButtonTapped(nil)
                 }
                 NotificationCenter.default.post(name: NSNotification.Name("Sileo.CompleteInstall"), object: nil)
@@ -1125,7 +1125,7 @@ class DownloadsTableViewController: SileoViewController {
                 self.isFinishedInstalling = true
                 self.reloadControlsOnly()
                 
-                if (UserDefaults.standard.bool(forKey: "AutoComplete") && !self.hasErrored) || !(TabBarController.singleton?.popupIsPresented ?? false) {
+                if (UserDefaults.standard.bool(forKey: "AutoComplete") && !self.hasErrored) || !(TabBarController.singleton?.isQueuePresentationVisible ?? false) {
                     self.completeButtonTapped(nil)
                 }
                 NotificationCenter.default.post(name: NSNotification.Name("Sileo.CompleteInstall"), object: nil)

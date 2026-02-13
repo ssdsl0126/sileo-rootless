@@ -20,6 +20,13 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     private var popupTapCatcher: UIControl?
     private var isPresentingQueueSheet = false
     private var isQueueSheetVisible = false
+
+    var isQueuePresentationVisible: Bool {
+        popupIsPresented ||
+        isPresentingQueueSheet ||
+        isQueueSheetVisible ||
+        presentedViewController === downloadsController
+    }
     
     private var preferredPopupInteractionStyle: UIViewController.PopupInteractionStyle {
         UIDevice.current.userInterfaceIdiom == .phone ? .snap : .drag
