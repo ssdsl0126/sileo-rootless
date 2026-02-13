@@ -104,6 +104,11 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
     }
     
     func presentPopup(completion: (() -> Void)?) {
+        if usesFloatingQueueCardOnPhone, (queueCardController != nil || isPresentingQueueCard) {
+            completion?()
+            return
+        }
+
         guard let downloadsController = downloadsController,
               !popupIsPresented
         else {
@@ -202,7 +207,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
     }
     
     func updatePopup(completion: (() -> Void)? = nil, bypass: Bool = false) {
-        if queueCardController != nil {
+        if queueCardController != nil || isPresentingQueueCard {
             completion?()
             return
         }
