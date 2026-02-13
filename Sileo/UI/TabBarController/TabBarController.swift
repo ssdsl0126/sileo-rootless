@@ -16,9 +16,20 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
     private var popupLock = DispatchSemaphore(value: 1)
     private var shouldSelectIndex = -1
     private var fuckedUpSources = false
+    private var popupTapGesture: UITapGestureRecognizer?
+    private var queueCardController: QueueFloatingCardController?
+    private var isPresentingQueueCard = false
     
     private var preferredPopupInteractionStyle: UIViewController.PopupInteractionStyle {
         UIDevice.current.userInterfaceIdiom == .phone ? .snap : .drag
+    }
+
+    private var usesFloatingQueueCardOnPhone: Bool {
+        UIDevice.current.userInterfaceIdiom == .phone
+    }
+
+    private var queueCollapsedInteractionStyle: UIViewController.PopupInteractionStyle {
+        usesFloatingQueueCardOnPhone ? .none : preferredPopupInteractionStyle
     }
     
     override func viewDidLoad() {
@@ -109,8 +120,9 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
         
         popupIsPresented = true
         self.popupBar.progressViewStyle = .bottom
-        self.popupInteractionStyle = preferredPopupInteractionStyle
+        self.popupInteractionStyle = queueCollapsedInteractionStyle
         self.presentPopupBar(with: downloadsController, animated: true, completion: completion)
+        self.configurePopupTapIfNeeded()
         
         self.updateSileoColors()
     }
@@ -141,6 +153,11 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
     }
     
     func presentPopupController(completion: (() -> Void)?) {
+        if usesFloatingQueueCardOnPhone {
+            presentFloatingQueueCard(completion: completion)
+            return
+        }
+
         guard popupIsPresented else {
             if let completion = completion {
                 completion()
@@ -162,6 +179,11 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
     }
     
     func dismissPopupController(completion: (() -> Void)?) {
+        if usesFloatingQueueCardOnPhone, let queueCardController = queueCardController {
+            queueCardController.dismissCard(completion: completion)
+            return
+        }
+
         guard popupIsPresented else {
             completion?()
             return
@@ -180,6 +202,11 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
     }
     
     func updatePopup(completion: (() -> Void)? = nil, bypass: Bool = false) {
+        if queueCardController != nil {
+            completion?()
+            return
+        }
+
         func hideRegardless() {
             if UIDevice.current.userInterfaceIdiom == .pad && self.view.frame.width >= 768 {
                 downloadsController?.popupItem.title = String(localizationKey: "Queued_Package_Status")
@@ -257,7 +284,60 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
         guard popupIsPresented else {
             return
         }
-        popupInteractionStyle = preferredPopupInteractionStyle
+        popupInteractionStyle = queueCollapsedInteractionStyle
+    }
+
+    public func restoreQueueCollapsedInteractionStyle() {
+        popupInteractionStyle = queueCollapsedInteractionStyle
+    }
+
+    private func configurePopupTapIfNeeded() {
+        guard usesFloatingQueueCardOnPhone else {
+            return
+        }
+        if popupTapGesture == nil {
+            let gesture = UITapGestureRecognizer(target: self, action: #selector(handlePopupBarTap))
+            popupTapGesture = gesture
+            popupBar.addGestureRecognizer(gesture)
+        }
+    }
+
+    @objc private func handlePopupBarTap() {
+        guard usesFloatingQueueCardOnPhone,
+              popupIsPresented,
+              queueCardController == nil
+        else {
+            return
+        }
+        presentPopupController()
+    }
+
+    private func presentFloatingQueueCard(completion: (() -> Void)?) {
+        guard usesFloatingQueueCardOnPhone,
+              popupIsPresented,
+              !isPresentingQueueCard,
+              queueCardController == nil,
+              let downloadsController = downloadsController
+        else {
+            completion?()
+            return
+        }
+
+        isPresentingQueueCard = true
+        popupIsPresented = false
+        dismissPopupBar(animated: false) { [weak self] in
+            guard let self = self else { return }
+            let queueCard = QueueFloatingCardController(contentController: downloadsController)
+            queueCard.onDismiss = { [weak self] in
+                self?.queueCardController = nil
+                self?.isPresentingQueueCard = false
+                self?.updatePopup()
+            }
+            self.queueCardController = queueCard
+            self.present(queueCard, animated: false) {
+                completion?()
+            }
+        }
     }
     
     @objc func updateSileoColors() {
@@ -284,5 +364,167 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
         let alertController = UIAlertController(title: String(localizationKey: "Unknown", type: .error), message: string, preferredStyle: .alert)
         alertController.addAction(UIAlertAction(title: String(localizationKey: "OK"), style: .default))
         self.present(alertController, animated: true, completion: nil)
+    }
+}
+
+private final class QueueFloatingCardController: UIViewController, UIGestureRecognizerDelegate {
+    private let contentController: UIViewController
+    private let dimmingView = UIControl(frame: .zero)
+    private let cardContainerView = UIView(frame: .zero)
+    private let grabberView = UIView(frame: .zero)
+    private var panGesture: UIPanGestureRecognizer?
+    private var didAnimateIn = false
+    private var isDismissing = false
+    private let baseDimmingAlpha: CGFloat = 1
+    var onDismiss: (() -> Void)?
+
+    init(contentController: UIViewController) {
+        self.contentController = contentController
+        super.init(nibName: nil, bundle: nil)
+        self.modalPresentationStyle = .overFullScreen
+        self.modalTransitionStyle = .crossDissolve
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .clear
+
+        dimmingView.translatesAutoresizingMaskIntoConstraints = false
+        dimmingView.backgroundColor = UIColor.black.withAlphaComponent(0.28)
+        dimmingView.alpha = 0
+        dimmingView.addTarget(self, action: #selector(dismissByTap), for: .touchUpInside)
+        view.addSubview(dimmingView)
+
+        cardContainerView.translatesAutoresizingMaskIntoConstraints = false
+        cardContainerView.backgroundColor = .sileoBackgroundColor
+        cardContainerView.layer.cornerRadius = 22
+        if #available(iOS 13.0, *) {
+            cardContainerView.layer.cornerCurve = .continuous
+        }
+        cardContainerView.layer.masksToBounds = true
+        view.addSubview(cardContainerView)
+
+        grabberView.translatesAutoresizingMaskIntoConstraints = false
+        grabberView.backgroundColor = UIColor.systemGray2
+        grabberView.layer.cornerRadius = 2.5
+        cardContainerView.addSubview(grabberView)
+
+        let panGesture = UIPanGestureRecognizer(target: self, action: #selector(handleCardPan(_:)))
+        panGesture.delegate = self
+        cardContainerView.addGestureRecognizer(panGesture)
+        self.panGesture = panGesture
+
+        addChild(contentController)
+        contentController.view.translatesAutoresizingMaskIntoConstraints = false
+        cardContainerView.addSubview(contentController.view)
+        contentController.didMove(toParent: self)
+
+        NSLayoutConstraint.activate([
+            dimmingView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            dimmingView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            dimmingView.topAnchor.constraint(equalTo: view.topAnchor),
+            dimmingView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+
+            cardContainerView.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 8),
+            cardContainerView.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -8),
+            cardContainerView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12),
+            cardContainerView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -12),
+
+            grabberView.topAnchor.constraint(equalTo: cardContainerView.topAnchor, constant: 8),
+            grabberView.centerXAnchor.constraint(equalTo: cardContainerView.centerXAnchor),
+            grabberView.widthAnchor.constraint(equalToConstant: 44),
+            grabberView.heightAnchor.constraint(equalToConstant: 5),
+
+            contentController.view.leadingAnchor.constraint(equalTo: cardContainerView.leadingAnchor),
+            contentController.view.trailingAnchor.constraint(equalTo: cardContainerView.trailingAnchor),
+            contentController.view.topAnchor.constraint(equalTo: cardContainerView.topAnchor),
+            contentController.view.bottomAnchor.constraint(equalTo: cardContainerView.bottomAnchor)
+        ])
+
+        cardContainerView.transform = CGAffineTransform(translationX: 0, y: 24)
+        cardContainerView.alpha = 0
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        guard !didAnimateIn else { return }
+        didAnimateIn = true
+        FRUIView.animate(withDuration: 0.26, delay: 0, options: [.beginFromCurrentState, .curveEaseOut], animations: {
+            self.dimmingView.alpha = self.baseDimmingAlpha
+            self.cardContainerView.alpha = 1
+            self.cardContainerView.transform = .identity
+        })
+    }
+
+    @objc private func dismissByTap() {
+        dismissCard(completion: nil)
+    }
+
+    @objc private func handleCardPan(_ gesture: UIPanGestureRecognizer) {
+        guard !isDismissing else {
+            return
+        }
+
+        let translation = gesture.translation(in: view)
+        let offsetY = max(0, translation.y)
+        let progress = min(1, offsetY / 220)
+
+        switch gesture.state {
+        case .changed:
+            let scale = 1 - (progress * 0.02)
+            cardContainerView.transform = CGAffineTransform(translationX: 0, y: offsetY).scaledBy(x: scale, y: scale)
+            dimmingView.alpha = baseDimmingAlpha * (1 - (progress * 0.85))
+        case .ended, .cancelled:
+            let velocityY = gesture.velocity(in: view).y
+            let shouldDismiss = offsetY > 120 || velocityY > 1200
+            if shouldDismiss {
+                dismissCard(completion: nil)
+            } else {
+                FRUIView.animate(withDuration: 0.22, delay: 0, options: [.beginFromCurrentState, .curveEaseOut], animations: {
+                    self.cardContainerView.transform = .identity
+                    self.dimmingView.alpha = self.baseDimmingAlpha
+                })
+            }
+        default:
+            break
+        }
+    }
+
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard gestureRecognizer === panGesture,
+              let pan = gestureRecognizer as? UIPanGestureRecognizer
+        else {
+            return true
+        }
+
+        let velocity = pan.velocity(in: cardContainerView)
+        guard velocity.y > abs(velocity.x), velocity.y > 0 else {
+            return false
+        }
+
+        let location = pan.location(in: cardContainerView)
+        return location.y <= 110
+    }
+
+    func dismissCard(completion: (() -> Void)?) {
+        guard !isDismissing else {
+            completion?()
+            return
+        }
+        isDismissing = true
+        FRUIView.animate(withDuration: 0.22, delay: 0, options: [.beginFromCurrentState, .curveEaseIn], animations: {
+            self.dimmingView.alpha = 0
+            self.cardContainerView.alpha = 0
+            self.cardContainerView.transform = CGAffineTransform(translationX: 0, y: 20)
+        }, completion: { _ in
+            self.dismiss(animated: false) {
+                self.onDismiss?()
+                completion?()
+            }
+        })
     }
 }

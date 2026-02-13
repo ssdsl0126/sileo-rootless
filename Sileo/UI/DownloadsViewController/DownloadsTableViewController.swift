@@ -688,7 +688,7 @@ class DownloadsTableViewController: SileoViewController {
                 self.footerView?.alpha = 0
             }, completion: { _ in
                 self.transferToInstall()
-                TabBarController.singleton?.popupInteractionStyle = UIDevice.current.userInterfaceIdiom == .phone ? .snap : .drag
+                TabBarController.singleton?.restoreQueueCollapsedInteractionStyle()
             })
         }
         if manager.errors.isEmpty {
@@ -809,7 +809,7 @@ class DownloadsTableViewController: SileoViewController {
             return
         }
         isInstalling = true
-        TabBarController.singleton?.popupInteractionStyle = UIDevice.current.userInterfaceIdiom == .phone ? .snap : .drag
+        TabBarController.singleton?.restoreQueueCollapsedInteractionStyle()
         var earlyBreak = false
         if UIApplication.shared.applicationState == .background || UIApplication.shared.applicationState == .inactive,
            let completion = backgroundCallback {
@@ -917,7 +917,7 @@ class DownloadsTableViewController: SileoViewController {
         tableView?.setEditing(true, animated: true)
         actions.removeAll()
 
-        TabBarController.singleton?.popupInteractionStyle = UIDevice.current.userInterfaceIdiom == .phone ? .snap : .drag
+        TabBarController.singleton?.restoreQueueCollapsedInteractionStyle()
         DownloadManager.shared.lockedForInstallation = false
         DownloadManager.shared.queueStarted = false
         DownloadManager.aptQueue.async {
@@ -1097,7 +1097,7 @@ class DownloadsTableViewController: SileoViewController {
         guard let detailsView = self.detailsView else {
             return
         }
-        TabBarController.singleton?.popupInteractionStyle = UIDevice.current.userInterfaceIdiom == .phone ? .snap : .drag
+        TabBarController.singleton?.restoreQueueCollapsedInteractionStyle()
         detailsView.alpha = 0
         detailsView.transform = CGAffineTransform(translationX: 0, y: 10)
         detailsView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
