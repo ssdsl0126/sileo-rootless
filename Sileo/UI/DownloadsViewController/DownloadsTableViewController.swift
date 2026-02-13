@@ -73,7 +73,8 @@ class DownloadsTableViewController: SileoViewController {
             }
         }
     }
-    private var queueSheetHandleImageView: UIImageView?
+    private var queueSheetHandleView: UIView?
+    private var queueSheetHandleLayer: CAShapeLayer?
     
     private var supportsFloatingSheetChrome: Bool {
         false
@@ -184,6 +185,7 @@ class DownloadsTableViewController: SileoViewController {
     
     public override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        updateQueueSheetHandlePath()
         applyFloatingLayoutMetrics(preserveTopPin: true)
         updateFloatingSheetChrome()
         updateFloatingCardShadowPath()
@@ -219,6 +221,7 @@ class DownloadsTableViewController: SileoViewController {
     
     public override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
         super.traitCollectionDidChange(previousTraitCollection)
+        updateQueueSheetHandlePath()
         applyFloatingLayoutMetrics(preserveTopPin: true)
         updateFloatingSheetChrome()
         updateFloatingCardShadowPath()
@@ -270,32 +273,57 @@ class DownloadsTableViewController: SileoViewController {
     private func updateQueueSheetHandle() {
         let shouldShow = usesSystemQueueSheetPresentation && UIDevice.current.userInterfaceIdiom == .phone
         if !shouldShow {
-            queueSheetHandleImageView?.removeFromSuperview()
-            queueSheetHandleImageView = nil
+            queueSheetHandleView?.removeFromSuperview()
+            queueSheetHandleView = nil
+            queueSheetHandleLayer = nil
             return
         }
 
-        let handleImageView: UIImageView
-        if let existing = queueSheetHandleImageView {
-            handleImageView = existing
+        let handleView: UIView
+        if let existing = queueSheetHandleView {
+            handleView = existing
         } else {
-            let symbolConfig = UIImage.SymbolConfiguration(pointSize: 30, weight: .bold, scale: .large)
-            let symbolImage = UIImage(systemName: "chevron.compact.down", withConfiguration: symbolConfig)
-            let imageView = UIImageView(image: symbolImage)
-            imageView.translatesAutoresizingMaskIntoConstraints = false
-            imageView.contentMode = .scaleAspectFit
-            imageView.tintColor = UIColor.systemGray
-            view.addSubview(imageView)
+            let createdView = UIView()
+            createdView.translatesAutoresizingMaskIntoConstraints = false
+            createdView.backgroundColor = .clear
+            view.addSubview(createdView)
             NSLayoutConstraint.activate([
-                imageView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-                imageView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 6),
-                imageView.widthAnchor.constraint(equalToConstant: 44),
-                imageView.heightAnchor.constraint(equalToConstant: 20)
+                createdView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+                createdView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 6),
+                createdView.widthAnchor.constraint(equalToConstant: 52),
+                createdView.heightAnchor.constraint(equalToConstant: 24)
             ])
-            queueSheetHandleImageView = imageView
-            handleImageView = imageView
+
+            let shapeLayer = CAShapeLayer()
+            shapeLayer.fillColor = UIColor.clear.cgColor
+            shapeLayer.strokeColor = UIColor.systemGray.cgColor
+            shapeLayer.lineWidth = 4.5
+            shapeLayer.lineCap = .round
+            shapeLayer.lineJoin = .round
+            createdView.layer.addSublayer(shapeLayer)
+
+            queueSheetHandleLayer = shapeLayer
+            queueSheetHandleView = createdView
+            handleView = createdView
         }
-        view.bringSubviewToFront(handleImageView)
+        view.bringSubviewToFront(handleView)
+        updateQueueSheetHandlePath()
+    }
+
+    private func updateQueueSheetHandlePath() {
+        guard let handleView = queueSheetHandleView,
+              let shapeLayer = queueSheetHandleLayer
+        else {
+            return
+        }
+
+        shapeLayer.frame = handleView.bounds
+        let path = UIBezierPath()
+        let midX = handleView.bounds.midX
+        path.move(to: CGPoint(x: midX - 18, y: 7))
+        path.addLine(to: CGPoint(x: midX, y: 15))
+        path.addLine(to: CGPoint(x: midX + 18, y: 7))
+        shapeLayer.path = path.cgPath
     }
     
     private func floatingDetailsFrame() -> CGRect {
