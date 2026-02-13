@@ -65,7 +65,15 @@ class DownloadsTableViewController: SileoViewController {
     private let cardMaxWidthPad: CGFloat = 720
     private let sideMarginMin: CGFloat = 16
     private let floatingCornerRadius: CGFloat = 18
-    public var usesSystemQueueSheetPresentation = false
+    public var usesSystemQueueSheetPresentation = false {
+        didSet {
+            DispatchQueue.main.async {
+                self.updateQueueSheetHandle()
+                self.applyFloatingLayoutMetrics(preserveTopPin: true)
+            }
+        }
+    }
+    private var queueSheetHandleImageView: UIImageView?
     
     private var supportsFloatingSheetChrome: Bool {
         false
@@ -168,6 +176,7 @@ class DownloadsTableViewController: SileoViewController {
         detailsTextView?.alwaysBounceVertical = true
         
         tableView?.register(DownloadsTableViewCell.self, forCellReuseIdentifier: "DownloadsTableViewCell")
+        updateQueueSheetHandle()
         applyFloatingLayoutMetrics(preserveTopPin: false)
         updateFloatingSheetChrome()
         DownloadManager.shared.reloadData(recheckPackages: false)
@@ -234,7 +243,7 @@ class DownloadsTableViewController: SileoViewController {
         
         let newTopInset: CGFloat
         if usesSystemQueueSheetPresentation && UIDevice.current.userInterfaceIdiom == .phone {
-            newTopInset = 0
+            newTopInset = 14
         } else if supportsFloatingSheetChrome {
             newTopInset = 43 + verticalOffset
         } else if UIDevice.current.userInterfaceIdiom == .phone {
@@ -256,6 +265,35 @@ class DownloadsTableViewController: SileoViewController {
         if wasPinnedToTop && abs(oldTopInset - newTopInset) > 0.5 {
             tableView.setContentOffset(CGPoint(x: tableView.contentOffset.x, y: -newTopInset), animated: false)
         }
+    }
+
+    private func updateQueueSheetHandle() {
+        let shouldShow = usesSystemQueueSheetPresentation && UIDevice.current.userInterfaceIdiom == .phone
+        if !shouldShow {
+            queueSheetHandleImageView?.removeFromSuperview()
+            queueSheetHandleImageView = nil
+            return
+        }
+
+        let handleImageView: UIImageView
+        if let existing = queueSheetHandleImageView {
+            handleImageView = existing
+        } else {
+            let imageView = UIImageView(image: UIImage(systemName: "chevron.compact.down"))
+            imageView.translatesAutoresizingMaskIntoConstraints = false
+            imageView.contentMode = .scaleAspectFit
+            imageView.tintColor = UIColor.systemGray2
+            view.addSubview(imageView)
+            NSLayoutConstraint.activate([
+                imageView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+                imageView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 4),
+                imageView.widthAnchor.constraint(equalToConstant: 24),
+                imageView.heightAnchor.constraint(equalToConstant: 12)
+            ])
+            queueSheetHandleImageView = imageView
+            handleImageView = imageView
+        }
+        view.bringSubviewToFront(handleImageView)
     }
     
     private func floatingDetailsFrame() -> CGRect {

@@ -375,7 +375,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
             if #available(iOS 15.0, *) {
                 if let sheet = downloadsController.sheetPresentationController {
                     sheet.detents = [.large()]
-                    sheet.prefersGrabberVisible = true
+                    sheet.prefersGrabberVisible = false
                     sheet.preferredCornerRadius = 22
                     sheet.prefersScrollingExpandsWhenScrolledToEdge = false
                 }
