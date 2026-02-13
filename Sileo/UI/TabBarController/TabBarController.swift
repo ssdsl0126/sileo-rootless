@@ -308,8 +308,16 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         guard usesFloatingQueueCardOnPhone else {
             return
         }
+
+        if let recognizers = popupBar.gestureRecognizers {
+            for recognizer in recognizers where recognizer !== popupTapGesture {
+                recognizer.isEnabled = false
+            }
+        }
+
         if popupTapGesture == nil {
             let gesture = UITapGestureRecognizer(target: self, action: #selector(handlePopupBarTap))
+            gesture.cancelsTouchesInView = true
             popupTapGesture = gesture
             popupBar.addGestureRecognizer(gesture)
         }
@@ -341,6 +349,10 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         popupIsPresented = false
         dismissPopupBar(animated: false) { [weak self] in
             guard let self = self else { return }
+            if let queueVC = downloadsController.viewControllers.first as? DownloadsTableViewController {
+                queueVC.usesSystemQueueSheetPresentation = true
+                queueVC.reloadData()
+            }
             downloadsController.modalPresentationStyle = .pageSheet
             if #available(iOS 15.0, *) {
                 if let sheet = downloadsController.sheetPresentationController {

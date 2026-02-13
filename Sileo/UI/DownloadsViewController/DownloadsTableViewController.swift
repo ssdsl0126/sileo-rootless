@@ -65,6 +65,7 @@ class DownloadsTableViewController: SileoViewController {
     private let cardMaxWidthPad: CGFloat = 720
     private let sideMarginMin: CGFloat = 16
     private let floatingCornerRadius: CGFloat = 18
+    public var usesSystemQueueSheetPresentation = false
     
     private var supportsFloatingSheetChrome: Bool {
         false
@@ -232,7 +233,9 @@ class DownloadsTableViewController: SileoViewController {
         footerTrailingConstraint?.constant = horizontalInset
         
         let newTopInset: CGFloat
-        if supportsFloatingSheetChrome {
+        if usesSystemQueueSheetPresentation && UIDevice.current.userInterfaceIdiom == .phone {
+            newTopInset = 0
+        } else if supportsFloatingSheetChrome {
             newTopInset = 43 + verticalOffset
         } else if UIDevice.current.userInterfaceIdiom == .phone {
             newTopInset = 43
