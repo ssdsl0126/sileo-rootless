@@ -380,7 +380,7 @@ private final class QueueFloatingCardController: UIViewController, UIGestureReco
     private var panGesture: UIPanGestureRecognizer?
     private var didAnimateIn = false
     private var isDismissing = false
-    private let baseDimmingAlpha: CGFloat = 1
+    private let baseDimmingAlpha: CGFloat = 0.72
     var onDismiss: (() -> Void)?
 
     init(contentController: UIViewController) {
@@ -399,17 +399,18 @@ private final class QueueFloatingCardController: UIViewController, UIGestureReco
         view.backgroundColor = .clear
 
         dimmingView.translatesAutoresizingMaskIntoConstraints = false
-        dimmingView.backgroundColor = UIColor.black.withAlphaComponent(0.28)
+        dimmingView.backgroundColor = UIColor.black.withAlphaComponent(0.24)
         dimmingView.alpha = 0
         dimmingView.addTarget(self, action: #selector(dismissByTap), for: .touchUpInside)
         view.addSubview(dimmingView)
 
         cardContainerView.translatesAutoresizingMaskIntoConstraints = false
         cardContainerView.backgroundColor = .sileoBackgroundColor
-        cardContainerView.layer.cornerRadius = 22
+        cardContainerView.layer.cornerRadius = 26
         if #available(iOS 13.0, *) {
             cardContainerView.layer.cornerCurve = .continuous
         }
+        cardContainerView.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
         cardContainerView.layer.masksToBounds = true
         view.addSubview(cardContainerView)
 
@@ -434,10 +435,10 @@ private final class QueueFloatingCardController: UIViewController, UIGestureReco
             dimmingView.topAnchor.constraint(equalTo: view.topAnchor),
             dimmingView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
 
-            cardContainerView.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 8),
-            cardContainerView.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -8),
-            cardContainerView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12),
-            cardContainerView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -12),
+            cardContainerView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            cardContainerView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            cardContainerView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 84),
+            cardContainerView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
 
             grabberView.topAnchor.constraint(equalTo: cardContainerView.topAnchor, constant: 8),
             grabberView.centerXAnchor.constraint(equalTo: cardContainerView.centerXAnchor),
@@ -450,7 +451,7 @@ private final class QueueFloatingCardController: UIViewController, UIGestureReco
             contentController.view.bottomAnchor.constraint(equalTo: cardContainerView.bottomAnchor)
         ])
 
-        cardContainerView.transform = CGAffineTransform(translationX: 0, y: 24)
+        cardContainerView.transform = CGAffineTransform(translationX: 0, y: 180)
         cardContainerView.alpha = 0
     }
 
@@ -480,12 +481,11 @@ private final class QueueFloatingCardController: UIViewController, UIGestureReco
 
         switch gesture.state {
         case .changed:
-            let scale = 1 - (progress * 0.02)
-            cardContainerView.transform = CGAffineTransform(translationX: 0, y: offsetY).scaledBy(x: scale, y: scale)
+            cardContainerView.transform = CGAffineTransform(translationX: 0, y: offsetY)
             dimmingView.alpha = baseDimmingAlpha * (1 - (progress * 0.85))
         case .ended, .cancelled:
             let velocityY = gesture.velocity(in: view).y
-            let shouldDismiss = offsetY > 120 || velocityY > 1200
+            let shouldDismiss = offsetY > 140 || velocityY > 1250
             if shouldDismiss {
                 dismissCard(completion: nil)
             } else {
@@ -510,9 +510,14 @@ private final class QueueFloatingCardController: UIViewController, UIGestureReco
         guard velocity.y > abs(velocity.x), velocity.y > 0 else {
             return false
         }
+        return true
+    }
 
-        let location = pan.location(in: cardContainerView)
-        return location.y <= 110
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard gestureRecognizer === panGesture else {
+            return false
+        }
+        return otherGestureRecognizer.view is UIScrollView || otherGestureRecognizer == (otherGestureRecognizer.view as? UIScrollView)?.panGestureRecognizer
     }
 
     func dismissCard(completion: (() -> Void)?) {
@@ -524,7 +529,7 @@ private final class QueueFloatingCardController: UIViewController, UIGestureReco
         UIView.animate(withDuration: 0.22, delay: 0, options: [.beginFromCurrentState, .curveEaseIn], animations: {
             self.dimmingView.alpha = 0
             self.cardContainerView.alpha = 0
-            self.cardContainerView.transform = CGAffineTransform(translationX: 0, y: 20)
+            self.cardContainerView.transform = CGAffineTransform(translationX: 0, y: 180)
         }, completion: { _ in
             self.dismiss(animated: false) {
                 self.onDismiss?()
