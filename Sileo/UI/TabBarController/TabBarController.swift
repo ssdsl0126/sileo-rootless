@@ -453,7 +453,7 @@ private final class QueueFloatingCardController: UIViewController, UIGestureReco
         super.viewDidAppear(animated)
         guard !didAnimateIn else { return }
         didAnimateIn = true
-        FRUIView.animate(withDuration: 0.26, delay: 0, options: [.beginFromCurrentState, .curveEaseOut], animations: {
+        UIView.animate(withDuration: 0.26, delay: 0, options: [.beginFromCurrentState, .curveEaseOut], animations: {
             self.dimmingView.alpha = self.baseDimmingAlpha
             self.cardContainerView.alpha = 1
             self.cardContainerView.transform = .identity
@@ -484,7 +484,7 @@ private final class QueueFloatingCardController: UIViewController, UIGestureReco
             if shouldDismiss {
                 dismissCard(completion: nil)
             } else {
-                FRUIView.animate(withDuration: 0.22, delay: 0, options: [.beginFromCurrentState, .curveEaseOut], animations: {
+                UIView.animate(withDuration: 0.22, delay: 0, options: [.beginFromCurrentState, .curveEaseOut], animations: {
                     self.cardContainerView.transform = .identity
                     self.dimmingView.alpha = self.baseDimmingAlpha
                 })
@@ -516,7 +516,7 @@ private final class QueueFloatingCardController: UIViewController, UIGestureReco
             return
         }
         isDismissing = true
-        FRUIView.animate(withDuration: 0.22, delay: 0, options: [.beginFromCurrentState, .curveEaseIn], animations: {
+        UIView.animate(withDuration: 0.22, delay: 0, options: [.beginFromCurrentState, .curveEaseIn], animations: {
             self.dimmingView.alpha = 0
             self.cardContainerView.alpha = 0
             self.cardContainerView.transform = CGAffineTransform(translationX: 0, y: 20)
