@@ -9,7 +9,7 @@
 import Foundation
 import LNPopupController
 
-class TabBarController: UITabBarController, UITabBarControllerDelegate {
+class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdaptivePresentationControllerDelegate {
     static var singleton: TabBarController?
     private var downloadsController: UINavigationController?
     private(set) public var popupIsPresented = false
@@ -17,8 +17,8 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
     private var shouldSelectIndex = -1
     private var fuckedUpSources = false
     private var popupTapGesture: UITapGestureRecognizer?
-    private var queueCardController: QueueFloatingCardController?
-    private var isPresentingQueueCard = false
+    private var isPresentingQueueSheet = false
+    private var isQueueSheetVisible = false
     
     private var preferredPopupInteractionStyle: UIViewController.PopupInteractionStyle {
         UIDevice.current.userInterfaceIdiom == .phone ? .snap : .drag
@@ -104,7 +104,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
     }
     
     func presentPopup(completion: (() -> Void)?) {
-        if usesFloatingQueueCardOnPhone, (queueCardController != nil || isPresentingQueueCard) {
+        if usesFloatingQueueCardOnPhone, (isQueueSheetVisible || isPresentingQueueSheet) {
             completion?()
             return
         }
@@ -159,7 +159,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
     
     func presentPopupController(completion: (() -> Void)?) {
         if usesFloatingQueueCardOnPhone {
-            presentFloatingQueueCard(completion: completion)
+            presentSystemQueueSheet(completion: completion)
             return
         }
 
@@ -184,8 +184,16 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
     }
     
     func dismissPopupController(completion: (() -> Void)?) {
-        if usesFloatingQueueCardOnPhone, let queueCardController = queueCardController {
-            queueCardController.dismissCard(completion: completion)
+        if usesFloatingQueueCardOnPhone,
+           isQueueSheetVisible,
+           let downloadsController = downloadsController,
+           downloadsController.presentingViewController != nil {
+            downloadsController.dismiss(animated: true) {
+                self.isQueueSheetVisible = false
+                self.isPresentingQueueSheet = false
+                self.updatePopup()
+                completion?()
+            }
             return
         }
 
@@ -207,7 +215,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
     }
     
     func updatePopup(completion: (() -> Void)? = nil, bypass: Bool = false) {
-        if queueCardController != nil || isPresentingQueueCard {
+        if isQueueSheetVisible || isPresentingQueueSheet {
             completion?()
             return
         }
@@ -310,39 +318,58 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
     @objc private func handlePopupBarTap() {
         guard usesFloatingQueueCardOnPhone,
               popupIsPresented,
-              queueCardController == nil
+              !isQueueSheetVisible,
+              !isPresentingQueueSheet
         else {
             return
         }
         presentPopupController()
     }
 
-    private func presentFloatingQueueCard(completion: (() -> Void)?) {
+    private func presentSystemQueueSheet(completion: (() -> Void)?) {
         guard usesFloatingQueueCardOnPhone,
               popupIsPresented,
-              !isPresentingQueueCard,
-              queueCardController == nil,
+              !isPresentingQueueSheet,
+              !isQueueSheetVisible,
               let downloadsController = downloadsController
         else {
             completion?()
             return
         }
 
-        isPresentingQueueCard = true
+        isPresentingQueueSheet = true
         popupIsPresented = false
         dismissPopupBar(animated: false) { [weak self] in
             guard let self = self else { return }
-            let queueCard = QueueFloatingCardController(contentController: downloadsController)
-            queueCard.onDismiss = { [weak self] in
-                self?.queueCardController = nil
-                self?.isPresentingQueueCard = false
-                self?.updatePopup()
+            downloadsController.modalPresentationStyle = .pageSheet
+            if #available(iOS 15.0, *) {
+                if let sheet = downloadsController.sheetPresentationController {
+                    sheet.detents = [.large()]
+                    sheet.prefersGrabberVisible = true
+                    sheet.preferredCornerRadius = 22
+                    sheet.prefersScrollingExpandsWhenScrolledToEdge = false
+                }
             }
-            self.queueCardController = queueCard
-            self.present(queueCard, animated: false) {
+
+            self.present(downloadsController, animated: true) {
+                downloadsController.presentationController?.delegate = self
+                self.isQueueSheetVisible = true
+                self.isPresentingQueueSheet = false
                 completion?()
             }
         }
+    }
+
+    func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
+        guard usesFloatingQueueCardOnPhone,
+              let downloadsController = downloadsController,
+              presentationController.presentedViewController === downloadsController
+        else {
+            return
+        }
+        isQueueSheetVisible = false
+        isPresentingQueueSheet = false
+        updatePopup()
     }
     
     @objc func updateSileoColors() {
