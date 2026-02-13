@@ -290,14 +290,14 @@ class DownloadsTableViewController: SileoViewController {
             NSLayoutConstraint.activate([
                 createdView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
                 createdView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 6),
-                createdView.widthAnchor.constraint(equalToConstant: 52),
-                createdView.heightAnchor.constraint(equalToConstant: 24)
+                createdView.widthAnchor.constraint(equalToConstant: 82),
+                createdView.heightAnchor.constraint(equalToConstant: 36)
             ])
 
             let shapeLayer = CAShapeLayer()
             shapeLayer.fillColor = UIColor.clear.cgColor
             shapeLayer.strokeColor = UIColor.systemGray.cgColor
-            shapeLayer.lineWidth = 4.5
+            shapeLayer.lineWidth = 6.5
             shapeLayer.lineCap = .round
             shapeLayer.lineJoin = .round
             createdView.layer.addSublayer(shapeLayer)
@@ -320,9 +320,9 @@ class DownloadsTableViewController: SileoViewController {
         shapeLayer.frame = handleView.bounds
         let path = UIBezierPath()
         let midX = handleView.bounds.midX
-        path.move(to: CGPoint(x: midX - 18, y: 7))
-        path.addLine(to: CGPoint(x: midX, y: 15))
-        path.addLine(to: CGPoint(x: midX + 18, y: 7))
+        path.move(to: CGPoint(x: midX - 28, y: 8))
+        path.addLine(to: CGPoint(x: midX, y: 22))
+        path.addLine(to: CGPoint(x: midX + 28, y: 8))
         shapeLayer.path = path.cgPath
     }
     
