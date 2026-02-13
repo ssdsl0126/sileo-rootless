@@ -127,6 +127,9 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         popupIsPresented = true
         self.popupBar.progressViewStyle = .bottom
         self.popupInteractionStyle = queueCollapsedInteractionStyle
+        if let queueVC = downloadsController.viewControllers.first as? DownloadsTableViewController {
+            queueVC.usesSystemQueueSheetPresentation = false
+        }
         self.presentPopupBar(with: downloadsController, animated: true, completion: completion)
         self.configurePopupTapIfNeeded()
         

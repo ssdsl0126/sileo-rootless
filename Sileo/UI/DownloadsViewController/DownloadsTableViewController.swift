@@ -246,7 +246,7 @@ class DownloadsTableViewController: SileoViewController {
         
         let newTopInset: CGFloat
         if usesSystemQueueSheetPresentation && UIDevice.current.userInterfaceIdiom == .phone {
-            newTopInset = 24
+            newTopInset = 14
         } else if supportsFloatingSheetChrome {
             newTopInset = 43 + verticalOffset
         } else if UIDevice.current.userInterfaceIdiom == .phone {
@@ -290,14 +290,14 @@ class DownloadsTableViewController: SileoViewController {
             NSLayoutConstraint.activate([
                 createdView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
                 createdView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 6),
-                createdView.widthAnchor.constraint(equalToConstant: 82),
-                createdView.heightAnchor.constraint(equalToConstant: 36)
+                createdView.widthAnchor.constraint(equalToConstant: 42),
+                createdView.heightAnchor.constraint(equalToConstant: 16)
             ])
 
             let shapeLayer = CAShapeLayer()
             shapeLayer.fillColor = UIColor.clear.cgColor
-            shapeLayer.strokeColor = UIColor.systemGray.cgColor
-            shapeLayer.lineWidth = 6.5
+            shapeLayer.strokeColor = UIColor.systemGray2.cgColor
+            shapeLayer.lineWidth = 3.5
             shapeLayer.lineCap = .round
             shapeLayer.lineJoin = .round
             createdView.layer.addSublayer(shapeLayer)
@@ -320,9 +320,9 @@ class DownloadsTableViewController: SileoViewController {
         shapeLayer.frame = handleView.bounds
         let path = UIBezierPath()
         let midX = handleView.bounds.midX
-        path.move(to: CGPoint(x: midX - 28, y: 8))
-        path.addLine(to: CGPoint(x: midX, y: 22))
-        path.addLine(to: CGPoint(x: midX + 28, y: 8))
+        path.move(to: CGPoint(x: midX - 12, y: 5))
+        path.addLine(to: CGPoint(x: midX, y: 10.5))
+        path.addLine(to: CGPoint(x: midX + 12, y: 5))
         shapeLayer.path = path.cgPath
     }
     
