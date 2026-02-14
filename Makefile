@@ -15,8 +15,17 @@ RUN_CLANG_STATIC_ANALYZER ?= NO
 SWIFT_TREAT_WARNINGS_AS_ERRORS ?= NO
 GCC_TREAT_WARNINGS_AS_ERRORS ?= NO
 CLANG_TREAT_WARNINGS_AS_ERRORS ?= NO
+EMBED_SWIFT_STDLIB ?= 0
 
 TARGET_CODESIGN = $(shell which ldid)
+
+ifeq ($(EMBED_SWIFT_STDLIB),1)
+SWIFT_STDLIB_EMBED_FLAG = YES
+SWIFT_STDLIB_SUFFIX = -embedded-swift
+else
+SWIFT_STDLIB_EMBED_FLAG = NO
+SWIFT_STDLIB_SUFFIX = -system-swift
+endif
 
 SILEOTMP = $(TMPDIR)/sileo
 SILEO_STAGE_DIR = $(SILEOTMP)/stage
@@ -200,7 +209,7 @@ stage: all
 	@set -o pipefail; \
 		xcodebuild -jobs $(shell sysctl -n hw.ncpu) -project 'Sileo.xcodeproj' -scheme "$(SCHEME)" -configuration $(BUILD_CONFIG) -arch $(ARCH) -sdk $(PLATFORM) -derivedDataPath $(SILEOTMP) \
 		CODE_SIGNING_ALLOWED=NO IPHONEOS_DEPLOYMENT_TARGET=$(IOS_DEPLOYMENT_TARGET) RUN_CLANG_STATIC_ANALYZER=$(RUN_CLANG_STATIC_ANALYZER) SWIFT_TREAT_WARNINGS_AS_ERRORS=$(SWIFT_TREAT_WARNINGS_AS_ERRORS) GCC_TREAT_WARNINGS_AS_ERRORS=$(GCC_TREAT_WARNINGS_AS_ERRORS) CLANG_TREAT_WARNINGS_AS_ERRORS=$(CLANG_TREAT_WARNINGS_AS_ERRORS) PRODUCT_BUNDLE_IDENTIFIER=$(PRODUCT_BUNDLE_IDENTIFIER) DISPLAY_NAME=$(DISPLAY_NAME) \
-		DSTROOT=$(SILEOTMP)/install $(XCPRETTY) ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES=NO
+		DSTROOT=$(SILEOTMP)/install $(XCPRETTY) ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES=$(SWIFT_STDLIB_EMBED_FLAG)
 	@rm -rf $(SILEO_STAGE_DIR)/
 	@mkdir -p $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/
 	@mv $(SILEO_APP_DIR) $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP)
@@ -217,7 +226,9 @@ stage: all
 	process_bundle $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP)
 	
 	@rm -rf $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP)/_CodeSignature
-	@rm -rf $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP)/Frameworks
+	@if [ "$(SWIFT_STDLIB_EMBED_FLAG)" = "NO" ]; then \
+		rm -rf $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP)/Frameworks; \
+	fi
 	@cp giveMeRoot/bin/giveMeRoot $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP)/
 	@$(TARGET_CODESIGN) -SSileo/Entitlements.entitlements $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP)/
 	@$(TARGET_CODESIGN) -SgiveMeRoot/Entitlements.plist $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP)/giveMeRoot
@@ -227,12 +238,14 @@ stage: all
 	@set -o pipefail; \
 		xcodebuild -jobs $(shell sysctl -n hw.ncpu) -project 'Sileo.xcodeproj' -scheme 'Sileo' $(DESTINATION) -configuration $(BUILD_CONFIG) ARCHS=$(ARCH) -derivedDataPath $(SILEOTMP) \
 		RUN_CLANG_STATIC_ANALYZER=$(RUN_CLANG_STATIC_ANALYZER) SWIFT_TREAT_WARNINGS_AS_ERRORS=$(SWIFT_TREAT_WARNINGS_AS_ERRORS) GCC_TREAT_WARNINGS_AS_ERRORS=$(GCC_TREAT_WARNINGS_AS_ERRORS) CLANG_TREAT_WARNINGS_AS_ERRORS=$(CLANG_TREAT_WARNINGS_AS_ERRORS) \
-		DSTROOT=$(SILEOTMP)/install $(XCPRETTY) ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES=NO
+		DSTROOT=$(SILEOTMP)/install $(XCPRETTY) ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES=$(SWIFT_STDLIB_EMBED_FLAG)
 	@rm -rf $(SILEO_STAGE_DIR)
 	@mkdir -p $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/
 	@rm -rf $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP)
 	@mv $(SILEO_APP_DIR) $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP)
-	@rm -rf $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP)/Frameworks
+	@if [ "$(SWIFT_STDLIB_EMBED_FLAG)" = "NO" ]; then \
+		rm -rf $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP)/Frameworks; \
+	fi
 endif
 
 ifeq ($(MAC), 1)
@@ -255,7 +268,7 @@ package: stage
 	@mv $(SILEO_STAGE_DIR)/DEBIAN/prerm-mac $(SILEO_STAGE_DIR)/DEBIAN/prerm
 	@chmod 0755 $(SILEO_STAGE_DIR)/DEBIAN/prerm
 	@mkdir -p ./packages
-	@dpkg-deb -Z$(DPKG_TYPE) --root-owner-group -b $(SILEO_STAGE_DIR) ./packages/$(SILEO_ID)_$(SILEO_VERSION)_$(DEB_ARCH).deb
+	@dpkg-deb -Z$(DPKG_TYPE) --root-owner-group -b $(SILEO_STAGE_DIR) ./packages/$(SILEO_ID)_$(SILEO_VERSION)_$(DEB_ARCH)$(SWIFT_STDLIB_SUFFIX).deb
 else
 package: stage
 	@cp -a ./layout/DEBIAN $(SILEO_STAGE_DIR)
@@ -274,7 +287,7 @@ package: stage
 	@rm -rf $(SILEO_STAGE_DIR)/DEBIAN/prerm-mac
 	@rm -rf "$(SILEO_STAGE_DIR)/Applications/$(SILEO_APP)/Down_Down.bundle/DownView (macOS).bundle"
 	@mkdir -p ./packages
-	@dpkg-deb -Z$(DPKG_TYPE) --root-owner-group -b $(SILEO_STAGE_DIR) ./packages/$(SILEO_ID)_$(SILEO_VERSION)_$(DEB_ARCH).deb
+	@dpkg-deb -Z$(DPKG_TYPE) --root-owner-group -b $(SILEO_STAGE_DIR) ./packages/$(SILEO_ID)_$(SILEO_VERSION)_$(DEB_ARCH)$(SWIFT_STDLIB_SUFFIX).deb
 endif
 
 clean::

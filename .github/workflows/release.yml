@@ -7,8 +7,21 @@ permissions:
   contents: write
 jobs:
   make:
-    name: Build and Upload Sileo
+    name: Build and Upload Sileo (${{ matrix.platform.label }}, ${{ matrix.swift_mode.label }})
     runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - label: iphoneos-arm
+            make_platform: iphoneos-arm
+          - label: iphoneos-arm64
+            make_platform: iphoneos-arm64
+        swift_mode:
+          - label: system-swift
+            embed: "0"
+          - label: embedded-swift
+            embed: "1"
     steps:
 
       - name: Checkout
@@ -55,7 +68,7 @@ jobs:
         run: |
           echo '/opt/procursus/sbin:/opt/procursus/bin' >> $GITHUB_PATH
 
-      - name: Build Sileo (iphoneos-arm)
+      - name: Build Sileo (${{ matrix.platform.label }}, ${{ matrix.swift_mode.label }})
         run: |
           make clean
           xcodebuild -resolvePackageDependencies -project Sileo.xcodeproj -scheme Sileo -derivedDataPath "$TMPDIR/sileo"
@@ -83,37 +96,7 @@ jobs:
             fi
           done < <(find "$LNPOPUP_PRIVATE_DIR" -mindepth 2 -type f \( -name '*.h' -o -name '*.hh' \))
           echo "LNPopup header links created: $LNPOPUP_LINK_COUNT"
-          make package DEBUG=0 ALL_BOOTSTRAPS=1 IOS_DEPLOYMENT_TARGET=13.0 V=1
-
-      - name: Build Sileo (iphoneos-arm64)
-        run: |
-          make clean
-          xcodebuild -resolvePackageDependencies -project Sileo.xcodeproj -scheme Sileo -derivedDataPath "$TMPDIR/sileo"
-          ALDERIS_FILE="$TMPDIR/sileo/SourcePackages/checkouts/Alderis/Alderis/ColorPickerInnerViewController.swift"
-          if [ ! -f "$ALDERIS_FILE" ]; then
-            echo "Alderis source file not found: $ALDERIS_FILE"
-            exit 1
-          fi
-          if ! grep -q 'var pickerTab: ColorPickerTab' "$ALDERIS_FILE"; then
-            sed -i '' 's/var tab: ColorPickerTab/var pickerTab: ColorPickerTab/' "$ALDERIS_FILE"
-            sed -i '' 's/tab = configuration.initialTab/pickerTab = configuration.initialTab/' "$ALDERIS_FILE"
-          fi
-          LNPOPUP_PRIVATE_DIR="$TMPDIR/sileo/SourcePackages/checkouts/LNPopupController/LNPopupController/LNPopupController/Private"
-          if [ ! -d "$LNPOPUP_PRIVATE_DIR" ]; then
-            echo "LNPopup private directory not found: $LNPOPUP_PRIVATE_DIR"
-            exit 1
-          fi
-          chmod -R u+w "$LNPOPUP_PRIVATE_DIR" || true
-          LNPOPUP_LINK_COUNT=0
-          while IFS= read -r header; do
-            target="$LNPOPUP_PRIVATE_DIR/$(basename "$header")"
-            if [ ! -e "$target" ]; then
-              ln -s "$header" "$target"
-              LNPOPUP_LINK_COUNT=$((LNPOPUP_LINK_COUNT + 1))
-            fi
-          done < <(find "$LNPOPUP_PRIVATE_DIR" -mindepth 2 -type f \( -name '*.h' -o -name '*.hh' \))
-          echo "LNPopup header links created: $LNPOPUP_LINK_COUNT"
-          make package DEBUG=0 ALL_BOOTSTRAPS=1 SILEO_PLATFORM=iphoneos-arm64 IOS_DEPLOYMENT_TARGET=13.0 V=1
+          make package DEBUG=0 ALL_BOOTSTRAPS=1 SILEO_PLATFORM=${{ matrix.platform.make_platform }} IOS_DEPLOYMENT_TARGET=13.0 V=1 EMBED_SWIFT_STDLIB=${{ matrix.swift_mode.embed }}
 
       - name: Upload build artifacts to GitHub Release
         uses: softprops/action-gh-release@v2

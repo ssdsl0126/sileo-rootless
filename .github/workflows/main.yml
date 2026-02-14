@@ -5,8 +5,16 @@ on:
 name: Build
 jobs:
   make:
-    name: Build and Upload Sileo
+    name: Build and Upload Sileo (${{ matrix.swift_mode.label }})
     runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        swift_mode:
+          - label: system-swift
+            embed: "0"
+          - label: embedded-swift
+            embed: "1"
     steps:
 
       - name: Checkout
@@ -53,7 +61,7 @@ jobs:
         run: |
           echo '/opt/procursus/sbin:/opt/procursus/bin' >> $GITHUB_PATH
 
-      - name: Build Sileo Nightly (iphoneos-arm64)
+      - name: Build Sileo Nightly (iphoneos-arm64, ${{ matrix.swift_mode.label }})
         run: |
           make clean
           xcodebuild -resolvePackageDependencies -project Sileo.xcodeproj -scheme Sileo -derivedDataPath "$TMPDIR/sileo"
@@ -81,10 +89,10 @@ jobs:
             fi
           done < <(find "$LNPOPUP_PRIVATE_DIR" -mindepth 2 -type f \( -name '*.h' -o -name '*.hh' \))
           echo "LNPopup header links created: $LNPOPUP_LINK_COUNT"
-          make package NIGHTLY=1 DEBUG=0 ALL_BOOTSTRAPS=1 SILEO_PLATFORM=iphoneos-arm64 IOS_DEPLOYMENT_TARGET=13.0 V=1
+          make package NIGHTLY=1 DEBUG=0 ALL_BOOTSTRAPS=1 SILEO_PLATFORM=iphoneos-arm64 IOS_DEPLOYMENT_TARGET=13.0 V=1 EMBED_SWIFT_STDLIB=${{ matrix.swift_mode.embed }}
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: sileo-nightly-packages
+          name: sileo-nightly-packages-${{ matrix.swift_mode.label }}
           path: packages/*
