@@ -316,12 +316,9 @@ stage: all
 			fi; \
 		done; \
 		if [ -z "$$SWIFT_RUNTIME_ROOT" ] || [ $$BEST_TOTAL_MATCH -le 0 ]; then \
-			SWIFT_CORE_PATH="$$(find "$$TOOLCHAIN_DIR" "$$SDK_DIR" -type f -path '*/swift*/iphoneos/*' -name 'libswiftCore.dylib' 2>/dev/null | head -n1)"; \
-			if [ -n "$$SWIFT_CORE_PATH" ]; then \
-				SWIFT_RUNTIME_ROOT="$$(dirname "$$SWIFT_CORE_PATH")"; \
-				BEST_STRONG_MATCH=0; \
-				BEST_TOTAL_MATCH=0; \
-			fi; \
+			SWIFT_RUNTIME_ROOT="$$(find "$$TOOLCHAIN_DIR" "$$SDK_DIR" -type f -path '*/swift*/*' -name 'libswiftCore.dylib' 2>/dev/null | while IFS= read -r CORE_PATH; do CANDIDATE_ROOT="$$(dirname "$$CORE_PATH")"; if [ -f "$$CANDIDATE_ROOT/libswift_Concurrency.dylib" ]; then echo "$$CANDIDATE_ROOT"; break; fi; done)"; \
+			BEST_STRONG_MATCH=0; \
+			BEST_TOTAL_MATCH=0; \
 		fi; \
 		if [ -n "$$SWIFT_RUNTIME_ROOT" ]; then \
 			echo "Using Swift runtime root: $$SWIFT_RUNTIME_ROOT (strong-match=$$BEST_STRONG_MATCH total-match=$$BEST_TOTAL_MATCH)"; \
@@ -356,6 +353,10 @@ stage: all
 				if [ $$COPIED -ne 1 ]; then \
 					if printf '%s\n' "$$REQUIRED_SWIFT_BASES" | tr ' ' '\n' | grep -Fxq "$$SWIFT_BASE"; then \
 						echo "Missing required Swift runtime library in toolchain: $$SWIFT_BASE"; \
+						if [ "$$SWIFT_BASE" = "libswift_Concurrency.dylib" ]; then \
+							echo "Searched concurrency candidates:"; \
+							find "$$TOOLCHAIN_DIR" "$$SDK_DIR" -type f -path '*/swift*/*' -name 'libswift_Concurrency.dylib' 2>/dev/null | head -n 10; \
+						fi; \
 						MISSING_STRONG_SWIFT_LIBS="$$MISSING_STRONG_SWIFT_LIBS $$SWIFT_BASE"; \
 					elif printf '%s\n' "$$WEAK_SWIFT_REFS" | grep -Fxq "$$SWIFT_REF"; then \
 						echo "Warning: weak Swift runtime library not found in toolchain: $$SWIFT_BASE"; \
