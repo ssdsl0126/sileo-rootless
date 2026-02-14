@@ -321,6 +321,14 @@ stage: all
 		fi; \
 		if [ -n "$$SWIFT_RUNTIME_ROOT" ]; then \
 			echo "Using Swift runtime root: $$SWIFT_RUNTIME_ROOT (strong-match=$$BEST_STRONG_MATCH total-match=$$BEST_TOTAL_MATCH)"; \
+			for EXISTING_SWIFT_DYLIB in $$APP_DIR/Frameworks/libswift*.dylib; do \
+				if [ -f "$$EXISTING_SWIFT_DYLIB" ]; then \
+					EXISTING_SWIFT_BASE="$$(basename "$$EXISTING_SWIFT_DYLIB")"; \
+					if [ ! -f "$$SWIFT_RUNTIME_ROOT/$$EXISTING_SWIFT_BASE" ]; then \
+						rm -f "$$EXISTING_SWIFT_DYLIB"; \
+					fi; \
+				fi; \
+			done; \
 		else \
 			echo "Warning: unable to determine a single iOS Swift runtime root, using fallback lookup"; \
 		fi; \
@@ -352,6 +360,16 @@ stage: all
 				fi; \
 			fi; \
 		done; \
+		if [ -n "$$SWIFT_RUNTIME_ROOT" ]; then \
+			for EXISTING_SWIFT_DYLIB in $$APP_DIR/Frameworks/libswift*.dylib; do \
+				if [ -f "$$EXISTING_SWIFT_DYLIB" ]; then \
+					EXISTING_SWIFT_BASE="$$(basename "$$EXISTING_SWIFT_DYLIB")"; \
+					if [ -f "$$SWIFT_RUNTIME_ROOT/$$EXISTING_SWIFT_BASE" ]; then \
+						cp "$$SWIFT_RUNTIME_ROOT/$$EXISTING_SWIFT_BASE" "$$EXISTING_SWIFT_DYLIB"; \
+					fi; \
+				fi; \
+			done; \
+		fi; \
 		if [ -n "$$MISSING_WEAK_SWIFT_LIBS" ]; then \
 			echo "Missing weak Swift runtime libraries:$$MISSING_WEAK_SWIFT_LIBS"; \
 		fi; \
