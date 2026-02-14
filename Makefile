@@ -257,6 +257,12 @@ stage: all
 		fi; \
 		mkdir -p "$$APP_DIR/Frameworks"; \
 		xcrun swift-stdlib-tool --copy --scan-executable "$$APP_EXE" --scan-folder "$$APP_DIR/Frameworks" --platform iphoneos --destination "$$APP_DIR/Frameworks"; \
+		for SWIFT_DYLIB in $$APP_DIR/Frameworks/libswift*.dylib; do \
+			if [ -f "$$SWIFT_DYLIB" ]; then \
+				SWIFT_BASE=$$(basename "$$SWIFT_DYLIB"); \
+				xcrun install_name_tool -id "/usr/lib/swift/$$SWIFT_BASE" "$$SWIFT_DYLIB"; \
+			fi; \
+		done; \
 	fi
 	
 	@function process_exec { \
