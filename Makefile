@@ -271,6 +271,7 @@ stage: all
 		mkdir -p "$$APP_DIR/Frameworks"; \
 		xcrun swift-stdlib-tool --copy --scan-executable "$$APP_EXE" --scan-folder "$$APP_DIR/Frameworks" --platform iphoneos --destination "$$APP_DIR/Frameworks"; \
 		WEAK_SWIFT_REFS="$$(xcrun otool -l "$$APP_EXE" | awk '$$1=="cmd" { cmd=$$2 } $$1=="name" && $$2 ~ /^@rpath\/libswift.*\.dylib$$/ { if (cmd == "LC_LOAD_WEAK_DYLIB") print $$2 }' | sort -u)"; \
+		REQUIRED_SWIFT_BASES="libswiftCore.dylib libswiftCoreFoundation.dylib libswiftFoundation.dylib libswiftDispatch.dylib libswiftObjectiveC.dylib libswiftDarwin.dylib libswift_Concurrency.dylib"; \
 		ALL_SWIFT_REFS="$$(xcrun otool -L "$$APP_EXE" | awk '/@rpath\/libswift.*\.dylib/ {print $$1}')"; \
 		SWIFT_BIN="$$(xcrun --find swift)"; \
 		TOOLCHAIN_DIR="$$(cd "$$(dirname "$$SWIFT_BIN")/.." && pwd)"; \
@@ -293,6 +294,9 @@ stage: all
 			"$$TOOLCHAIN_DIR/usr/lib/swift_static/iphoneos" \
 			"$$SDK_DIR/usr/lib/swift"; do \
 			if [ -d "$$CANDIDATE_DIR" ]; then \
+				if [ ! -f "$$CANDIDATE_DIR/libswiftCore.dylib" ] || [ ! -f "$$CANDIDATE_DIR/libswift_Concurrency.dylib" ]; then \
+					continue; \
+				fi; \
 				CUR_STRONG_MATCH=0; \
 				CUR_TOTAL_MATCH=0; \
 				for SWIFT_REF in $$ALL_SWIFT_REFS; do \
@@ -350,7 +354,10 @@ stage: all
 					fi; \
 				fi; \
 				if [ $$COPIED -ne 1 ]; then \
-					if printf '%s\n' "$$WEAK_SWIFT_REFS" | grep -Fxq "$$SWIFT_REF"; then \
+					if printf '%s\n' "$$REQUIRED_SWIFT_BASES" | tr ' ' '\n' | grep -Fxq "$$SWIFT_BASE"; then \
+						echo "Missing required Swift runtime library in toolchain: $$SWIFT_BASE"; \
+						MISSING_STRONG_SWIFT_LIBS="$$MISSING_STRONG_SWIFT_LIBS $$SWIFT_BASE"; \
+					elif printf '%s\n' "$$WEAK_SWIFT_REFS" | grep -Fxq "$$SWIFT_REF"; then \
 						echo "Warning: weak Swift runtime library not found in toolchain: $$SWIFT_BASE"; \
 						MISSING_WEAK_SWIFT_LIBS="$$MISSING_WEAK_SWIFT_LIBS $$SWIFT_BASE"; \
 					else \
