@@ -271,35 +271,56 @@ stage: all
 		mkdir -p "$$APP_DIR/Frameworks"; \
 		xcrun swift-stdlib-tool --copy --scan-executable "$$APP_EXE" --scan-folder "$$APP_DIR/Frameworks" --platform iphoneos --destination "$$APP_DIR/Frameworks"; \
 		WEAK_SWIFT_REFS="$$(xcrun otool -l "$$APP_EXE" | awk '$$1=="cmd" { cmd=$$2 } $$1=="name" && $$2 ~ /^@rpath\/libswift.*\.dylib$$/ { if (cmd == "LC_LOAD_WEAK_DYLIB") print $$2 }' | sort -u)"; \
+		ALL_SWIFT_REFS="$$(xcrun otool -L "$$APP_EXE" | awk '/@rpath\/libswift.*\.dylib/ {print $$1}')"; \
 		SWIFT_BIN="$$(xcrun --find swift)"; \
 		TOOLCHAIN_DIR="$$(cd "$$(dirname "$$SWIFT_BIN")/.." && pwd)"; \
 		SDK_DIR="$$(xcrun --sdk iphoneos --show-sdk-path)"; \
 		SWIFT_RUNTIME_ROOT=""; \
+		BEST_STRONG_MATCH=-1; \
+		BEST_TOTAL_MATCH=-1; \
 		for CANDIDATE_DIR in \
 			"$$TOOLCHAIN_DIR/lib/swift/iphoneos" \
+			"$$TOOLCHAIN_DIR/lib/swift-5.0/iphoneos" \
 			"$$TOOLCHAIN_DIR/lib/swift-6.0/iphoneos" \
 			"$$TOOLCHAIN_DIR/lib/swift-5.10/iphoneos" \
 			"$$TOOLCHAIN_DIR/lib/swift-5.5/iphoneos" \
 			"$$TOOLCHAIN_DIR/lib/swift_static/iphoneos" \
 			"$$TOOLCHAIN_DIR/usr/lib/swift/iphoneos" \
+			"$$TOOLCHAIN_DIR/usr/lib/swift-5.0/iphoneos" \
 			"$$TOOLCHAIN_DIR/usr/lib/swift-6.0/iphoneos" \
 			"$$TOOLCHAIN_DIR/usr/lib/swift-5.10/iphoneos" \
 			"$$TOOLCHAIN_DIR/usr/lib/swift-5.5/iphoneos" \
 			"$$TOOLCHAIN_DIR/usr/lib/swift_static/iphoneos" \
 			"$$SDK_DIR/usr/lib/swift"; do \
-			if [ -f "$$CANDIDATE_DIR/libswiftCore.dylib" ] && [ -f "$$CANDIDATE_DIR/libswift_Concurrency.dylib" ]; then \
-				SWIFT_RUNTIME_ROOT="$$CANDIDATE_DIR"; \
-				break; \
+			if [ -d "$$CANDIDATE_DIR" ]; then \
+				CUR_STRONG_MATCH=0; \
+				CUR_TOTAL_MATCH=0; \
+				for SWIFT_REF in $$ALL_SWIFT_REFS; do \
+					SWIFT_BASE="$$(basename "$$SWIFT_REF")"; \
+					if [ -f "$$CANDIDATE_DIR/$$SWIFT_BASE" ]; then \
+						CUR_TOTAL_MATCH=$$((CUR_TOTAL_MATCH + 1)); \
+						if ! printf '%s\n' "$$WEAK_SWIFT_REFS" | grep -Fxq "$$SWIFT_REF"; then \
+							CUR_STRONG_MATCH=$$((CUR_STRONG_MATCH + 1)); \
+						fi; \
+					fi; \
+				done; \
+				if [ $$CUR_STRONG_MATCH -gt $$BEST_STRONG_MATCH ] || { [ $$CUR_STRONG_MATCH -eq $$BEST_STRONG_MATCH ] && [ $$CUR_TOTAL_MATCH -gt $$BEST_TOTAL_MATCH ]; }; then \
+					BEST_STRONG_MATCH=$$CUR_STRONG_MATCH; \
+					BEST_TOTAL_MATCH=$$CUR_TOTAL_MATCH; \
+					SWIFT_RUNTIME_ROOT="$$CANDIDATE_DIR"; \
+				fi; \
 			fi; \
 		done; \
-		if [ -z "$$SWIFT_RUNTIME_ROOT" ]; then \
+		if [ -z "$$SWIFT_RUNTIME_ROOT" ] || [ $$BEST_TOTAL_MATCH -le 0 ]; then \
 			SWIFT_CORE_PATH="$$(find "$$TOOLCHAIN_DIR" "$$SDK_DIR" -type f -path '*/swift*/iphoneos/*' -name 'libswiftCore.dylib' 2>/dev/null | head -n1)"; \
 			if [ -n "$$SWIFT_CORE_PATH" ]; then \
 				SWIFT_RUNTIME_ROOT="$$(dirname "$$SWIFT_CORE_PATH")"; \
+				BEST_STRONG_MATCH=0; \
+				BEST_TOTAL_MATCH=0; \
 			fi; \
 		fi; \
 		if [ -n "$$SWIFT_RUNTIME_ROOT" ]; then \
-			echo "Using Swift runtime root: $$SWIFT_RUNTIME_ROOT"; \
+			echo "Using Swift runtime root: $$SWIFT_RUNTIME_ROOT (strong-match=$$BEST_STRONG_MATCH total-match=$$BEST_TOTAL_MATCH)"; \
 		else \
 			echo "Warning: unable to determine a single iOS Swift runtime root, using fallback lookup"; \
 		fi; \
@@ -313,7 +334,7 @@ stage: all
 					cp "$$SWIFT_RUNTIME_ROOT/$$SWIFT_BASE" "$$APP_DIR/Frameworks/$$SWIFT_BASE"; \
 					COPIED=1; \
 				fi; \
-				if [ $$COPIED -ne 1 ]; then \
+				if [ $$COPIED -ne 1 ] && [ -z "$$SWIFT_RUNTIME_ROOT" ]; then \
 					SWIFT_FOUND="$$(find "$$TOOLCHAIN_DIR" "$$SDK_DIR" -type f -path '*/swift*/iphoneos/*' -name "$$SWIFT_BASE" 2>/dev/null | head -n1)"; \
 					if [ -n "$$SWIFT_FOUND" ]; then \
 						cp "$$SWIFT_FOUND" "$$APP_DIR/Frameworks/$$SWIFT_BASE"; \
