@@ -270,7 +270,7 @@ stage: all
 		fi; \
 		mkdir -p "$$APP_DIR/Frameworks"; \
 		xcrun swift-stdlib-tool --copy --scan-executable "$$APP_EXE" --scan-folder "$$APP_DIR/Frameworks" --platform iphoneos --destination "$$APP_DIR/Frameworks"; \
-		WEAK_SWIFT_REFS="$$(xcrun otool -l "$$APP_EXE" | awk '\n+			$$1=="cmd" { cmd=$$2 }\n+			$$1=="name" && $$2 ~ /^@rpath\/libswift.*\.dylib$$/ {\n+				if (cmd == "LC_LOAD_WEAK_DYLIB") print $$2\n+			}\n+		' | sort -u)"; \
+		WEAK_SWIFT_REFS="$$(xcrun otool -l "$$APP_EXE" | awk '$$1=="cmd" { cmd=$$2 } $$1=="name" && $$2 ~ /^@rpath\/libswift.*\.dylib$$/ { if (cmd == "LC_LOAD_WEAK_DYLIB") print $$2 }' | sort -u)"; \
 		SWIFT_BIN="$$(xcrun --find swift)"; \
 		TOOLCHAIN_DIR="$$(cd "$$(dirname "$$SWIFT_BIN")/.." && pwd)"; \
 		SDK_DIR="$$(xcrun --sdk iphoneos --show-sdk-path)"; \
@@ -315,7 +315,7 @@ stage: all
 				xcrun install_name_tool -id "@rpath/$$SWIFT_BASE" "$$SWIFT_DYLIB"; \
 			fi; \
 		done; \
-		while IFS= read -r -d '' MACHO_FILE; do \
+		find "$$APP_DIR" -type f | while IFS= read -r MACHO_FILE; do \
 			if ! xcrun otool -h "$$MACHO_FILE" >/dev/null 2>&1; then \
 				continue; \
 			fi; \
@@ -333,7 +333,7 @@ stage: all
 				echo "Embedded mode validation failed: absolute system Swift runtime reference in $$MACHO_FILE"; \
 				exit 1; \
 			fi; \
-		done < <(find "$$APP_DIR" -type f -print0); \
+		done; \
 	fi
 	
 	@function process_exec { \
