@@ -227,9 +227,22 @@ stage: all
 			SWIFT_BASE=$$(basename "$$SWIFT_LIB"); \
 			xcrun install_name_tool -change "$$SWIFT_LIB" "@rpath/$$SWIFT_BASE" "$$APP_EXE"; \
 		done; \
-		if ! xcrun otool -l "$$APP_EXE" | grep -q '@executable_path/Frameworks'; then \
-			xcrun install_name_tool -add_rpath @executable_path/Frameworks "$$APP_EXE"; \
-		fi; \
+		while xcrun otool -l "$$APP_EXE" | grep -q '@executable_path/Frameworks'; do \
+			xcrun install_name_tool -delete_rpath @executable_path/Frameworks "$$APP_EXE"; \
+		done; \
+		while xcrun otool -l "$$APP_EXE" | grep -q '/opt/procursus/lib'; do \
+			xcrun install_name_tool -delete_rpath /opt/procursus/lib "$$APP_EXE"; \
+		done; \
+		while xcrun otool -l "$$APP_EXE" | grep -q '/var/jb/usr/local/lib'; do \
+			xcrun install_name_tool -delete_rpath /var/jb/usr/local/lib "$$APP_EXE"; \
+		done; \
+		while xcrun otool -l "$$APP_EXE" | grep -q '/var/jb/usr/lib'; do \
+			xcrun install_name_tool -delete_rpath /var/jb/usr/lib "$$APP_EXE"; \
+		done; \
+		xcrun install_name_tool -add_rpath @executable_path/Frameworks "$$APP_EXE"; \
+		xcrun install_name_tool -add_rpath /opt/procursus/lib "$$APP_EXE"; \
+		xcrun install_name_tool -add_rpath /var/jb/usr/local/lib "$$APP_EXE"; \
+		xcrun install_name_tool -add_rpath /var/jb/usr/lib "$$APP_EXE"; \
 		while xcrun otool -l "$$APP_EXE" | grep -q '/usr/lib/swift'; do \
 			xcrun install_name_tool -delete_rpath /usr/lib/swift "$$APP_EXE"; \
 		done; \
@@ -260,7 +273,7 @@ stage: all
 		for SWIFT_DYLIB in $$APP_DIR/Frameworks/libswift*.dylib; do \
 			if [ -f "$$SWIFT_DYLIB" ]; then \
 				SWIFT_BASE=$$(basename "$$SWIFT_DYLIB"); \
-				xcrun install_name_tool -id "/usr/lib/swift/$$SWIFT_BASE" "$$SWIFT_DYLIB"; \
+				xcrun install_name_tool -id "@rpath/$$SWIFT_BASE" "$$SWIFT_DYLIB"; \
 			fi; \
 		done; \
 	fi
