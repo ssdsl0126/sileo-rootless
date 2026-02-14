@@ -315,6 +315,25 @@ stage: all
 				xcrun install_name_tool -id "@rpath/$$SWIFT_BASE" "$$SWIFT_DYLIB"; \
 			fi; \
 		done; \
+		while IFS= read -r -d '' MACHO_FILE; do \
+			if ! xcrun otool -h "$$MACHO_FILE" >/dev/null 2>&1; then \
+				continue; \
+			fi; \
+			for SWIFT_LIB in $$(xcrun otool -L "$$MACHO_FILE" | awk '/\/usr\/lib\/swift\/libswift.*\.dylib/ {print $$1}'); do \
+				SWIFT_BASE=$$(basename "$$SWIFT_LIB"); \
+				xcrun install_name_tool -change "$$SWIFT_LIB" "@rpath/$$SWIFT_BASE" "$$MACHO_FILE"; \
+			done; \
+			while xcrun otool -l "$$MACHO_FILE" | grep -q '/usr/lib/swift'; do \
+				xcrun install_name_tool -delete_rpath /usr/lib/swift "$$MACHO_FILE"; \
+			done; \
+			while xcrun otool -l "$$MACHO_FILE" | grep -q '/usr/lib/libswift/stable'; do \
+				xcrun install_name_tool -delete_rpath /usr/lib/libswift/stable "$$MACHO_FILE"; \
+			done; \
+			if xcrun otool -L "$$MACHO_FILE" | grep -q '/usr/lib/swift/libswift'; then \
+				echo "Embedded mode validation failed: absolute system Swift runtime reference in $$MACHO_FILE"; \
+				exit 1; \
+			fi; \
+		done < <(find "$$APP_DIR" -type f -print0); \
 	fi
 	
 	@function process_exec { \
