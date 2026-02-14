@@ -216,6 +216,10 @@ stage: all
 	@APP_DIR="$(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP)"; \
 	APP_EXE="$$APP_DIR/$$(/usr/libexec/PlistBuddy -c \"Print :CFBundleExecutable\" $$APP_DIR/Info.plist)"; \
 	if [ "$(SWIFT_STDLIB_EMBED_FLAG)" = "YES" ]; then \
+		for SWIFT_LIB in $$(xcrun otool -L "$$APP_EXE" | awk '/\/usr\/lib\/swift\/libswift.*\.dylib/ {print $$1}'); do \
+			SWIFT_BASE=$$(basename "$$SWIFT_LIB"); \
+			xcrun install_name_tool -change "$$SWIFT_LIB" "@rpath/$$SWIFT_BASE" "$$APP_EXE"; \
+		done; \
 		while xcrun otool -l "$$APP_EXE" | grep -q '/usr/lib/libswift/stable'; do \
 			xcrun install_name_tool -delete_rpath /usr/lib/libswift/stable "$$APP_EXE"; \
 		done; \
