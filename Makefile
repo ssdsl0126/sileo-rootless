@@ -213,6 +213,12 @@ stage: all
 	@rm -rf $(SILEO_STAGE_DIR)/
 	@mkdir -p $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/
 	@mv $(SILEO_APP_DIR) $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP)
+	@if [ "$(SWIFT_STDLIB_EMBED_FLAG)" = "YES" ]; then \
+		APP_DIR="$(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP)"; \
+		APP_EXE="$$APP_DIR/$$(/usr/libexec/PlistBuddy -c \"Print :CFBundleExecutable\" $$APP_DIR/Info.plist)"; \
+		mkdir -p "$$APP_DIR/Frameworks"; \
+		xcrun swift-stdlib-tool --copy --scan-executable "$$APP_EXE" --scan-folder "$$APP_DIR/Frameworks" --platform iphoneos --destination "$$APP_DIR/Frameworks"; \
+	fi
 	
 	@function process_exec { \
 		$(STRIP) $$1; \
@@ -221,7 +227,11 @@ stage: all
 		process_exec $$1/$$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" $$1/Info.plist); \
 	}; \
 	export -f process_exec process_bundle; \
-	find $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP) -name '*.dylib' -print0 | xargs -I{} -0 bash -c 'process_exec "$$@"' _ {}; \
+	if [ "$(SWIFT_STDLIB_EMBED_FLAG)" = "YES" ]; then \
+		find $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP) -name '*.dylib' ! -path '*/Frameworks/*' -print0 | xargs -I{} -0 bash -c 'process_exec "$$@"' _ {}; \
+	else \
+		find $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP) -name '*.dylib' -print0 | xargs -I{} -0 bash -c 'process_exec "$$@"' _ {}; \
+	fi; \
 	find $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP) \( -name '*.framework' -or -name '*.appex' \) -print0 | xargs -I{} -0 bash -c 'process_bundle "$$@"' _ {}; \
 	process_bundle $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP)
 	
