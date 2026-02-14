@@ -220,12 +220,22 @@ stage: all
 			SWIFT_BASE=$$(basename "$$SWIFT_LIB"); \
 			xcrun install_name_tool -change "$$SWIFT_LIB" "@rpath/$$SWIFT_BASE" "$$APP_EXE"; \
 		done; \
+		if ! xcrun otool -l "$$APP_EXE" | grep -q '@executable_path/Frameworks'; then \
+			xcrun install_name_tool -add_rpath @executable_path/Frameworks "$$APP_EXE"; \
+		fi; \
+		while xcrun otool -l "$$APP_EXE" | grep -q '/usr/lib/swift'; do \
+			xcrun install_name_tool -delete_rpath /usr/lib/swift "$$APP_EXE"; \
+		done; \
 		while xcrun otool -l "$$APP_EXE" | grep -q '/usr/lib/libswift/stable'; do \
 			xcrun install_name_tool -delete_rpath /usr/lib/libswift/stable "$$APP_EXE"; \
 		done; \
+		if xcrun otool -L "$$APP_EXE" | grep -q '/usr/lib/swift/libswift'; then \
+			echo "Embedded mode validation failed: still has absolute /usr/lib/swift/libswift load commands"; \
+			exit 1; \
+		fi; \
 	else \
-		if ! xcrun otool -l "$$APP_EXE" | grep -q '/usr/lib/libswift/stable'; then \
-			xcrun install_name_tool -add_rpath /usr/lib/libswift/stable "$$APP_EXE"; \
+		if ! xcrun otool -l "$$APP_EXE" | grep -q '/usr/lib/swift'; then \
+			xcrun install_name_tool -add_rpath /usr/lib/swift "$$APP_EXE"; \
 		fi; \
 	fi
 	@if [ "$(SWIFT_STDLIB_EMBED_FLAG)" = "YES" ]; then \
