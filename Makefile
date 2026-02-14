@@ -213,6 +213,17 @@ stage: all
 	@rm -rf $(SILEO_STAGE_DIR)/
 	@mkdir -p $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/
 	@mv $(SILEO_APP_DIR) $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP)
+	@APP_DIR="$(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP)"; \
+	APP_EXE="$$APP_DIR/$$(/usr/libexec/PlistBuddy -c \"Print :CFBundleExecutable\" $$APP_DIR/Info.plist)"; \
+	if [ "$(SWIFT_STDLIB_EMBED_FLAG)" = "YES" ]; then \
+		while xcrun otool -l "$$APP_EXE" | grep -q '/usr/lib/libswift/stable'; do \
+			xcrun install_name_tool -delete_rpath /usr/lib/libswift/stable "$$APP_EXE"; \
+		done; \
+	else \
+		if ! xcrun otool -l "$$APP_EXE" | grep -q '/usr/lib/libswift/stable'; then \
+			xcrun install_name_tool -add_rpath /usr/lib/libswift/stable "$$APP_EXE"; \
+		fi; \
+	fi
 	@if [ "$(SWIFT_STDLIB_EMBED_FLAG)" = "YES" ]; then \
 		APP_DIR="$(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP)"; \
 		APP_EXE="$$APP_DIR/$$(/usr/libexec/PlistBuddy -c \"Print :CFBundleExecutable\" $$APP_DIR/Info.plist)"; \
