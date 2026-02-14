@@ -236,6 +236,9 @@ stage: all
 	process_bundle $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP)
 	
 	@rm -rf $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP)/_CodeSignature
+	@if [ "$(SWIFT_STDLIB_EMBED_FLAG)" = "YES" ]; then \
+		find $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP)/Frameworks -type f -name '*.dylib' -print0 | xargs -0 -I{} $(TARGET_CODESIGN) -S {}; \
+	fi
 	@if [ "$(SWIFT_STDLIB_EMBED_FLAG)" = "NO" ]; then \
 		rm -rf $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP)/Frameworks; \
 	fi
