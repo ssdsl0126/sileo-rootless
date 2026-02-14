@@ -274,30 +274,32 @@ stage: all
 		SWIFT_BIN="$$(xcrun --find swift)"; \
 		TOOLCHAIN_DIR="$$(cd "$$(dirname "$$SWIFT_BIN")/.." && pwd)"; \
 		SDK_DIR="$$(xcrun --sdk iphoneos --show-sdk-path)"; \
+		SWIFT_RUNTIME_ROOT=""; \
+		for CANDIDATE_DIR in \
+			"$$TOOLCHAIN_DIR/lib/swift/iphoneos" \
+			"$$TOOLCHAIN_DIR/lib/swift-5.5/iphoneos" \
+			"$$TOOLCHAIN_DIR/lib/swift_static/iphoneos" \
+			"$$TOOLCHAIN_DIR/usr/lib/swift/iphoneos" \
+			"$$TOOLCHAIN_DIR/usr/lib/swift-5.5/iphoneos" \
+			"$$TOOLCHAIN_DIR/usr/lib/swift_static/iphoneos" \
+			"$$SDK_DIR/usr/lib/swift"; do \
+			if [ -f "$$CANDIDATE_DIR/libswiftCore.dylib" ] && [ -f "$$CANDIDATE_DIR/libswift_Concurrency.dylib" ]; then \
+				SWIFT_RUNTIME_ROOT="$$CANDIDATE_DIR"; \
+				break; \
+			fi; \
+		done; \
+		if [ -z "$$SWIFT_RUNTIME_ROOT" ]; then \
+			echo "Unable to locate a valid iOS Swift runtime root in toolchain/SDK"; \
+			exit 1; \
+		fi; \
+		echo "Using Swift runtime root: $$SWIFT_RUNTIME_ROOT"; \
 		for SWIFT_REF in $$(xcrun otool -L "$$APP_EXE" | awk '/@rpath\/libswift.*\.dylib/ {print $$1}'); do \
 			SWIFT_BASE="$$(basename "$$SWIFT_REF")"; \
 			if [ ! -f "$$APP_DIR/Frameworks/$$SWIFT_BASE" ]; then \
 				COPIED=0; \
-				for SEARCH_DIR in \
-					"$$TOOLCHAIN_DIR/lib/swift/iphoneos" \
-					"$$TOOLCHAIN_DIR/lib/swift-5.5/iphoneos" \
-					"$$TOOLCHAIN_DIR/lib/swift_static/iphoneos" \
-					"$$TOOLCHAIN_DIR/usr/lib/swift/iphoneos" \
-					"$$TOOLCHAIN_DIR/usr/lib/swift-5.5/iphoneos" \
-					"$$TOOLCHAIN_DIR/usr/lib/swift_static/iphoneos" \
-					"$$SDK_DIR/usr/lib/swift"; do \
-					if [ -f "$$SEARCH_DIR/$$SWIFT_BASE" ]; then \
-						cp "$$SEARCH_DIR/$$SWIFT_BASE" "$$APP_DIR/Frameworks/$$SWIFT_BASE"; \
-						COPIED=1; \
-						break; \
-					fi; \
-				done; \
-				if [ $$COPIED -ne 1 ]; then \
-					SWIFT_FOUND="$$(find "$$TOOLCHAIN_DIR" "$$SDK_DIR" -type f -path '*/swift*/iphoneos/*' -name "$$SWIFT_BASE" 2>/dev/null | head -n1)"; \
-					if [ -n "$$SWIFT_FOUND" ]; then \
-						cp "$$SWIFT_FOUND" "$$APP_DIR/Frameworks/$$SWIFT_BASE"; \
-						COPIED=1; \
-					fi; \
+				if [ -f "$$SWIFT_RUNTIME_ROOT/$$SWIFT_BASE" ]; then \
+					cp "$$SWIFT_RUNTIME_ROOT/$$SWIFT_BASE" "$$APP_DIR/Frameworks/$$SWIFT_BASE"; \
+					COPIED=1; \
 				fi; \
 				if [ $$COPIED -ne 1 ]; then \
 					if printf '%s\n' "$$WEAK_SWIFT_REFS" | grep -Fxq "$$SWIFT_REF"; then \
