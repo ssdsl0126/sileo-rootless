@@ -214,7 +214,14 @@ stage: all
 	@mkdir -p $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/
 	@mv $(SILEO_APP_DIR) $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP)
 	@APP_DIR="$(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP)"; \
-	APP_EXE="$$APP_DIR/$$(/usr/libexec/PlistBuddy -c \"Print :CFBundleExecutable\" $$APP_DIR/Info.plist)"; \
+	APP_EXE="$$APP_DIR/Sileo"; \
+	if [ ! -f "$$APP_EXE" ]; then \
+		APP_EXE="$$APP_DIR/$$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$$APP_DIR/Info.plist" 2>/dev/null || echo Sileo)"; \
+	fi; \
+	if [ ! -f "$$APP_EXE" ]; then \
+		echo "Unable to resolve app executable path: $$APP_EXE"; \
+		exit 1; \
+	fi; \
 	if [ "$(SWIFT_STDLIB_EMBED_FLAG)" = "YES" ]; then \
 		for SWIFT_LIB in $$(xcrun otool -L "$$APP_EXE" | awk '/\/usr\/lib\/swift\/libswift.*\.dylib/ {print $$1}'); do \
 			SWIFT_BASE=$$(basename "$$SWIFT_LIB"); \
@@ -240,7 +247,14 @@ stage: all
 	fi
 	@if [ "$(SWIFT_STDLIB_EMBED_FLAG)" = "YES" ]; then \
 		APP_DIR="$(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP)"; \
-		APP_EXE="$$APP_DIR/$$(/usr/libexec/PlistBuddy -c \"Print :CFBundleExecutable\" $$APP_DIR/Info.plist)"; \
+		APP_EXE="$$APP_DIR/Sileo"; \
+		if [ ! -f "$$APP_EXE" ]; then \
+			APP_EXE="$$APP_DIR/$$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$$APP_DIR/Info.plist" 2>/dev/null || echo Sileo)"; \
+		fi; \
+		if [ ! -f "$$APP_EXE" ]; then \
+			echo "Unable to resolve app executable path for swift-stdlib-tool: $$APP_EXE"; \
+			exit 1; \
+		fi; \
 		mkdir -p "$$APP_DIR/Frameworks"; \
 		xcrun swift-stdlib-tool --copy --scan-executable "$$APP_EXE" --scan-folder "$$APP_DIR/Frameworks" --platform iphoneos --destination "$$APP_DIR/Frameworks"; \
 	fi
