@@ -96,7 +96,7 @@ jobs:
             fi
           done < <(find "$LNPOPUP_PRIVATE_DIR" -mindepth 2 -type f \( -name '*.h' -o -name '*.hh' \))
           echo "LNPopup header links created: $LNPOPUP_LINK_COUNT"
-          make package DEBUG=0 ALL_BOOTSTRAPS=1 SILEO_PLATFORM=${{ matrix.platform.make_platform }} IOS_DEPLOYMENT_TARGET=13.0 V=1 EMBED_SWIFT_STDLIB=${{ matrix.swift_mode.embed }}
+          make package DEBUG=0 ALL_BOOTSTRAPS=1 SILEO_PLATFORM=${{ matrix.platform.make_platform }} IOS_DEPLOYMENT_TARGET=13.0 V=0 EMBED_SWIFT_STDLIB=${{ matrix.swift_mode.embed }}
 
           if [ "${{ matrix.swift_mode.embed }}" = "1" ]; then
             PKG_FILE="$(ls -t packages/*embedded-swift.deb | head -n1)"

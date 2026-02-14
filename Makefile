@@ -293,6 +293,8 @@ stage: all
 			exit 1; \
 		fi; \
 		echo "Using Swift runtime root: $$SWIFT_RUNTIME_ROOT"; \
+		MISSING_WEAK_SWIFT_LIBS=""; \
+		MISSING_STRONG_SWIFT_LIBS=""; \
 		for SWIFT_REF in $$(xcrun otool -L "$$APP_EXE" | awk '/@rpath\/libswift.*\.dylib/ {print $$1}'); do \
 			SWIFT_BASE="$$(basename "$$SWIFT_REF")"; \
 			if [ ! -f "$$APP_DIR/Frameworks/$$SWIFT_BASE" ]; then \
@@ -304,13 +306,21 @@ stage: all
 				if [ $$COPIED -ne 1 ]; then \
 					if printf '%s\n' "$$WEAK_SWIFT_REFS" | grep -Fxq "$$SWIFT_REF"; then \
 						echo "Warning: weak Swift runtime library not found in toolchain: $$SWIFT_BASE"; \
+						MISSING_WEAK_SWIFT_LIBS="$$MISSING_WEAK_SWIFT_LIBS $$SWIFT_BASE"; \
 					else \
 						echo "Missing required Swift runtime library in toolchain: $$SWIFT_BASE"; \
-						exit 1; \
+						MISSING_STRONG_SWIFT_LIBS="$$MISSING_STRONG_SWIFT_LIBS $$SWIFT_BASE"; \
 					fi; \
 				fi; \
 			fi; \
 		done; \
+		if [ -n "$$MISSING_WEAK_SWIFT_LIBS" ]; then \
+			echo "Missing weak Swift runtime libraries:$$MISSING_WEAK_SWIFT_LIBS"; \
+		fi; \
+		if [ -n "$$MISSING_STRONG_SWIFT_LIBS" ]; then \
+			echo "Missing required Swift runtime libraries:$$MISSING_STRONG_SWIFT_LIBS"; \
+			exit 1; \
+		fi; \
 		for SWIFT_DYLIB in $$APP_DIR/Frameworks/libswift*.dylib; do \
 			if [ -f "$$SWIFT_DYLIB" ]; then \
 				SWIFT_BASE=$$(basename "$$SWIFT_DYLIB"); \
