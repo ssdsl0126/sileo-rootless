@@ -7,16 +7,8 @@ permissions:
   contents: write
 jobs:
   make:
-    name: Build and Upload Sileo (${{ matrix.platform.label }}, embedded-swift)
+    name: Build and Upload Sileo
     runs-on: macos-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        platform:
-          - label: iphoneos-arm
-            make_platform: iphoneos-arm
-          - label: iphoneos-arm64
-            make_platform: iphoneos-arm64
     steps:
 
       - name: Checkout
@@ -63,7 +55,7 @@ jobs:
         run: |
           echo '/opt/procursus/sbin:/opt/procursus/bin' >> $GITHUB_PATH
 
-      - name: Build Sileo (${{ matrix.platform.label }}, embedded-swift)
+      - name: Build Sileo (iphoneos-arm)
         run: |
           make clean
           xcodebuild -resolvePackageDependencies -project Sileo.xcodeproj -scheme Sileo -derivedDataPath "$TMPDIR/sileo"
@@ -76,89 +68,22 @@ jobs:
             sed -i '' 's/var tab: ColorPickerTab/var pickerTab: ColorPickerTab/' "$ALDERIS_FILE"
             sed -i '' 's/tab = configuration.initialTab/pickerTab = configuration.initialTab/' "$ALDERIS_FILE"
           fi
-          LNPOPUP_PRIVATE_DIR="$TMPDIR/sileo/SourcePackages/checkouts/LNPopupController/LNPopupController/LNPopupController/Private"
-          if [ ! -d "$LNPOPUP_PRIVATE_DIR" ]; then
-            echo "LNPopup private directory not found: $LNPOPUP_PRIVATE_DIR"
+          make package DEBUG=0 ALL_BOOTSTRAPS=1 IOS_DEPLOYMENT_TARGET=13.0
+
+      - name: Build Sileo (iphoneos-arm64)
+        run: |
+          make clean
+          xcodebuild -resolvePackageDependencies -project Sileo.xcodeproj -scheme Sileo -derivedDataPath "$TMPDIR/sileo"
+          ALDERIS_FILE="$TMPDIR/sileo/SourcePackages/checkouts/Alderis/Alderis/ColorPickerInnerViewController.swift"
+          if [ ! -f "$ALDERIS_FILE" ]; then
+            echo "Alderis source file not found: $ALDERIS_FILE"
             exit 1
           fi
-          chmod -R u+w "$LNPOPUP_PRIVATE_DIR" || true
-          LNPOPUP_LINK_COUNT=0
-          while IFS= read -r header; do
-            target="$LNPOPUP_PRIVATE_DIR/$(basename "$header")"
-            if [ ! -e "$target" ]; then
-              ln -s "$header" "$target"
-              LNPOPUP_LINK_COUNT=$((LNPOPUP_LINK_COUNT + 1))
-            fi
-          done < <(find "$LNPOPUP_PRIVATE_DIR" -mindepth 2 -type f \( -name '*.h' -o -name '*.hh' \))
-          echo "LNPopup header links created: $LNPOPUP_LINK_COUNT"
-          make package DEBUG=0 ALL_BOOTSTRAPS=1 SILEO_PLATFORM=${{ matrix.platform.make_platform }} IOS_DEPLOYMENT_TARGET=13.0 V=0 EMBED_SWIFT_STDLIB=1
-          PKG_FILE="$(ls -t packages/*embedded-swift.deb | head -n1)"
-          rm -rf verify-root
-          mkdir -p verify-root
-          dpkg-deb -x "$PKG_FILE" verify-root
-          APP_DIR="$(find verify-root -type d -path '*/Applications/Sileo*.app' | head -n1)"
-          if [ -z "$APP_DIR" ]; then
-            echo "Unable to locate extracted Sileo.app in embedded package"
-            exit 1
+          if ! grep -q 'var pickerTab: ColorPickerTab' "$ALDERIS_FILE"; then
+            sed -i '' 's/var tab: ColorPickerTab/var pickerTab: ColorPickerTab/' "$ALDERIS_FILE"
+            sed -i '' 's/tab = configuration.initialTab/pickerTab = configuration.initialTab/' "$ALDERIS_FILE"
           fi
-          APP_EXE="$APP_DIR/Sileo"
-          if [ ! -f "$APP_EXE" ]; then
-            APP_EXE="$APP_DIR/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP_DIR/Info.plist" 2>/dev/null || echo Sileo)"
-          fi
-          if [ ! -f "$APP_EXE" ]; then
-            echo "Unable to locate Sileo executable in embedded package"
-            exit 1
-          fi
-          if [ ! -f "$APP_DIR/Frameworks/libswift_Concurrency.dylib" ]; then
-            echo "Missing libswift_Concurrency.dylib in embedded package"
-            exit 1
-          fi
-          if xcrun otool -L "$APP_EXE" | grep -q '/usr/lib/swift/libswift'; then
-            echo "Embedded package still has absolute /usr/lib/swift/libswift references"
-            exit 1
-          fi
-          ABS_SWIFT_REFS=""
-          while IFS= read -r macho; do
-            if xcrun otool -L "$macho" 2>/dev/null | grep -q '/usr/lib/swift/libswift'; then
-              ABS_SWIFT_REFS="$ABS_SWIFT_REFS $macho"
-            fi
-          done < <(find "$APP_DIR" -type f \( -name 'Sileo' -o -path '*/Frameworks/libswift*.dylib' \))
-          if [ -n "$ABS_SWIFT_REFS" ]; then
-            echo "Embedded package has absolute system Swift references in:$ABS_SWIFT_REFS"
-            exit 1
-          fi
-          BAD_SWIFT_RPATHS=""
-          while IFS= read -r macho; do
-            if xcrun otool -l "$macho" 2>/dev/null | grep -q '/usr/lib/swift\|/usr/lib/libswift/stable'; then
-              BAD_SWIFT_RPATHS="$BAD_SWIFT_RPATHS $macho"
-            fi
-          done < <(find "$APP_DIR" -type f \( -name 'Sileo' -o -path '*/Frameworks/libswift*.dylib' \))
-          if [ -n "$BAD_SWIFT_RPATHS" ]; then
-            echo "Embedded package has forbidden Swift rpaths in:$BAD_SWIFT_RPATHS"
-            exit 1
-          fi
-          WEAK_SWIFT_REFS="$(xcrun otool -l "$APP_EXE" | awk '$1=="cmd" { cmd=$2 } $1=="name" && $2 ~ /^@rpath\/libswift.*\.dylib$/ { if (cmd == "LC_LOAD_WEAK_DYLIB") print $2 }' | sort -u)"
-          MISSING_WEAK_SWIFT_LIBS=""
-          MISSING_STRONG_SWIFT_LIBS=""
-          for SWIFT_REF in $(xcrun otool -L "$APP_EXE" | awk '/@rpath\/libswift.*\.dylib/ {print $1}'); do
-            SWIFT_BASE="$(basename "$SWIFT_REF")"
-            if [ ! -f "$APP_DIR/Frameworks/$SWIFT_BASE" ]; then
-              if printf '%s\n' "$WEAK_SWIFT_REFS" | grep -Fxq "$SWIFT_REF"; then
-                MISSING_WEAK_SWIFT_LIBS="$MISSING_WEAK_SWIFT_LIBS $SWIFT_BASE"
-              else
-                MISSING_STRONG_SWIFT_LIBS="$MISSING_STRONG_SWIFT_LIBS $SWIFT_BASE"
-              fi
-            fi
-          done
-          if [ -n "$MISSING_WEAK_SWIFT_LIBS" ]; then
-            echo "Embedded package missing weak swift dylibs:$MISSING_WEAK_SWIFT_LIBS"
-          fi
-          if [ -n "$MISSING_STRONG_SWIFT_LIBS" ]; then
-            echo "Embedded package missing required swift dylibs:$MISSING_STRONG_SWIFT_LIBS"
-            exit 1
-          fi
-          echo "Embedded package UUID:"
-          xcrun dwarfdump --uuid "$APP_EXE"
+          make package DEBUG=0 ALL_BOOTSTRAPS=1 SILEO_PLATFORM=iphoneos-arm64 IOS_DEPLOYMENT_TARGET=13.0
 
       - name: Upload build artifacts to GitHub Release
         uses: softprops/action-gh-release@v2
