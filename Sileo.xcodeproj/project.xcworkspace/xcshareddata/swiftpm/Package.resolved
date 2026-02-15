@@ -48,11 +48,11 @@
       },
       {
         "package": "LNPopupController",
-        "repositoryURL": "https://github.com/LeoNatan/LNPopupController.git",
+        "repositoryURL": "https://github.com/elihwyma/LNPopupController",
         "state": {
           "branch": null,
-          "revision": "6f4bfa89a32cc7254599869b4bca8d2638e74671",
-          "version": "4.4.1"
+          "revision": "6cdb4a977b8e0253305cd5009e33028d90631788",
+          "version": null
         }
       },
       {
