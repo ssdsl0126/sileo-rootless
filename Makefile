@@ -38,7 +38,7 @@ ifeq ($(SILEO_PLATFORM),iphoneos-arm)
 ARCH            = arm64
 PLATFORM        = iphoneos
 DEB_ARCH        = iphoneos-arm
-DESTINATION     =
+DESTINATION     = -destination "generic/platform=iOS"
 CONTENTS        =
 SCHEME          = Sileo
 BUILD_CONFIG	= Release
@@ -47,7 +47,7 @@ else ifeq ($(SILEO_PLATFORM),iphoneos-arm64)
 ARCH            = arm64
 PLATFORM        = iphoneos
 DEB_ARCH        = iphoneos-arm64
-DESTINATION     =
+DESTINATION     = -destination "generic/platform=iOS"
 CONTENTS        =
 PREFIX          = /var/jb
 SCHEME 			= Sileo
