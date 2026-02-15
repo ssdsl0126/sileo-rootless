@@ -1256,7 +1256,9 @@ extension DownloadsTableViewController: UITableViewDataSource {
     func tableView(_ tableView: UITableView, viewForHeaderInSection section: Int) -> UIView? {
         if (self.tableView?.numberOfRows(inSection: section) ?? 0) > 0 {
             let headerView = UIView(frame: CGRect(origin: .zero, size: CGSize(width: 320, height: 36)))
-            headerView.backgroundColor = .clear
+            headerView.backgroundColor = .sileoBackgroundColor
+            headerView.isOpaque = true
+            headerView.clipsToBounds = true
             
             if let text = self.tableView(tableView, titleForHeaderInSection: section) {
                 let titleView = SileoLabelView(frame: CGRect(x: 16, y: 0, width: 320, height: 28))

@@ -702,6 +702,9 @@ extension SourcesViewController: UITableViewDataSource { // UITableViewDataSourc
     func tableView(_ tableView: UITableView, viewForHeaderInSection section: Int) -> UIView? {
         let text = self.tableView(tableView, titleForHeaderInSection: section)
         let headerView = UIView(frame: CGRect(origin: .zero, size: CGSize(width: 320, height: 36)))
+        headerView.backgroundColor = .sileoBackgroundColor
+        headerView.isOpaque = true
+        headerView.clipsToBounds = true
         
         if let text = text {
             let headerBlur = UIToolbar(frame: headerView.bounds)
