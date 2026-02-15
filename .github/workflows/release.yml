@@ -8,7 +8,7 @@ permissions:
 jobs:
   make:
     name: Build and Upload Sileo
-    runs-on: macos-latest
+    runs-on: macos-14
     steps:
 
       - name: Checkout
@@ -16,10 +16,10 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Select Xcode (latest stable)
+      - name: Select Xcode (15.4 pinned)
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: latest-stable
+          xcode-version: '15.4'
 
       - name: Show build environment
         run: |
