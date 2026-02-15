@@ -7,7 +7,7 @@ permissions:
   contents: write
 jobs:
   make:
-    name: Build and Upload Sileo (${{ matrix.platform.label }}, ${{ matrix.swift_mode.label }})
+    name: Build and Upload Sileo (${{ matrix.platform.label }}, system-swift)
     runs-on: macos-latest
     strategy:
       fail-fast: false
@@ -17,11 +17,6 @@ jobs:
             make_platform: iphoneos-arm
           - label: iphoneos-arm64
             make_platform: iphoneos-arm64
-        swift_mode:
-          - label: system-swift
-            embed: "0"
-          - label: embedded-swift
-            embed: "1"
     steps:
 
       - name: Checkout
@@ -68,7 +63,7 @@ jobs:
         run: |
           echo '/opt/procursus/sbin:/opt/procursus/bin' >> $GITHUB_PATH
 
-      - name: Build Sileo (${{ matrix.platform.label }}, ${{ matrix.swift_mode.label }})
+      - name: Build Sileo (${{ matrix.platform.label }}, system-swift)
         run: |
           make clean
           xcodebuild -resolvePackageDependencies -project Sileo.xcodeproj -scheme Sileo -derivedDataPath "$TMPDIR/sileo"
@@ -96,25 +91,7 @@ jobs:
             fi
           done < <(find "$LNPOPUP_PRIVATE_DIR" -mindepth 2 -type f \( -name '*.h' -o -name '*.hh' \))
           echo "LNPopup header links created: $LNPOPUP_LINK_COUNT"
-          make package DEBUG=0 ALL_BOOTSTRAPS=1 SILEO_PLATFORM=${{ matrix.platform.make_platform }} IOS_DEPLOYMENT_TARGET=13.0 V=0 EMBED_SWIFT_STDLIB=${{ matrix.swift_mode.embed }}
-
-          if [ "${{ matrix.swift_mode.embed }}" = "1" ]; then
-            PKG_FILE="$(ls -t packages/*embedded-swift.deb | head -n1)"
-            rm -rf verify-root
-            mkdir -p verify-root
-            dpkg-deb -x "$PKG_FILE" verify-root
-            APP_DIR="$(find verify-root -type d -path '*/Applications/Sileo*.app' | head -n1)"
-            if [ -z "$APP_DIR" ]; then
-              echo "Unable to locate extracted Sileo.app in embedded package"
-              exit 1
-            fi
-            if [ ! -f "$APP_DIR/Frameworks/libswift_Concurrency.dylib" ]; then
-              echo "Missing libswift_Concurrency.dylib in embedded package"
-              exit 1
-            fi
-            echo "Embedded package UUID:"
-            xcrun dwarfdump --uuid "$APP_DIR/Sileo"
-          fi
+          make package DEBUG=0 ALL_BOOTSTRAPS=1 SILEO_PLATFORM=${{ matrix.platform.make_platform }} IOS_DEPLOYMENT_TARGET=13.0 V=0 EMBED_SWIFT_STDLIB=0
 
       - name: Upload build artifacts to GitHub Release
         uses: softprops/action-gh-release@v2
