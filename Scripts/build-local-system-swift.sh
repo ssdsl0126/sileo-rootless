@@ -74,6 +74,12 @@ validate_system_swift_deb() {
     exit 1
   fi
 
+  if xcrun otool -L "$app_exe" | grep -q '/usr/lib/swift/libswift'; then
+    echo "[FAIL] system-swift package still has absolute /usr/lib/swift/libswift load commands"
+    rm -rf "$verify_dir"
+    exit 1
+  fi
+
   echo "[OK] Validation passed: $(basename "$deb_file")"
   rm -rf "$verify_dir"
 }

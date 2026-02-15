@@ -27,7 +27,7 @@ SWIFT_RUNTIME_DEPENDS = firmware (>= 11.0)
 else
 SWIFT_STDLIB_EMBED_FLAG = NO
 SWIFT_STDLIB_SUFFIX = -system-swift
-SWIFT_RUNTIME_DEPENDS = firmware (>= 11.0), firmware (>= 15.0) | org.swift.libswift (>= 5.5)
+SWIFT_RUNTIME_DEPENDS = firmware (>= 13.0) | org.swift.libswift (>= 5.0)
 endif
 
 SILEOTMP = $(TMPDIR)/sileo
@@ -275,18 +275,35 @@ stage: all
 			exit 1; \
 		fi; \
 	else \
-		if ! xcrun otool -l "$$APP_EXE" | grep -q '/usr/lib/swift'; then \
-			xcrun install_name_tool -add_rpath /usr/lib/swift "$$APP_EXE"; \
-		fi; \
-		if ! xcrun otool -l "$$APP_EXE" | grep -q '/usr/lib/libswift/stable'; then \
-			xcrun install_name_tool -add_rpath /usr/lib/libswift/stable "$$APP_EXE"; \
-		fi; \
-		if ! xcrun otool -l "$$APP_EXE" | grep -q '/var/jb/usr/lib/swift'; then \
-			xcrun install_name_tool -add_rpath /var/jb/usr/lib/swift "$$APP_EXE"; \
-		fi; \
-		if ! xcrun otool -l "$$APP_EXE" | grep -q '/var/jb/usr/lib/libswift/stable'; then \
-			xcrun install_name_tool -add_rpath /var/jb/usr/lib/libswift/stable "$$APP_EXE"; \
-		fi; \
+		while xcrun otool -l "$$APP_EXE" | grep -q '/usr/lib/swift'; do \
+			xcrun install_name_tool -delete_rpath /usr/lib/swift "$$APP_EXE"; \
+		done; \
+		while xcrun otool -l "$$APP_EXE" | grep -q '/usr/lib/libswift/stable'; do \
+			xcrun install_name_tool -delete_rpath /usr/lib/libswift/stable "$$APP_EXE"; \
+		done; \
+		while xcrun otool -l "$$APP_EXE" | grep -q '/var/jb/usr/lib/swift'; do \
+			xcrun install_name_tool -delete_rpath /var/jb/usr/lib/swift "$$APP_EXE"; \
+		done; \
+		while xcrun otool -l "$$APP_EXE" | grep -q '/var/jb/usr/lib/libswift/stable'; do \
+			xcrun install_name_tool -delete_rpath /var/jb/usr/lib/libswift/stable "$$APP_EXE"; \
+		done; \
+		xcrun install_name_tool -add_rpath /usr/lib/libswift/stable "$$APP_EXE"; \
+		xcrun install_name_tool -add_rpath /var/jb/usr/lib/libswift/stable "$$APP_EXE"; \
+		xcrun install_name_tool -add_rpath /usr/lib/swift "$$APP_EXE"; \
+		xcrun install_name_tool -add_rpath /var/jb/usr/lib/swift "$$APP_EXE"; \
+		for SWIFT_LIB in $$(xcrun otool -L "$$APP_EXE" | awk '/\/usr\/lib\/swift\/libswift.*\.dylib/ {print $$1}'); do \
+			SWIFT_BASE=$$(basename "$$SWIFT_LIB"); \
+			xcrun install_name_tool -change "$$SWIFT_LIB" "@rpath/$$SWIFT_BASE" "$$APP_EXE"; \
+		done; \
+		find "$$APP_DIR" -type f | while IFS= read -r MACHO_FILE; do \
+			if ! xcrun otool -h "$$MACHO_FILE" >/dev/null 2>&1; then \
+				continue; \
+			fi; \
+			for SWIFT_LIB in $$(xcrun otool -L "$$MACHO_FILE" | awk '/\/usr\/lib\/swift\/libswift.*\.dylib/ {print $$1}'); do \
+				SWIFT_BASE=$$(basename "$$SWIFT_LIB"); \
+				xcrun install_name_tool -change "$$SWIFT_LIB" "@rpath/$$SWIFT_BASE" "$$MACHO_FILE"; \
+			done; \
+		done; \
 	fi
 	@if [ "$(SWIFT_STDLIB_EMBED_FLAG)" = "YES" ]; then \
 		APP_DIR="$(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP)"; \
