@@ -140,6 +140,7 @@ class DownloadsTableViewController: SileoViewController {
     
     public override func viewDidLoad() {
         super.viewDidLoad()
+        applyQueueNavigationBarAppearance()
         
         let statusBarView = SileoRootView(frame: .zero)
         self.view.addSubview(statusBarView)
@@ -221,11 +222,35 @@ class DownloadsTableViewController: SileoViewController {
     
     public override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
         super.traitCollectionDidChange(previousTraitCollection)
+        applyQueueNavigationBarAppearance()
         updateQueueSheetHandlePath()
         applyFloatingLayoutMetrics(preserveTopPin: true)
         updateFloatingSheetChrome()
         updateFloatingCardShadowPath()
         updateDetailsViewFrameIfNeeded()
+    }
+
+    private func applyQueueNavigationBarAppearance() {
+        guard let navigationBar = navigationController?.navigationBar else {
+            return
+        }
+
+        navigationBar.isTranslucent = false
+
+        if #available(iOS 15.0, *) {
+            let appearance = UINavigationBarAppearance()
+            appearance.configureWithOpaqueBackground()
+            appearance.backgroundColor = .sileoBackgroundColor
+            appearance.shadowColor = .sileoSeparatorColor
+            appearance.titleTextAttributes = navigationBar.standardAppearance.titleTextAttributes
+            appearance.largeTitleTextAttributes = navigationBar.standardAppearance.largeTitleTextAttributes
+            navigationBar.standardAppearance = appearance
+            navigationBar.scrollEdgeAppearance = appearance
+            navigationBar.compactAppearance = appearance
+            navigationBar.compactScrollEdgeAppearance = appearance
+        } else {
+            navigationBar.barTintColor = .sileoBackgroundColor
+        }
     }
     
     private func applyFloatingLayoutMetrics(preserveTopPin: Bool) {
