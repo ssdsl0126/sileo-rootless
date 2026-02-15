@@ -302,16 +302,26 @@ stage: all
 		BEST_STRONG_MATCH=-1; \
 		BEST_TOTAL_MATCH=-1; \
 		if [ -n "$(SWIFT_RUNTIME_ROOT_OVERRIDE)" ] && [ -d "$(SWIFT_RUNTIME_ROOT_OVERRIDE)" ]; then \
-			SWIFT_RUNTIME_ROOT="$(SWIFT_RUNTIME_ROOT_OVERRIDE)"; \
-			if [ ! -f "$$SWIFT_RUNTIME_ROOT/libswiftCore.dylib" ]; then \
-				SWIFT_OVERRIDE_ALT="$$(cd "$$SWIFT_RUNTIME_ROOT/.." && pwd)/swift/iphoneos"; \
+			OVERRIDE_RAW="$(SWIFT_RUNTIME_ROOT_OVERRIDE)"; \
+			for SWIFT_OVERRIDE_ALT in \
+				"$$OVERRIDE_RAW" \
+				"$$(cd "$$OVERRIDE_RAW/.." 2>/dev/null && pwd)/swift/iphoneos" \
+				"$$(cd "$$OVERRIDE_RAW/../.." 2>/dev/null && pwd)/swift/iphoneos" \
+				"$$TOOLCHAIN_DIR/usr/lib/swift/iphoneos" \
+				"$$SDK_DIR/usr/lib/swift/iphoneos"; do \
 				if [ -f "$$SWIFT_OVERRIDE_ALT/libswiftCore.dylib" ] && [ -f "$$SWIFT_OVERRIDE_ALT/libswift_Concurrency.dylib" ]; then \
-					echo "Override root adjusted to $$SWIFT_OVERRIDE_ALT (contains Core+Concurrency)"; \
+					if [ "$$SWIFT_OVERRIDE_ALT" != "$$OVERRIDE_RAW" ]; then \
+						echo "Override root adjusted to $$SWIFT_OVERRIDE_ALT (contains Core+Concurrency)"; \
+					fi; \
 					SWIFT_RUNTIME_ROOT="$$SWIFT_OVERRIDE_ALT"; \
+					BEST_STRONG_MATCH=999; \
+					BEST_TOTAL_MATCH=999; \
+					break; \
 				fi; \
+			done; \
+			if [ -z "$$SWIFT_RUNTIME_ROOT" ]; then \
+				echo "Warning: override root is invalid (missing Core/Concurrency): $$OVERRIDE_RAW"; \
 			fi; \
-			BEST_STRONG_MATCH=999; \
-			BEST_TOTAL_MATCH=999; \
 		fi; \
 		if [ -n "$$SWIFT_RUNTIME_ROOT" ]; then \
 			echo "Using overridden Swift runtime root: $$SWIFT_RUNTIME_ROOT"; \
