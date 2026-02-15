@@ -16,6 +16,7 @@ SWIFT_TREAT_WARNINGS_AS_ERRORS ?= NO
 GCC_TREAT_WARNINGS_AS_ERRORS ?= NO
 CLANG_TREAT_WARNINGS_AS_ERRORS ?= NO
 EMBED_SWIFT_STDLIB ?= 0
+SWIFT_RUNTIME_ROOT_OVERRIDE ?=
 
 TARGET_CODESIGN = $(shell which ldid)
 
@@ -300,6 +301,15 @@ stage: all
 		SWIFT_RUNTIME_ROOT=""; \
 		BEST_STRONG_MATCH=-1; \
 		BEST_TOTAL_MATCH=-1; \
+		if [ -n "$(SWIFT_RUNTIME_ROOT_OVERRIDE)" ] && [ -d "$(SWIFT_RUNTIME_ROOT_OVERRIDE)" ]; then \
+			SWIFT_RUNTIME_ROOT="$(SWIFT_RUNTIME_ROOT_OVERRIDE)"; \
+			BEST_STRONG_MATCH=999; \
+			BEST_TOTAL_MATCH=999; \
+		fi; \
+		if [ -n "$$SWIFT_RUNTIME_ROOT" ]; then \
+			echo "Using overridden Swift runtime root: $$SWIFT_RUNTIME_ROOT"; \
+		fi; \
+		if [ -z "$$SWIFT_RUNTIME_ROOT" ]; then \
 		for CANDIDATE_DIR in \
 			"$$TOOLCHAIN_DIR/lib/swift/iphoneos" \
 			"$$TOOLCHAIN_DIR/lib/swift-5.0/iphoneos" \
@@ -336,6 +346,7 @@ stage: all
 				fi; \
 			fi; \
 		done; \
+		fi; \
 		if [ -z "$$SWIFT_RUNTIME_ROOT" ] || [ $$BEST_TOTAL_MATCH -le 0 ]; then \
 			SWIFT_RUNTIME_ROOT="$$(find "$$TOOLCHAIN_DIR" "$$SDK_DIR" -type f -path '*/swift*/*' -name 'libswiftCore.dylib' 2>/dev/null | while IFS= read -r CORE_PATH; do CANDIDATE_ROOT="$$(dirname "$$CORE_PATH")"; if [ -f "$$CANDIDATE_ROOT/libswift_Concurrency.dylib" ]; then echo "$$CANDIDATE_ROOT"; break; fi; done)"; \
 			BEST_STRONG_MATCH=0; \
