@@ -68,6 +68,12 @@ validate_system_swift_deb() {
     exit 1
   fi
 
+  if ! xcrun otool -l "$app_exe" | grep -q '/usr/lib/libswift/stable'; then
+    echo "[FAIL] system-swift package missing /usr/lib/libswift/stable rpath"
+    rm -rf "$verify_dir"
+    exit 1
+  fi
+
   echo "[OK] Validation passed: $(basename "$deb_file")"
   rm -rf "$verify_dir"
 }

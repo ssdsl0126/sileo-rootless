@@ -23,9 +23,11 @@ TARGET_CODESIGN = $(shell which ldid)
 ifeq ($(EMBED_SWIFT_STDLIB),1)
 SWIFT_STDLIB_EMBED_FLAG = YES
 SWIFT_STDLIB_SUFFIX = -embedded-swift
+SWIFT_RUNTIME_DEPENDS = firmware (>= 11.0)
 else
 SWIFT_STDLIB_EMBED_FLAG = NO
 SWIFT_STDLIB_SUFFIX = -system-swift
+SWIFT_RUNTIME_DEPENDS = firmware (>= 11.0), firmware (>= 15.0) | org.swift.libswift (>= 5.5)
 endif
 
 SILEOTMP = $(TMPDIR)/sileo
@@ -103,9 +105,9 @@ endif
 
 ifeq ($(PLATFORM),iphoneos)
 ifeq ($(ALL_BOOTSTRAPS), 1)
-DEB_DEPENDS     = firmware (>= 11.0), firmware(>=12.2) | org.swift.libswift (>=5.0), coreutils (>= 8.30-1), dpkg (>= 1.19.4-1), apt (>= 1.8.2), libzstd1
+DEB_DEPENDS     = $(SWIFT_RUNTIME_DEPENDS), coreutils (>= 8.30-1), dpkg (>= 1.19.4-1), apt (>= 1.8.2), libzstd1
 else
-DEB_DEPENDS     = firmware (>= 11.0), firmware(>=12.2) | org.swift.libswift (>=5.0), coreutils (>= 8.32-4), dpkg (>= 1.20.0), apt (>= 2.3.0), libzstd1
+DEB_DEPENDS     = $(SWIFT_RUNTIME_DEPENDS), coreutils (>= 8.32-4), dpkg (>= 1.20.0), apt (>= 2.3.0), libzstd1
 endif
 endif
 
@@ -117,9 +119,9 @@ endif
 
 ifeq ($(PLATFORM),iphoneos)
 ifeq ($(ALL_BOOTSTRAPS), 1)
-DEB_DEPENDS     = firmware (>= 11.0), firmware(>=12.2) | org.swift.libswift (>=5.0), coreutils (>= 8.30-1), dpkg (>= 1.19.4-1), apt (>= 1.8.2), libzstd1
+DEB_DEPENDS     = $(SWIFT_RUNTIME_DEPENDS), coreutils (>= 8.30-1), dpkg (>= 1.19.4-1), apt (>= 1.8.2), libzstd1
 else
-DEB_DEPENDS     = firmware (>= 11.0), firmware(>=12.2) | org.swift.libswift (>=5.0), coreutils (>= 8.32-4), dpkg (>= 1.20.0), apt (>= 2.3.0), libzstd1
+DEB_DEPENDS     = $(SWIFT_RUNTIME_DEPENDS), coreutils (>= 8.32-4), dpkg (>= 1.20.0), apt (>= 2.3.0), libzstd1
 endif
 endif
 
@@ -275,6 +277,15 @@ stage: all
 	else \
 		if ! xcrun otool -l "$$APP_EXE" | grep -q '/usr/lib/swift'; then \
 			xcrun install_name_tool -add_rpath /usr/lib/swift "$$APP_EXE"; \
+		fi; \
+		if ! xcrun otool -l "$$APP_EXE" | grep -q '/usr/lib/libswift/stable'; then \
+			xcrun install_name_tool -add_rpath /usr/lib/libswift/stable "$$APP_EXE"; \
+		fi; \
+		if ! xcrun otool -l "$$APP_EXE" | grep -q '/var/jb/usr/lib/swift'; then \
+			xcrun install_name_tool -add_rpath /var/jb/usr/lib/swift "$$APP_EXE"; \
+		fi; \
+		if ! xcrun otool -l "$$APP_EXE" | grep -q '/var/jb/usr/lib/libswift/stable'; then \
+			xcrun install_name_tool -add_rpath /var/jb/usr/lib/libswift/stable "$$APP_EXE"; \
 		fi; \
 	fi
 	@if [ "$(SWIFT_STDLIB_EMBED_FLAG)" = "YES" ]; then \
