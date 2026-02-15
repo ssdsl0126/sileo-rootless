@@ -8,6 +8,19 @@ IOS_TARGET="${IOS_DEPLOYMENT_TARGET:-13.0}"
 PLATFORMS_RAW="${SILEO_PLATFORMS:-iphoneos-arm iphoneos-arm64}"
 read -r -a PLATFORMS <<< "$PLATFORMS_RAW"
 COMMON_ARGS_BASE=(DEBUG=0 ALL_BOOTSTRAPS=1 "IOS_DEPLOYMENT_TARGET=${IOS_TARGET}" V=0 EMBED_SWIFT_STDLIB=0)
+BUILD_NIGHTLY="${BUILD_NIGHTLY:-${NIGHTLY:-1}}"
+BUILD_STABLE="${BUILD_STABLE:-1}"
+
+is_enabled() {
+  case "$1" in
+    1|true|TRUE|yes|YES|on|ON) return 0 ;;
+    0|false|FALSE|no|NO|off|OFF) return 1 ;;
+    *)
+      echo "Invalid boolean value: $1"
+      exit 1
+      ;;
+  esac
+}
 
 ensure_tool() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -74,23 +87,41 @@ ensure_tool make
 ensure_tool dpkg-deb
 ensure_tool xcrun
 
+expected_builds_per_platform=0
+if is_enabled "$BUILD_NIGHTLY"; then
+  ((expected_builds_per_platform+=1))
+fi
+if is_enabled "$BUILD_STABLE"; then
+  ((expected_builds_per_platform+=1))
+fi
+if [[ $expected_builds_per_platform -eq 0 ]]; then
+  echo "[FAIL] Nothing to build: both Nightly and Stable are disabled"
+  exit 1
+fi
+
 echo "Repo: $ROOT_DIR"
 echo "Xcode: $(xcodebuild -version | tr '\n' ' ' | sed 's/  */ /g')"
 echo "Platforms: ${PLATFORMS_RAW}, iOS target: ${IOS_TARGET}"
+echo "Build flags: NIGHTLY=${BUILD_NIGHTLY}, STABLE=${BUILD_STABLE}"
 
 for platform in "${PLATFORMS[@]}"; do
-  build_one "Nightly (test)" "$platform" NIGHTLY=1
-  build_one "Stable (release)" "$platform" NIGHTLY=0 BETA=0
+  if is_enabled "$BUILD_NIGHTLY"; then
+    build_one "Nightly (test)" "$platform" NIGHTLY=1
+  fi
+  if is_enabled "$BUILD_STABLE"; then
+    build_one "Stable (release)" "$platform" NIGHTLY=0 BETA=0
+  fi
 done
 
 for platform in "${PLATFORMS[@]}"; do
   mapfile -t platform_debs < <(ls -t packages/*_"${platform}"-system-swift.deb 2>/dev/null || true)
-  if [[ ${#platform_debs[@]} -lt 2 ]]; then
-    echo "[FAIL] Expected at least 2 system-swift packages for ${platform} (nightly + stable)"
+  if [[ ${#platform_debs[@]} -lt $expected_builds_per_platform ]]; then
+    echo "[FAIL] Expected at least ${expected_builds_per_platform} system-swift package(s) for ${platform}"
     exit 1
   fi
-  validate_system_swift_deb "${platform_debs[0]}"
-  validate_system_swift_deb "${platform_debs[1]}"
+  for ((i=0; i<expected_builds_per_platform; i++)); do
+    validate_system_swift_deb "${platform_debs[$i]}"
+  done
 done
 
 echo ""
