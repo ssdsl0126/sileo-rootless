@@ -92,6 +92,31 @@ jobs:
           done < <(find "$LNPOPUP_PRIVATE_DIR" -mindepth 2 -type f \( -name '*.h' -o -name '*.hh' \))
           echo "LNPopup header links created: $LNPOPUP_LINK_COUNT"
           make package DEBUG=0 ALL_BOOTSTRAPS=1 SILEO_PLATFORM=${{ matrix.platform.make_platform }} IOS_DEPLOYMENT_TARGET=13.0 V=0 EMBED_SWIFT_STDLIB=0
+          PKG_FILE="$(ls -t packages/*system-swift.deb | head -n1)"
+          rm -rf verify-root
+          mkdir -p verify-root
+          dpkg-deb -x "$PKG_FILE" verify-root
+          APP_DIR="$(find verify-root -type d -path '*/Applications/Sileo*.app' | head -n1)"
+          if [ -z "$APP_DIR" ]; then
+            echo "Unable to locate extracted Sileo.app in system package"
+            exit 1
+          fi
+          APP_EXE="$APP_DIR/Sileo"
+          if [ ! -f "$APP_EXE" ]; then
+            APP_EXE="$APP_DIR/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP_DIR/Info.plist" 2>/dev/null || echo Sileo)"
+          fi
+          if [ ! -f "$APP_EXE" ]; then
+            echo "Unable to locate Sileo executable in system package"
+            exit 1
+          fi
+          if find "$APP_DIR/Frameworks" -maxdepth 1 -type f -name 'libswift*.dylib' 2>/dev/null | grep -q .; then
+            echo "System-swift package unexpectedly contains embedded libswift*.dylib"
+            exit 1
+          fi
+          if ! xcrun otool -l "$APP_EXE" | grep -q '/usr/lib/swift'; then
+            echo "System-swift package missing /usr/lib/swift runtime rpath"
+            exit 1
+          fi
 
       - name: Upload build artifacts to GitHub Release
         uses: softprops/action-gh-release@v2
