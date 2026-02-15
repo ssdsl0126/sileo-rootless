@@ -5,7 +5,7 @@ on:
 name: Build
 jobs:
   make:
-    name: Build and Upload Sileo (system-swift)
+    name: Build and Upload Sileo (embedded-swift)
     runs-on: macos-latest
     steps:
 
@@ -53,7 +53,7 @@ jobs:
         run: |
           echo '/opt/procursus/sbin:/opt/procursus/bin' >> $GITHUB_PATH
 
-      - name: Build Sileo Nightly (iphoneos-arm64, system-swift)
+      - name: Build Sileo Nightly (iphoneos-arm64, embedded-swift)
         run: |
           make clean
           xcodebuild -resolvePackageDependencies -project Sileo.xcodeproj -scheme Sileo -derivedDataPath "$TMPDIR/sileo"
@@ -81,14 +81,14 @@ jobs:
             fi
           done < <(find "$LNPOPUP_PRIVATE_DIR" -mindepth 2 -type f \( -name '*.h' -o -name '*.hh' \))
           echo "LNPopup header links created: $LNPOPUP_LINK_COUNT"
-          make package NIGHTLY=1 DEBUG=0 ALL_BOOTSTRAPS=1 SILEO_PLATFORM=iphoneos-arm64 IOS_DEPLOYMENT_TARGET=13.0 V=0 EMBED_SWIFT_STDLIB=0
-          PKG_FILE="$(ls -t packages/*system-swift.deb | head -n1)"
+          make package NIGHTLY=1 DEBUG=0 ALL_BOOTSTRAPS=1 SILEO_PLATFORM=iphoneos-arm64 IOS_DEPLOYMENT_TARGET=13.0 V=0 EMBED_SWIFT_STDLIB=1
+          PKG_FILE="$(ls -t packages/*embedded-swift.deb | head -n1)"
           rm -rf verify-root
           mkdir -p verify-root
           dpkg-deb -x "$PKG_FILE" verify-root
           APP_DIR="$(find verify-root -type d -path '*/Applications/Sileo*.app' | head -n1)"
           if [ -z "$APP_DIR" ]; then
-            echo "Unable to locate extracted Sileo.app in system package"
+            echo "Unable to locate extracted Sileo.app in embedded package"
             exit 1
           fi
           APP_EXE="$APP_DIR/Sileo"
@@ -96,20 +96,33 @@ jobs:
             APP_EXE="$APP_DIR/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP_DIR/Info.plist" 2>/dev/null || echo Sileo)"
           fi
           if [ ! -f "$APP_EXE" ]; then
-            echo "Unable to locate Sileo executable in system package"
+            echo "Unable to locate Sileo executable in embedded package"
             exit 1
           fi
-          if find "$APP_DIR/Frameworks" -maxdepth 1 -type f -name 'libswift*.dylib' 2>/dev/null | grep -q .; then
-            echo "System-swift package unexpectedly contains embedded libswift*.dylib"
+          if [ ! -f "$APP_DIR/Frameworks/libswift_Concurrency.dylib" ]; then
+            echo "Missing libswift_Concurrency.dylib in embedded package"
             exit 1
           fi
-          if ! xcrun otool -l "$APP_EXE" | grep -q '/usr/lib/swift'; then
-            echo "System-swift package missing /usr/lib/swift runtime rpath"
+          if xcrun otool -L "$APP_EXE" | grep -q '/usr/lib/swift/libswift'; then
+            echo "Embedded package still has absolute /usr/lib/swift/libswift references"
             exit 1
           fi
+          MISSING_SWIFT_LIBS=""
+          for SWIFT_REF in $(xcrun otool -L "$APP_EXE" | awk '/@rpath\/libswift.*\.dylib/ {print $1}'); do
+            SWIFT_BASE="$(basename "$SWIFT_REF")"
+            if [ ! -f "$APP_DIR/Frameworks/$SWIFT_BASE" ]; then
+              MISSING_SWIFT_LIBS="$MISSING_SWIFT_LIBS $SWIFT_BASE"
+            fi
+          done
+          if [ -n "$MISSING_SWIFT_LIBS" ]; then
+            echo "Embedded package missing referenced swift dylibs:$MISSING_SWIFT_LIBS"
+            exit 1
+          fi
+          echo "Embedded package UUID:"
+          xcrun dwarfdump --uuid "$APP_EXE"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: sileo-nightly-packages-system-swift
+          name: sileo-nightly-packages-embedded-swift
           path: packages/*
