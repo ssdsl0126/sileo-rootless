@@ -206,8 +206,29 @@ stage: all
 	@echo $(PLATFORM)
 	@echo $(SILEO_APP_DIR)
 	@echo $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP)
+	@xcodebuild -resolvePackageDependencies -project 'Sileo.xcodeproj' -scheme "$(SCHEME)" -derivedDataPath $(SILEOTMP)
+	@ALDERIS_FILE="$(SILEOTMP)/SourcePackages/checkouts/Alderis/Alderis/ColorPickerInnerViewController.swift"; \
+	if [ -f "$$ALDERIS_FILE" ]; then \
+		if ! grep -q 'var pickerTab: ColorPickerTab' "$$ALDERIS_FILE"; then \
+			sed -i '' 's/var tab: ColorPickerTab/var pickerTab: ColorPickerTab/' "$$ALDERIS_FILE"; \
+			sed -i '' 's/tab = configuration.initialTab/pickerTab = configuration.initialTab/' "$$ALDERIS_FILE"; \
+		fi; \
+	fi
+	@LNPOPUP_PRIVATE_DIR="$(SILEOTMP)/SourcePackages/checkouts/LNPopupController/LNPopupController/LNPopupController/Private"; \
+	if [ -d "$$LNPOPUP_PRIVATE_DIR" ]; then \
+		chmod -R u+w "$$LNPOPUP_PRIVATE_DIR" || true; \
+		LNPOPUP_LINK_COUNT=0; \
+		find "$$LNPOPUP_PRIVATE_DIR" -mindepth 2 -type f \( -name '*.h' -o -name '*.hh' \) | while IFS= read -r header; do \
+			target="$$LNPOPUP_PRIVATE_DIR/$$(basename "$$header")"; \
+			if [ ! -e "$$target" ]; then \
+				ln -s "$$header" "$$target"; \
+				LNPOPUP_LINK_COUNT=$$((LNPOPUP_LINK_COUNT + 1)); \
+			fi; \
+		done; \
+		echo "LNPopup header links ensured"; \
+	fi
 	@set -o pipefail; \
-		xcodebuild -jobs $(shell sysctl -n hw.ncpu) -project 'Sileo.xcodeproj' -scheme "$(SCHEME)" -configuration $(BUILD_CONFIG) -arch $(ARCH) -sdk $(PLATFORM) -derivedDataPath $(SILEOTMP) \
+		xcodebuild -jobs $(shell sysctl -n hw.ncpu) -project 'Sileo.xcodeproj' -scheme "$(SCHEME)" -configuration $(BUILD_CONFIG) -arch $(ARCH) -sdk $(PLATFORM) $(DESTINATION) -derivedDataPath $(SILEOTMP) \
 		CODE_SIGNING_ALLOWED=NO IPHONEOS_DEPLOYMENT_TARGET=$(IOS_DEPLOYMENT_TARGET) RUN_CLANG_STATIC_ANALYZER=$(RUN_CLANG_STATIC_ANALYZER) SWIFT_TREAT_WARNINGS_AS_ERRORS=$(SWIFT_TREAT_WARNINGS_AS_ERRORS) GCC_TREAT_WARNINGS_AS_ERRORS=$(GCC_TREAT_WARNINGS_AS_ERRORS) CLANG_TREAT_WARNINGS_AS_ERRORS=$(CLANG_TREAT_WARNINGS_AS_ERRORS) PRODUCT_BUNDLE_IDENTIFIER=$(PRODUCT_BUNDLE_IDENTIFIER) DISPLAY_NAME=$(DISPLAY_NAME) \
 		DSTROOT=$(SILEOTMP)/install $(XCPRETTY) ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES=$(SWIFT_STDLIB_EMBED_FLAG)
 	@rm -rf $(SILEO_STAGE_DIR)/
