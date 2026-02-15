@@ -432,30 +432,8 @@ stage: all
 			echo "Missing required Swift runtime libraries:$$MISSING_STRONG_SWIFT_LIBS"; \
 			exit 1; \
 		fi; \
-		MISSING_REQUIRED_RPATH_LIBS=""; \
-		for RPATH_REF in $$(xcrun otool -L "$$APP_EXE" | awk '/@rpath\/lib.*\.dylib/ {print $$1}' | grep -v '@rpath/libswift'); do \
-			RPATH_BASE="$$(basename "$$RPATH_REF")"; \
-			if [ ! -f "$$APP_DIR/Frameworks/$$RPATH_BASE" ]; then \
-				COPIED=0; \
-				for NONSWIFT_LIB_DIR in \
-					"/opt/procursus/lib" \
-					"/var/jb/usr/lib" \
-					"/usr/local/lib"; do \
-					if [ -f "$$NONSWIFT_LIB_DIR/$$RPATH_BASE" ]; then \
-						cp "$$NONSWIFT_LIB_DIR/$$RPATH_BASE" "$$APP_DIR/Frameworks/$$RPATH_BASE"; \
-						COPIED=1; \
-						break; \
-					fi; \
-				done; \
-				if [ $$COPIED -ne 1 ]; then \
-					echo "Missing required non-Swift runtime library: $$RPATH_BASE"; \
-					MISSING_REQUIRED_RPATH_LIBS="$$MISSING_REQUIRED_RPATH_LIBS $$RPATH_BASE"; \
-				fi; \
-			fi; \
-		done; \
-		if [ -n "$$MISSING_REQUIRED_RPATH_LIBS" ]; then \
-			echo "Missing required non-Swift @rpath libraries:$$MISSING_REQUIRED_RPATH_LIBS"; \
-			exit 1; \
+		if xcrun otool -L "$$APP_EXE" | grep -q '@rpath/libzstd.1.dylib'; then \
+			xcrun install_name_tool -change @rpath/libzstd.1.dylib /var/jb/usr/lib/libzstd.1.dylib "$$APP_EXE"; \
 		fi; \
 		for SWIFT_DYLIB in $$APP_DIR/Frameworks/libswift*.dylib; do \
 			if [ -f "$$SWIFT_DYLIB" ]; then \

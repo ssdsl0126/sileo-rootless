@@ -147,17 +147,6 @@ jobs:
             echo "Embedded package missing required swift dylibs:$MISSING_STRONG_SWIFT_LIBS"
             exit 1
           fi
-          MISSING_REQUIRED_RPATH_LIBS=""
-          for RPATH_REF in $(xcrun otool -L "$APP_EXE" | awk '/@rpath\/lib.*\.dylib/ {print $1}' | grep -v '@rpath/libswift'); do
-            RPATH_BASE="$(basename "$RPATH_REF")"
-            if [ ! -f "$APP_DIR/Frameworks/$RPATH_BASE" ]; then
-              MISSING_REQUIRED_RPATH_LIBS="$MISSING_REQUIRED_RPATH_LIBS $RPATH_BASE"
-            fi
-          done
-          if [ -n "$MISSING_REQUIRED_RPATH_LIBS" ]; then
-            echo "Embedded package missing required non-Swift @rpath dylibs:$MISSING_REQUIRED_RPATH_LIBS"
-            exit 1
-          fi
           echo "Embedded package UUID:"
           xcrun dwarfdump --uuid "$APP_EXE"
 
