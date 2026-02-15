@@ -246,47 +246,37 @@ stage: all
 		echo "Unable to resolve app executable path: $$APP_EXE"; \
 		exit 1; \
 	fi; \
+	list_rpaths() { \
+		xcrun otool -l "$$1" | awk '$$1=="cmd" && $$2=="LC_RPATH" { in_rpath=1; next } in_rpath && $$1=="path" { print $$2; in_rpath=0 }'; \
+	}; \
+	delete_rpath_if_present() { \
+		_macho="$$1"; \
+		_rpath="$$2"; \
+		if list_rpaths "$$_macho" | grep -Fxq "$$_rpath"; then \
+			xcrun install_name_tool -delete_rpath "$$_rpath" "$$_macho"; \
+		fi; \
+	}; \
 	if [ "$(SWIFT_STDLIB_EMBED_FLAG)" = "YES" ]; then \
 		for SWIFT_LIB in $$(xcrun otool -L "$$APP_EXE" | awk '/\/usr\/lib\/swift\/libswift.*\.dylib/ {print $$1}'); do \
 			SWIFT_BASE=$$(basename "$$SWIFT_LIB"); \
 			xcrun install_name_tool -change "$$SWIFT_LIB" "@rpath/$$SWIFT_BASE" "$$APP_EXE"; \
 		done; \
-		while xcrun otool -l "$$APP_EXE" | grep -q '@executable_path/Frameworks'; do \
-			xcrun install_name_tool -delete_rpath @executable_path/Frameworks "$$APP_EXE"; \
-		done; \
-		while xcrun otool -l "$$APP_EXE" | grep -q '/opt/procursus/lib'; do \
-			xcrun install_name_tool -delete_rpath /opt/procursus/lib "$$APP_EXE"; \
-		done; \
-		while xcrun otool -l "$$APP_EXE" | grep -q '/var/jb/usr/local/lib'; do \
-			xcrun install_name_tool -delete_rpath /var/jb/usr/local/lib "$$APP_EXE"; \
-		done; \
-		while xcrun otool -l "$$APP_EXE" | grep -q '/var/jb/usr/lib'; do \
-			xcrun install_name_tool -delete_rpath /var/jb/usr/lib "$$APP_EXE"; \
-		done; \
+		delete_rpath_if_present "$$APP_EXE" @executable_path/Frameworks; \
+		delete_rpath_if_present "$$APP_EXE" /opt/procursus/lib; \
+		delete_rpath_if_present "$$APP_EXE" /var/jb/usr/local/lib; \
+		delete_rpath_if_present "$$APP_EXE" /var/jb/usr/lib; \
 		xcrun install_name_tool -add_rpath @executable_path/Frameworks "$$APP_EXE"; \
-		while xcrun otool -l "$$APP_EXE" | grep -q '/usr/lib/swift'; do \
-			xcrun install_name_tool -delete_rpath /usr/lib/swift "$$APP_EXE"; \
-		done; \
-		while xcrun otool -l "$$APP_EXE" | grep -q '/usr/lib/libswift/stable'; do \
-			xcrun install_name_tool -delete_rpath /usr/lib/libswift/stable "$$APP_EXE"; \
-		done; \
+		delete_rpath_if_present "$$APP_EXE" /usr/lib/swift; \
+		delete_rpath_if_present "$$APP_EXE" /usr/lib/libswift/stable; \
 		if xcrun otool -L "$$APP_EXE" | grep -q '/usr/lib/swift/libswift'; then \
 			echo "Embedded mode validation failed: still has absolute /usr/lib/swift/libswift load commands"; \
 			exit 1; \
 		fi; \
 	else \
-		while xcrun otool -l "$$APP_EXE" | grep -q '/usr/lib/swift'; do \
-			xcrun install_name_tool -delete_rpath /usr/lib/swift "$$APP_EXE"; \
-		done; \
-		while xcrun otool -l "$$APP_EXE" | grep -q '/usr/lib/libswift/stable'; do \
-			xcrun install_name_tool -delete_rpath /usr/lib/libswift/stable "$$APP_EXE"; \
-		done; \
-		while xcrun otool -l "$$APP_EXE" | grep -q '/var/jb/usr/lib/swift'; do \
-			xcrun install_name_tool -delete_rpath /var/jb/usr/lib/swift "$$APP_EXE"; \
-		done; \
-		while xcrun otool -l "$$APP_EXE" | grep -q '/var/jb/usr/lib/libswift/stable'; do \
-			xcrun install_name_tool -delete_rpath /var/jb/usr/lib/libswift/stable "$$APP_EXE"; \
-		done; \
+		delete_rpath_if_present "$$APP_EXE" /usr/lib/swift; \
+		delete_rpath_if_present "$$APP_EXE" /usr/lib/libswift/stable; \
+		delete_rpath_if_present "$$APP_EXE" /var/jb/usr/lib/swift; \
+		delete_rpath_if_present "$$APP_EXE" /var/jb/usr/lib/libswift/stable; \
 		xcrun install_name_tool -add_rpath /usr/lib/libswift/stable "$$APP_EXE"; \
 		xcrun install_name_tool -add_rpath /var/jb/usr/lib/libswift/stable "$$APP_EXE"; \
 		xcrun install_name_tool -add_rpath /usr/lib/swift "$$APP_EXE"; \
@@ -477,12 +467,8 @@ stage: all
 				SWIFT_BASE=$$(basename "$$SWIFT_LIB"); \
 				xcrun install_name_tool -change "$$SWIFT_LIB" "@rpath/$$SWIFT_BASE" "$$MACHO_FILE"; \
 			done; \
-			while xcrun otool -l "$$MACHO_FILE" | grep -q '/usr/lib/swift'; do \
-				xcrun install_name_tool -delete_rpath /usr/lib/swift "$$MACHO_FILE"; \
-			done; \
-			while xcrun otool -l "$$MACHO_FILE" | grep -q '/usr/lib/libswift/stable'; do \
-				xcrun install_name_tool -delete_rpath /usr/lib/libswift/stable "$$MACHO_FILE"; \
-			done; \
+			delete_rpath_if_present "$$MACHO_FILE" /usr/lib/swift; \
+			delete_rpath_if_present "$$MACHO_FILE" /usr/lib/libswift/stable; \
 			if xcrun otool -L "$$MACHO_FILE" | grep -q '/usr/lib/swift/libswift'; then \
 				echo "Embedded mode validation failed: absolute system Swift runtime reference in $$MACHO_FILE"; \
 				exit 1; \
