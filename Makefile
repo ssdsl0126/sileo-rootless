@@ -303,6 +303,13 @@ stage: all
 		BEST_TOTAL_MATCH=-1; \
 		if [ -n "$(SWIFT_RUNTIME_ROOT_OVERRIDE)" ] && [ -d "$(SWIFT_RUNTIME_ROOT_OVERRIDE)" ]; then \
 			SWIFT_RUNTIME_ROOT="$(SWIFT_RUNTIME_ROOT_OVERRIDE)"; \
+			if [ ! -f "$$SWIFT_RUNTIME_ROOT/libswiftCore.dylib" ]; then \
+				SWIFT_OVERRIDE_ALT="$$(cd "$$SWIFT_RUNTIME_ROOT/.." && pwd)/swift/iphoneos"; \
+				if [ -f "$$SWIFT_OVERRIDE_ALT/libswiftCore.dylib" ] && [ -f "$$SWIFT_OVERRIDE_ALT/libswift_Concurrency.dylib" ]; then \
+					echo "Override root adjusted to $$SWIFT_OVERRIDE_ALT (contains Core+Concurrency)"; \
+					SWIFT_RUNTIME_ROOT="$$SWIFT_OVERRIDE_ALT"; \
+				fi; \
+			fi; \
 			BEST_STRONG_MATCH=999; \
 			BEST_TOTAL_MATCH=999; \
 		fi; \
@@ -323,6 +330,7 @@ stage: all
 			"$$TOOLCHAIN_DIR/usr/lib/swift-5.10/iphoneos" \
 			"$$TOOLCHAIN_DIR/usr/lib/swift-5.5/iphoneos" \
 			"$$TOOLCHAIN_DIR/usr/lib/swift_static/iphoneos" \
+			"$$SDK_DIR/usr/lib/swift/iphoneos" \
 			"$$SDK_DIR/usr/lib/swift"; do \
 			if [ -d "$$CANDIDATE_DIR" ]; then \
 				if [ ! -f "$$CANDIDATE_DIR/libswiftCore.dylib" ] || [ ! -f "$$CANDIDATE_DIR/libswift_Concurrency.dylib" ]; then \
