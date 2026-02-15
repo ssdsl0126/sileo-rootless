@@ -117,6 +117,16 @@ jobs:
             echo "Embedded package has absolute system Swift references in:$ABS_SWIFT_REFS"
             exit 1
           fi
+          BAD_SWIFT_RPATHS=""
+          while IFS= read -r macho; do
+            if xcrun otool -l "$macho" 2>/dev/null | grep -q '/usr/lib/swift\|/usr/lib/libswift/stable'; then
+              BAD_SWIFT_RPATHS="$BAD_SWIFT_RPATHS $macho"
+            fi
+          done < <(find "$APP_DIR" -type f \( -name 'Sileo' -o -path '*/Frameworks/libswift*.dylib' \))
+          if [ -n "$BAD_SWIFT_RPATHS" ]; then
+            echo "Embedded package has forbidden Swift rpaths in:$BAD_SWIFT_RPATHS"
+            exit 1
+          fi
           WEAK_SWIFT_REFS="$(xcrun otool -l "$APP_EXE" | awk '$1=="cmd" { cmd=$2 } $1=="name" && $2 ~ /^@rpath\/libswift.*\.dylib$/ { if (cmd == "LC_LOAD_WEAK_DYLIB") print $2 }' | sort -u)"
           MISSING_WEAK_SWIFT_LIBS=""
           MISSING_STRONG_SWIFT_LIBS=""
