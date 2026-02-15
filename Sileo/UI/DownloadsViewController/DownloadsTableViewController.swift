@@ -154,8 +154,9 @@ class DownloadsTableViewController: SileoViewController {
         self.tableView?.clipsToBounds = true
         self.tableView?.backgroundColor = .sileoBackgroundColor
         self.tableView?.isOpaque = true
-        if supportsFloatingSheetChrome {
-            self.tableView?.contentInsetAdjustmentBehavior = .never
+        self.tableView?.contentInsetAdjustmentBehavior = .never
+        if #available(iOS 15.0, *) {
+            self.tableView?.sectionHeaderTopPadding = 0
         }
         
         confirmButton?.layer.cornerRadius = 10
@@ -199,7 +200,9 @@ class DownloadsTableViewController: SileoViewController {
                 return
         }
         
-        statusBarView.frame = CGRect(origin: .zero, size: CGSize(width: self.view.bounds.width, height: tableView.safeAreaInsets.top))
+        statusBarView.frame = CGRect(origin: .zero,
+                         size: CGSize(width: self.view.bounds.width,
+                              height: max(tableView.safeAreaInsets.top, tableView.contentInset.top)))
         statusBarView.isHidden = supportsFloatingSheetChrome && UIDevice.current.userInterfaceIdiom != .phone
         statusBarView.backgroundColor = .sileoBackgroundColor
         
@@ -271,7 +274,7 @@ class DownloadsTableViewController: SileoViewController {
         
         let newTopInset: CGFloat
         if usesSystemQueueSheetPresentation && UIDevice.current.userInterfaceIdiom == .phone {
-            newTopInset = 14
+            newTopInset = 43
         } else if supportsFloatingSheetChrome {
             newTopInset = 43 + verticalOffset
         } else if UIDevice.current.userInterfaceIdiom == .phone {
