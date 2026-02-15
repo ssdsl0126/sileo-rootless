@@ -262,9 +262,6 @@ stage: all
 			xcrun install_name_tool -delete_rpath /var/jb/usr/lib "$$APP_EXE"; \
 		done; \
 		xcrun install_name_tool -add_rpath @executable_path/Frameworks "$$APP_EXE"; \
-		xcrun install_name_tool -add_rpath /opt/procursus/lib "$$APP_EXE"; \
-		xcrun install_name_tool -add_rpath /var/jb/usr/local/lib "$$APP_EXE"; \
-		xcrun install_name_tool -add_rpath /var/jb/usr/lib "$$APP_EXE"; \
 		while xcrun otool -l "$$APP_EXE" | grep -q '/usr/lib/swift'; do \
 			xcrun install_name_tool -delete_rpath /usr/lib/swift "$$APP_EXE"; \
 		done; \
