@@ -117,15 +117,34 @@ jobs:
             echo "Embedded package still has absolute /usr/lib/swift/libswift references"
             exit 1
           fi
-          MISSING_SWIFT_LIBS=""
+          ABS_SWIFT_REFS=""
+          while IFS= read -r macho; do
+            if xcrun otool -L "$macho" 2>/dev/null | grep -q '/usr/lib/swift/libswift'; then
+              ABS_SWIFT_REFS="$ABS_SWIFT_REFS $macho"
+            fi
+          done < <(find "$APP_DIR" -type f \( -name 'Sileo' -o -path '*/Frameworks/libswift*.dylib' \))
+          if [ -n "$ABS_SWIFT_REFS" ]; then
+            echo "Embedded package has absolute system Swift references in:$ABS_SWIFT_REFS"
+            exit 1
+          fi
+          WEAK_SWIFT_REFS="$(xcrun otool -l "$APP_EXE" | awk '$1=="cmd" { cmd=$2 } $1=="name" && $2 ~ /^@rpath\/libswift.*\.dylib$/ { if (cmd == "LC_LOAD_WEAK_DYLIB") print $2 }' | sort -u)"
+          MISSING_WEAK_SWIFT_LIBS=""
+          MISSING_STRONG_SWIFT_LIBS=""
           for SWIFT_REF in $(xcrun otool -L "$APP_EXE" | awk '/@rpath\/libswift.*\.dylib/ {print $1}'); do
             SWIFT_BASE="$(basename "$SWIFT_REF")"
             if [ ! -f "$APP_DIR/Frameworks/$SWIFT_BASE" ]; then
-              MISSING_SWIFT_LIBS="$MISSING_SWIFT_LIBS $SWIFT_BASE"
+              if printf '%s\n' "$WEAK_SWIFT_REFS" | grep -Fxq "$SWIFT_REF"; then
+                MISSING_WEAK_SWIFT_LIBS="$MISSING_WEAK_SWIFT_LIBS $SWIFT_BASE"
+              else
+                MISSING_STRONG_SWIFT_LIBS="$MISSING_STRONG_SWIFT_LIBS $SWIFT_BASE"
+              fi
             fi
           done
-          if [ -n "$MISSING_SWIFT_LIBS" ]; then
-            echo "Embedded package missing referenced swift dylibs:$MISSING_SWIFT_LIBS"
+          if [ -n "$MISSING_WEAK_SWIFT_LIBS" ]; then
+            echo "Embedded package missing weak swift dylibs:$MISSING_WEAK_SWIFT_LIBS"
+          fi
+          if [ -n "$MISSING_STRONG_SWIFT_LIBS" ]; then
+            echo "Embedded package missing required swift dylibs:$MISSING_STRONG_SWIFT_LIBS"
             exit 1
           fi
           echo "Embedded package UUID:"
