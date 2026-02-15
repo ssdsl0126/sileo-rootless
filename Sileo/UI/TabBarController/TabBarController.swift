@@ -28,7 +28,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         presentedViewController === downloadsController
     }
     
-    private var preferredPopupInteractionStyle: UIViewController.PopupInteractionStyle {
+    private var preferredPopupInteractionStyle: LNPopupInteractionStyle {
         UIDevice.current.userInterfaceIdiom == .phone ? .snap : .drag
     }
 
@@ -36,7 +36,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         UIDevice.current.userInterfaceIdiom == .phone
     }
 
-    private var queueCollapsedInteractionStyle: UIViewController.PopupInteractionStyle {
+    private var queueCollapsedInteractionStyle: LNPopupInteractionStyle {
         usesFloatingQueueCardOnPhone ? .none : preferredPopupInteractionStyle
     }
     
@@ -137,7 +137,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         if let queueVC = downloadsController.viewControllers.first as? DownloadsTableViewController {
             queueVC.usesSystemQueueSheetPresentation = false
         }
-        self.presentPopupBar(with: downloadsController, animated: true, completion: completion)
+        self.presentPopupBar(withContentViewController: downloadsController, animated: true, completion: completion)
         self.configurePopupTapIfNeeded()
         
         self.updateSileoColors()
@@ -414,7 +414,9 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     
     @objc func updateSileoColors() {
         self.popupBar.tintColor = UINavigationBar.appearance().tintColor
-        self.setNeedsPopupBarAppearanceUpdate()
+        if self.responds(to: NSSelectorFromString("setNeedsPopupBarAppearanceUpdate")) {
+            _ = self.perform(NSSelectorFromString("setNeedsPopupBarAppearanceUpdate"))
+        }
     }
     
     override func viewDidLayoutSubviews() {
