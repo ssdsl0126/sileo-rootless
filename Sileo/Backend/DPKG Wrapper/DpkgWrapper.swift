@@ -45,6 +45,19 @@ enum pkgpriority: String {
 }
 
 class DpkgWrapper {
+    static let demoPreferredArchitectureKey = "DemoPreferredArchitecture"
+
+    #if targetEnvironment(simulator) || TARGET_SANDBOX
+    static var demoPreferredArchitecture: DPKGArchitecture.Architecture {
+        if let rawValue = UserDefaults.standard.string(forKey: demoPreferredArchitectureKey),
+           let architecture = DPKGArchitecture.Architecture(rawValue: rawValue),
+           architecture == .rootless || architecture == .rootful {
+            return architecture
+        }
+        return .rootless
+    }
+    #endif
+
     private class func shellEscape(_ argument: String) -> String {
         "'\(argument.replacingOccurrences(of: "'", with: "'\\''"))'"
     }
@@ -84,6 +97,11 @@ class DpkgWrapper {
     }
  
     public static var architecture: DPKGArchitecture = {
+        #if targetEnvironment(simulator) || TARGET_SANDBOX
+        let demoArchitectures = DPKGArchitecture(primary: demoPreferredArchitecture, foreign: [])
+        print("Default Archs: \(demoArchitectures)")
+        return demoArchitectures
+        #else
         #if arch(x86_64) && !targetEnvironment(simulator)
         let defaultArchitectures: DPKGArchitecture = DPKGArchitecture(primary: .intel, foreign: [])
         #elseif arch(arm64) && os(macOS) && !targetEnvironment(simulator)
@@ -96,10 +114,6 @@ class DpkgWrapper {
         default: defaultArchitectures = DPKGArchitecture(primary: .rootful, foreign: [])
         }
         #endif
-        #if targetEnvironment(simulator) || TARGET_SANDBOX
-        print("Default Archs: \(defaultArchitectures)")
-        return defaultArchitectures
-        #else
         
         let (localStatus, localArchs, _) = spawn(command: CommandPath.dpkg, args: ["dpkg", "--print-architecture"])
         guard localStatus == 0 else {

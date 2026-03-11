@@ -175,6 +175,11 @@
 "Help_Translate" = "Help Translate Sileo";
 "Always_Show_Install_Log" = "Always Show Install Log";
 "Auto_Show_Queue" = "Show Queue on Upgrade All";
+"Demo_Package_Architecture" = "Demo Package Architecture";
+"Demo_Package_Architecture_Explain" = "Choose which package architecture the sandbox demo should browse. Your change will apply after you close and reopen Sileo Demo, then refresh sources.";
+"Demo_Package_Architecture_Apply_Message" = "Close and reopen Sileo Demo, then refresh sources to apply this change.";
+"Rootless" = "Rootless";
+"Rootful" = "Rootful";
 
 "Sileo_Light" = "Sileo Light";
 "Sileo_Dark" = "Sileo Dark";

@@ -5224,7 +5224,7 @@
 					"$(PROJECT_DIR)/Deps/liblz4",
 				);
 				LLVM_LTO = YES;
-				MARKETING_VERSION = 2.5.1;
+				MARKETING_VERSION = 2.6.4;
 				OTHER_CFLAGS = (
 					"-flto",
 					"$(inherited)",
@@ -5389,7 +5389,7 @@
 					"$(PROJECT_DIR)/Deps/liblzma",
 					"$(PROJECT_DIR)/Deps/liblz4",
 				);
-				MARKETING_VERSION = 2.5.1;
+				MARKETING_VERSION = 2.6.4;
 				OTHER_CFLAGS = (
 					"-flto",
 					"$(inherited)",
@@ -5442,7 +5442,7 @@
 					"$(PROJECT_DIR)/Deps/liblz4",
 				);
 				LLVM_LTO = YES;
-				MARKETING_VERSION = 2.5.1;
+				MARKETING_VERSION = 2.6.4;
 				OTHER_CFLAGS = (
 					"-flto",
 					"$(inherited)",

@@ -97,7 +97,11 @@ extension SettingsViewController { // UITableViewDataSource
         case 1: // Themes
             return 5
         case 2:
+            #if TARGET_SANDBOX
+            return 12
+            #else
             return 11
+            #endif
         case 3: // About section
             return 5
         default:
@@ -168,6 +172,15 @@ extension SettingsViewController { // UITableViewDataSource
                 fatalError("You done goofed")
             }
         case 2:
+            #if TARGET_SANDBOX
+            if indexPath.row == 11 {
+                let cell = self.reusableCell(withStyle: .value1, reuseIdentifier: "DemoArchitectureCell")
+                cell.textLabel?.text = String(localizationKey: "Demo_Package_Architecture")
+                cell.detailTextLabel?.text = DemoPackageArchitectureOption.current.title
+                cell.accessoryType = .disclosureIndicator
+                return cell
+            }
+            #endif
             let cell = SettingsSwitchTableViewCell()
             switch indexPath.row {
             case 0:
@@ -295,6 +308,13 @@ extension SettingsViewController { // UITableViewDataSource
                 self.navigationController?.pushViewController(menuSettingsVC, animated: true)
             default: break
             }
+        case 2:
+            #if TARGET_SANDBOX
+            if indexPath.row == 11 {
+                let architectureVC = DemoArchitectureSelectionViewController(style: .grouped)
+                self.navigationController?.pushViewController(architectureVC, animated: true)
+            }
+            #endif
         case 3: // About section
             switch indexPath.row {
             case 0:
@@ -392,6 +412,85 @@ extension SettingsViewController: ColorPickerDelegate {
         SileoThemeManager.shared.setTintColor(color)
     }
 }
+
+#if TARGET_SANDBOX
+private enum DemoPackageArchitectureOption: CaseIterable {
+    case rootless
+    case rootful
+
+    var architecture: DPKGArchitecture.Architecture {
+        switch self {
+        case .rootless:
+            return .rootless
+        case .rootful:
+            return .rootful
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .rootless:
+            return String(localizationKey: "Rootless")
+        case .rootful:
+            return String(localizationKey: "Rootful")
+        }
+    }
+
+    static var current: DemoPackageArchitectureOption {
+        switch DpkgWrapper.demoPreferredArchitecture {
+        case .rootful:
+            return .rootful
+        default:
+            return .rootless
+        }
+    }
+}
+
+private final class DemoArchitectureSelectionViewController: BaseSettingsViewController {
+    private var selectedOption = DemoPackageArchitectureOption.current
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        navigationItem.title = String(localizationKey: "Demo_Package_Architecture")
+    }
+
+    override func numberOfSections(in tableView: UITableView) -> Int {
+        1
+    }
+
+    override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+        DemoPackageArchitectureOption.allCases.count
+    }
+
+    override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        let option = DemoPackageArchitectureOption.allCases[indexPath.row]
+        let cell = reusableCell(withStyle: .default, reuseIdentifier: "DemoArchitectureOptionCell")
+        cell.textLabel?.text = option.title
+        cell.accessoryType = option == selectedOption ? .checkmark : .none
+        return cell
+    }
+
+    override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        let option = DemoPackageArchitectureOption.allCases[indexPath.row]
+        tableView.deselectRow(at: indexPath, animated: true)
+        guard option != selectedOption else { return }
+
+        selectedOption = option
+        UserDefaults.standard.setValue(option.architecture.rawValue, forKey: DpkgWrapper.demoPreferredArchitectureKey)
+        tableView.reloadData()
+
+        let alert = UIAlertController(title: String(localizationKey: "Demo_Package_Architecture"),
+                                      message: String(localizationKey: "Demo_Package_Architecture_Apply_Message"),
+                                      preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: String(localizationKey: "OK"), style: .default))
+        present(alert, animated: true)
+    }
+
+    override func tableView(_ tableView: UITableView, titleForFooterInSection section: Int) -> String? {
+        String(localizationKey: "Demo_Package_Architecture_Explain")
+    }
+}
+#endif
 
 @available(iOS 14.0, *)
 extension SettingsViewController: UIColorPickerViewControllerDelegate {

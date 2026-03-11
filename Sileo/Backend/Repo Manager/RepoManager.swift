@@ -978,6 +978,7 @@ final class RepoManager {
                                         }
                                         return
                                     }
+                                    #endif
 
                                     if succeededExtension == "xz" || succeededExtension == "lzma" {
                                         let ret = XZ.decompress(path: packagesFile.url, type: succeededExtension == "xz" ? .xz : .lzma)
@@ -992,7 +993,6 @@ final class RepoManager {
                                         }
                                         return
                                     }
-                                    #endif
                                     if succeededExtension == "bz2" {
                                         let ret = BZIP.decompress(path: packagesFile.url)
                                         switch ret {
