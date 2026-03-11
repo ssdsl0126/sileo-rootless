@@ -1,0 +1,83 @@
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+name: Build Sileo Demo
+
+jobs:
+  build-demo:
+    name: Build and Upload Sileo Demo
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Select Xcode (15.4 pinned)
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '15.4'
+
+      - name: Show build environment
+        run: |
+          echo "Runner architecture: $RUNNER_ARCH"
+          xcodebuild -version
+          xcode-select -p
+
+      - name: Build Sileo Demo (iphoneos-arm64)
+        run: |
+          DERIVED_DATA="$TMPDIR/sileo-demo"
+          ALDERIS_FILE="$DERIVED_DATA/SourcePackages/checkouts/Alderis/Alderis/ColorPickerInnerViewController.swift"
+          APP_PATH="$DERIVED_DATA/Build/Products/Release-iphoneos/Sileo Demo.app"
+          ARTIFACTS_DIR="$GITHUB_WORKSPACE/artifacts"
+          PAYLOAD_DIR="$ARTIFACTS_DIR/Payload"
+
+          rm -rf "$DERIVED_DATA" "$ARTIFACTS_DIR"
+
+          xcodebuild -resolvePackageDependencies -project Sileo.xcodeproj -scheme "Sileo Demo" -derivedDataPath "$DERIVED_DATA"
+
+          if [ ! -f "$ALDERIS_FILE" ]; then
+            echo "Alderis source file not found: $ALDERIS_FILE"
+            exit 1
+          fi
+
+          if ! grep -q 'var pickerTab: ColorPickerTab' "$ALDERIS_FILE"; then
+            sed -i '' 's/var tab: ColorPickerTab/var pickerTab: ColorPickerTab/' "$ALDERIS_FILE"
+            sed -i '' 's/tab = configuration.initialTab/pickerTab = configuration.initialTab/' "$ALDERIS_FILE"
+          fi
+
+          xcodebuild \
+            -jobs "$(sysctl -n hw.ncpu)" \
+            -project Sileo.xcodeproj \
+            -scheme "Sileo Demo" \
+            -configuration Release \
+            -arch arm64 \
+            -sdk iphoneos \
+            -derivedDataPath "$DERIVED_DATA" \
+            CODE_SIGNING_ALLOWED=NO \
+            IPHONEOS_DEPLOYMENT_TARGET=13.0 \
+            RUN_CLANG_STATIC_ANALYZER=NO
+
+          if [ ! -d "$APP_PATH" ]; then
+            echo "Built app not found: $APP_PATH"
+            exit 1
+          fi
+
+          mkdir -p "$PAYLOAD_DIR"
+          ditto "$APP_PATH" "$PAYLOAD_DIR/Sileo Demo.app"
+
+          (
+            cd "$ARTIFACTS_DIR"
+            ditto -c -k --sequesterRsrc --keepParent Payload Sileo-Demo-unsigned.ipa
+          )
+
+          rm -rf "$PAYLOAD_DIR"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sileo-demo-unsigned-ipa
+          path: artifacts/Sileo-Demo-unsigned.ipa
