@@ -45,6 +45,29 @@ enum pkgpriority: String {
 }
 
 class DpkgWrapper {
+    private class func shellEscape(_ argument: String) -> String {
+        "'\(argument.replacingOccurrences(of: "'", with: "'\\''"))'"
+    }
+
+    private class func installedWantInfo(package: String) -> pkgwant? {
+        let installedPackages = PackageListManager.readPackages(installed: true)
+        for (_, packageVersions) in installedPackages {
+            guard let versions = packageVersions[package],
+                  let installedPackage = versions.values.max(by: { old, new in
+                      preferredPackage(old: old, new: new)
+                  }) else {
+                continue
+            }
+            return installedPackage.wantInfo
+        }
+        return nil
+    }
+
+    private class func setPackageSelection(_ selection: pkgwant, package: String) -> Bool {
+        let selectionCommand = "printf '%s %s\\n' \(shellEscape(package)) \(shellEscape(selection.rawValue)) | \(shellEscape(CommandPath.dpkg)) --set-selections"
+        let (status, _, _) = spawnAsRoot(args: [CommandPath.sh, "-c", selectionCommand])
+        return status == 0
+    }
 
     public class func dpkgInterrupted() -> Bool {
         let updatesDir = CommandPath.dpkgDir.appendingPathComponent("updates/")
@@ -125,10 +148,19 @@ class DpkgWrapper {
         return true
     }
     
-    public class func ignoreUpdates(_ ignoreUpdates: Bool, package: String) {
+    @discardableResult
+    public class func ignoreUpdates(_ ignoreUpdates: Bool, package: String) -> Bool {
         let ignoreCommand = ignoreUpdates ? "hold" : "unhold"
+        let desiredWant: pkgwant = ignoreUpdates ? .hold : .install
         let command = [CommandPath.aptmark, "\(ignoreCommand)", "\(package)"]
-        spawnAsRoot(args: command)
+        let (status, _, _) = spawnAsRoot(args: command)
+        if status == 0, installedWantInfo(package: package) == desiredWant {
+            return true
+        }
+        guard setPackageSelection(desiredWant, package: package) else {
+            return false
+        }
+        return installedWantInfo(package: package) == desiredWant
     }
     
     public class func rawFields(packageURL: URL) throws -> String {

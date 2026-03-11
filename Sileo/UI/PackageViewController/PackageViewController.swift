@@ -643,18 +643,7 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
             let ignoreUpdatesText = installedPackage?.wantInfo == .hold ?
                 String(localizationKey: "Package_Hold_Disable_Action") : String(localizationKey: "Package_Hold_Enable_Action")
             let ignoreUpdates = UIAlertAction(title: ignoreUpdatesText, style: .default) { _ in
-                if self.installedPackage?.wantInfo == .hold {
-                    self.installedPackage?.wantInfo = .install
-                    #if !targetEnvironment(simulator) && !TARGET_SIMULATOR
-                    DpkgWrapper.ignoreUpdates(false, package: packageID)
-                    #endif
-                } else {
-                    self.installedPackage?.wantInfo = .hold
-                    #if !targetEnvironment(simulator) && !TARGET_SIMULATOR
-                    DpkgWrapper.ignoreUpdates(true, package: packageID)
-                    #endif
-                }
-                NotificationCenter.default.post(Notification(name: PackageListManager.prefsNotification))
+                self.setIgnoredUpdates(self.installedPackage?.wantInfo != .hold, packageID: packageID)
             }
             sharePopup.addAction(ignoreUpdates)
         }
@@ -692,6 +681,30 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
     @objc func dismissImmediately() {
         // Dismiss this view controller.
         self.dismiss(animated: true, completion: nil)
+    }
+
+    private func setIgnoredUpdates(_ ignoreUpdates: Bool, packageID: String) {
+        #if !targetEnvironment(simulator) && !TARGET_SIMULATOR
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let success = DpkgWrapper.ignoreUpdates(ignoreUpdates, package: packageID)
+            PackageListManager.shared.reloadInstalled()
+            let refreshedPackage = PackageListManager.shared.installedPackage(identifier: packageID)
+
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                self.installedPackage = refreshedPackage
+                NotificationCenter.default.post(Notification(name: PackageListManager.prefsNotification))
+
+                let expectedWant: pkgwant = ignoreUpdates ? .hold : .install
+                if !success || refreshedPackage?.wantInfo != expectedWant {
+                    os_log("Failed to persist ignore updates state for %{public}@", type: .error, packageID)
+                }
+            }
+        }
+        #else
+        self.installedPackage?.wantInfo = ignoreUpdates ? .hold : .install
+        NotificationCenter.default.post(Notification(name: PackageListManager.prefsNotification))
+        #endif
     }
 
     func updatePurchaseStatus() {
