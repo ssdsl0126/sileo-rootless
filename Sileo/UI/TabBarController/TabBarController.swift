@@ -360,7 +360,9 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
 
         // 当前页面可能是导航栈里的详情页，把实际滚动视图直接交给标签栏控制器和导航容器，
         // 让 UIKit 的 iOS 26 收缩手势跟踪当前页面，而不是依赖固定的初始页面。
+        setContentScrollView(scrollView, for: .top)
         setContentScrollView(scrollView, for: .bottom)
+        selectedViewController?.setContentScrollView(scrollView, for: .top)
         selectedViewController?.setContentScrollView(scrollView, for: .bottom)
     }
 
@@ -371,7 +373,9 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
             return
         }
 
+        setContentScrollView(scrollView, for: .top)
         setContentScrollView(scrollView, for: .bottom)
+        selectedViewController.setContentScrollView(scrollView, for: .top)
         selectedViewController.setContentScrollView(scrollView, for: .bottom)
     }
 

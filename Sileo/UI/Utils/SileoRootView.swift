@@ -41,6 +41,8 @@ class SileoRootView: UIView {
 
 /// 为 iOS 26 提供原生 Liquid Glass，同时为 iOS 15–18 保留材质回退。
 enum SileoGlass {
+    private static let pinnedHeaderSurfaceIdentifier = "Sileo.iOS26.PinnedHeaderSurface"
+
     static var isSupported: Bool {
         if #available(iOS 26.0, *) {
             return true
@@ -139,8 +141,40 @@ enum SileoGlass {
         viewController.view.backgroundColor = surfaceColor
         scrollView.backgroundColor = surfaceColor
         scrollView.isOpaque = true
+        // iOS 26 的导航栏与标签栏必须观察同一个滚动视图，保持上下玻璃边界连续。
+        viewController.setContentScrollView(scrollView, for: .top)
         viewController.setContentScrollView(scrollView, for: .bottom)
+        viewController.navigationController?.setContentScrollView(scrollView, for: .top)
         viewController.navigationController?.setContentScrollView(scrollView, for: .bottom)
+    }
+
+    /// 为 iOS 26 的固定分组标题添加与导航栏一致的玻璃表面，避免滚动时出现纯色断层。
+    static func configurePinnedHeaderSurface(_ headerView: UIView) {
+        guard #available(iOS 26.0, *) else {
+            return
+        }
+
+        headerView.backgroundColor = .clear
+        headerView.isOpaque = false
+
+        let surfaceView: UIVisualEffectView
+        if let existingView = headerView.subviews.first(where: {
+            $0.accessibilityIdentifier == pinnedHeaderSurfaceIdentifier
+        }) as? UIVisualEffectView {
+            surfaceView = existingView
+        } else {
+            let createdView = UIVisualEffectView(effect: nil)
+            createdView.accessibilityIdentifier = pinnedHeaderSurfaceIdentifier
+            createdView.isUserInteractionEnabled = false
+            createdView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            headerView.insertSubview(createdView, at: 0)
+            surfaceView = createdView
+        }
+
+        surfaceView.frame = headerView.bounds
+        surfaceView.backgroundColor = .clear
+        update(surfaceView,
+               tintColor: UIColor.sileoBackgroundColor.withAlphaComponent(0.12))
     }
 
     /// iOS 26 不再使用旧版 WhiteBlur 标记，避免旧玻璃层参与顶部合成。

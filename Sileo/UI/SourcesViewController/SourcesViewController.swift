@@ -760,9 +760,8 @@ extension SourcesViewController: UITableViewDataSource { // UITableViewDataSourc
         }
         let headerView = UIView(frame: CGRect(origin: .zero, size: CGSize(width: 320, height: headerHeight)))
         if #available(iOS 26.0, *) {
-            // iOS 26 使用与列表相同的不透明内容面，避免回弹时出现玻璃断带。
-            headerView.backgroundColor = .sileoBackgroundColor
-            headerView.isOpaque = true
+            // 固定分组标题使用玻璃表面，避免与导航栏之间出现纯色断层。
+            SileoGlass.configurePinnedHeaderSurface(headerView)
         } else {
             headerView.backgroundColor = .sileoBackgroundColor
             headerView.isOpaque = true
