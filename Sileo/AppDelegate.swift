@@ -45,8 +45,16 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate, UITabBarControllerDe
             fatalError("Invalid Storyboard")
         }
         tabBarController.delegate = self
-        tabBarController.tabBar._blurEnabled = true
-        tabBarController.tabBar.tag = WHITE_BLUR_TAG
+        if #available(iOS 26.0, *) {
+            // iOS 26 会为系统标签栏提供 Liquid Glass；不要再覆盖系统材质。
+            tabBarController.tabBar.isTranslucent = true
+            tabBarController.tabBar.backgroundImage = nil
+            tabBarController.tabBar.shadowImage = nil
+            tabBarController.tabBar.barTintColor = nil
+        } else {
+            tabBarController.tabBar._blurEnabled = true
+            tabBarController.tabBar.tag = WHITE_BLUR_TAG
+        }
         
         DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + .seconds(3)) {
             let updatesPrompt = UserDefaults.standard.bool(forKey: "updatesPrompt")
@@ -213,6 +221,13 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate, UITabBarControllerDe
         UITableView.appearance().tintColor = tintColor
         DepictionBaseView.appearance().tintColor = tintColor
         self.window?.tintColor = tintColor
+
+        if #available(iOS 26.0, *),
+           let tabBarController = self.window?.rootViewController as? UITabBarController {
+            // iOS 26 的系统标签栏不再经过旧的 appearance blur，直接刷新选中态颜色。
+            tabBarController.tabBar.tintColor = tintColor
+            tabBarController.tabBar.unselectedItemTintColor = .label
+        }
     }
     
     func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {

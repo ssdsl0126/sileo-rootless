@@ -160,7 +160,12 @@ class PackageQueueButton: PackageButton {
     }
     
     func updateButton(title: String) {
-        self.setTitle(title.uppercased(), for: .normal)
+        let normalizedTitle = title.uppercased()
+        self.setTitle(normalizedTitle, for: .normal)
+        if #available(iOS 26.0, *) {
+            // 状态通知可能紧接着触发玻璃配置重建，立即把最终标题写回配置。
+            self.syncLiquidGlassTitle(normalizedTitle, for: .normal)
+        }
     }
 
     private func packageForInstallActions(from package: Package) -> Package {

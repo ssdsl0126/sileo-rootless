@@ -2,15 +2,6 @@
   "object": {
     "pins": [
       {
-        "package": "Alderis",
-        "repositoryURL": "https://github.com/elihwyma/Alderis.git",
-        "state": {
-          "branch": "master",
-          "revision": "95030bfc6afc5d58a22aaa013e0f4c77317b57a1",
-          "version": null
-        }
-      },
-      {
         "package": "Cosmos",
         "repositoryURL": "https://github.com/evgenyneu/Cosmos.git",
         "state": {

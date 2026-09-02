@@ -48,6 +48,9 @@ class NewsViewController: SileoViewController, UICollectionViewDataSource, UICol
 
         collectionView.isHidden = true
         self.activityIndicatorView.startAnimating()
+        if #available(iOS 26.0, *) {
+            SileoGlass.configureScrollSurface(collectionView, in: self)
+        }
         let flowLayout: UICollectionViewFlowLayout? = collectionView?.collectionViewLayout as? UICollectionViewFlowLayout
         flowLayout?.sectionHeadersPinToVisibleBounds = true
         
@@ -92,10 +95,19 @@ class NewsViewController: SileoViewController, UICollectionViewDataSource, UICol
     
     @objc func updateSileoColors() {
         self.statusBarStyle = .default
+        if #available(iOS 26.0, *) {
+            view.backgroundColor = .sileoBackgroundColor
+            collectionView.backgroundColor = .sileoBackgroundColor
+            collectionView.isOpaque = true
+        }
     }
     
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
         updateSileoColors()
+    }
+
+    func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        TabBarController.singleton?.updateLiquidGlassScroll(scrollView)
     }
 
     override func viewWillAppear(_ animated: Bool) {
@@ -108,7 +120,11 @@ class NewsViewController: SileoViewController, UICollectionViewDataSource, UICol
         super.viewDidAppear(animated)
         normalizeLargeTitleLayoutMargins()
 
-        self.navigationController?.navigationBar.superview?.tag = WHITE_BLUR_TAG
+        if #available(iOS 26.0, *) {
+            SileoGlass.removeLegacyBlurMarker(from: self)
+        } else {
+            self.navigationController?.navigationBar.superview?.tag = WHITE_BLUR_TAG
+        }
         self.navigationController?.navigationBar._hidesShadow = true
     }
 

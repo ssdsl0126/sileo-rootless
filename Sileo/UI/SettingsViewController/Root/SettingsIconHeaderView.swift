@@ -28,7 +28,11 @@ class SettingsIconHeaderView: UIView, SettingsHeaderViewDisplayable {
         self.setImage()
         iconView.clipsToBounds = true
         iconView.translatesAutoresizingMaskIntoConstraints = false
-        iconView.layer.setValue(true, forKey: "continuousCorners")
+        if #available(iOS 26.0, *) {
+            iconView.layer.cornerCurve = .continuous
+        } else {
+            iconView.layer.setValue(true, forKey: "continuousCorners")
+        }
         iconView.layer.cornerRadius = 29 // size / 4
         self.addSubview(iconView)
         

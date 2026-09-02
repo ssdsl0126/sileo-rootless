@@ -80,6 +80,11 @@ class PackageListViewController: SileoViewController, UIGestureRecognizerDelegat
         if let textField = searchController.searchBar.value(forKey: "searchField") as? UITextField {
             textField.textColor = .sileoLabel
         }
+        if #available(iOS 26.0, *) {
+            view.backgroundColor = .sileoBackgroundColor
+            collectionView?.backgroundColor = .sileoBackgroundColor
+            collectionView?.isOpaque = true
+        }
     }
     
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
@@ -143,9 +148,11 @@ class PackageListViewController: SileoViewController, UIGestureRecognizerDelegat
 
         if showWishlist {
             let exportBtn = UIBarButtonItem(title: String(localizationKey: "Export"), style: .plain, target: self, action: #selector(self.exportButtonClicked(_:)))
+            SileoGlass.configure(barButtonItem: exportBtn, tintColor: .tintColor)
             self.navigationItem.leftBarButtonItem = exportBtn
             
             let wishlistBtn = UIBarButtonItem(title: String(localizationKey: "Wishlist"), style: .plain, target: self, action: #selector(self.showWishlist(_:)))
+            SileoGlass.configure(barButtonItem: wishlistBtn, tintColor: .tintColor)
             self.navigationItem.rightBarButtonItem = wishlistBtn
         }
         
@@ -188,7 +195,11 @@ class PackageListViewController: SileoViewController, UIGestureRecognizerDelegat
         searchController.obscuresBackgroundDuringPresentation = false
         searchController.hidesNavigationBarDuringPresentation = true
         
-        self.navigationController?.navigationBar.superview?.tag = WHITE_BLUR_TAG
+        if #available(iOS 26.0, *) {
+            SileoGlass.removeLegacyBlurMarker(from: self)
+        } else {
+            self.navigationController?.navigationBar.superview?.tag = WHITE_BLUR_TAG
+        }
         
         self.navigationItem.hidesSearchBarWhenScrolling = false
         self.navigationItem.searchController = searchController
@@ -207,6 +218,9 @@ class PackageListViewController: SileoViewController, UIGestureRecognizerDelegat
         tapRecognizer.delegate = self
         
         if let collectionView = collectionView {
+            if #available(iOS 26.0, *) {
+                SileoGlass.configureScrollSurface(collectionView, in: self)
+            }
             if self.packagesLoadIdentifier == "--installed" {
                 refreshPackages.addTarget(self, action: #selector(refreshInstalledPackages(_:)), for: .valueChanged)
                 collectionView.refreshControl = refreshPackages
@@ -620,6 +634,10 @@ extension PackageListViewController: UICollectionViewDataSource {
 }
 
 extension PackageListViewController: UICollectionViewDelegate {
+    func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        TabBarController.singleton?.updateLiquidGlassScroll(scrollView)
+    }
+
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
         collectionView.deselectItem(at: indexPath, animated: true)
         guard let pvc = self.controller(indexPath: indexPath) else { return }

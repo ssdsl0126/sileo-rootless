@@ -53,6 +53,7 @@ class SettingsHeaderContainerView: UIView {
     private var contentBottomConstraint: NSLayoutConstraint?
     
     private var colorInfluenceView: UIView?
+    private var blurView: UIVisualEffectView?
     
     required init?(coder: NSCoder) {
         super.init(coder: coder)
@@ -62,16 +63,20 @@ class SettingsHeaderContainerView: UIView {
         super.init(frame: frame)
         self.clipsToBounds = true
         
-        let blurEffect: UIBlurEffect = UIBlurEffect(style: UIBlurEffect.Style.light)
-        let blurView: UIVisualEffectView = UIVisualEffectView(effect: blurEffect)
+        let blurView = UIVisualEffectView(effect: SileoGlass.effect(tintColor: UIColor.sileoHeaderColor,
+                                                                     fallbackStyle: .light))
         blurView.autoresizingMask = [.flexibleHeight, .flexibleWidth]
         blurView.frame = self.bounds
         self.addSubview(blurView)
+        self.blurView = blurView
         
         let colourInfluenceView: UIView = UIView()
         colourInfluenceView.autoresizingMask = [.flexibleHeight, .flexibleWidth]
         colourInfluenceView.frame = self.bounds
         colourInfluenceView.backgroundColor = UIColor.sileoHeaderColor
+        if #available(iOS 26.0, *) {
+            colourInfluenceView.backgroundColor = .clear
+        }
         self.addSubview(colourInfluenceView)
         
         self.colorInfluenceView = colourInfluenceView
@@ -94,11 +99,22 @@ class SettingsHeaderContainerView: UIView {
     }
     
     @objc func updateSileoColors() {
-        self.colorInfluenceView?.backgroundColor = UIColor.sileoHeaderColor
+        if let blurView = blurView {
+            SileoGlass.update(blurView,
+                              tintColor: UIColor.sileoHeaderColor,
+                              fallbackStyle: .light)
+        }
+        if #available(iOS 26.0, *) {
+            colorInfluenceView?.backgroundColor = .clear
+        } else {
+            colorInfluenceView?.backgroundColor = UIColor.sileoHeaderColor
+        }
     }
 
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
-        if #available(iOS 13.0, *) {
+        if #available(iOS 26.0, *) {
+            self.colorInfluenceView?.backgroundColor = .clear
+        } else if #available(iOS 13.0, *) {
             self.colorInfluenceView?.backgroundColor = UIColor.sileoHeaderColor
         }
     }

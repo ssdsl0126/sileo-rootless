@@ -134,6 +134,9 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
 
         self.navigationItem.largeTitleDisplayMode = .never
         scrollView.delegate = self
+        if #available(iOS 26.0, *) {
+            setContentScrollView(scrollView, for: .bottom)
+        }
         
         NotificationCenter.default.addObserver(self,
                                                selector: #selector(PackageViewController.reloadData),
@@ -436,6 +439,7 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
     }
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        TabBarController.singleton?.updateLiquidGlassScroll(scrollView)
         // do header view scaling magic
         let headerBounds = depictionHeaderView.bounds
         var aspectRatio = headerBounds.width / headerBounds.height

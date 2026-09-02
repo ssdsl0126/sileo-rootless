@@ -18,6 +18,11 @@
 hook(_UIVisualEffectSubview)
 
 - (void)setFilters:(NSArray *)filters {
+    if (@available(iOS 26.0, *)) {
+        // Liquid Glass 由系统渲染，旧的滤镜篡改会破坏 iOS 26 的玻璃效果。
+        _orig(void, filters);
+        return;
+    }
     if (@available(iOS 13, *)){
         if ([self isKindOfClass:NSClassFromString(@"_UIVisualEffectBackdropView")]) {
             NSMutableArray *filtersMutable = [filters mutableCopy];

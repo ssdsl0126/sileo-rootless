@@ -23,7 +23,12 @@ class NewsArticlesHeader: UICollectionViewCell {
         
         super.init(frame: frame)
 
-        self.backgroundColor = UIColor.red
+        if #available(iOS 26.0, *) {
+            // iOS 26 顶部内容面使用统一背景，避免调试色造成滚动断层。
+            self.backgroundColor = .sileoBackgroundColor
+        } else {
+            self.backgroundColor = UIColor.red
+        }
         self.clipsToBounds = false
         
         gradientView = NewsGradientBackgroundView()

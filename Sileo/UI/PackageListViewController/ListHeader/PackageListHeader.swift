@@ -21,6 +21,18 @@ class PackageListHeader: UICollectionReusableView {
         super.awakeFromNib()
         toolbar?._hidesShadow = true
         toolbar?.tag = WHITE_BLUR_TAG
+
+        if #available(iOS 26.0, *) {
+            // pinned header 必须遮住后面的首行，避免回弹时出现透明断层。
+            backgroundColor = .sileoBackgroundColor
+            isOpaque = true
+            toolbar?.isHidden = true
+            toolbar?.tag = 0
+            toolbar?.isTranslucent = false
+            toolbar?.setBackgroundImage(nil, forToolbarPosition: .any, barMetrics: .default)
+            toolbar?.setShadowImage(nil, forToolbarPosition: .any)
+            toolbar?.backgroundColor = .sileoBackgroundColor
+        }
         
         sortIcon?.image = UIImage(named: "SortChevron")?.withRenderingMode(.alwaysTemplate)
         
@@ -35,6 +47,10 @@ class PackageListHeader: UICollectionReusableView {
         label?.textColor = .sileoLabel
         sortIcon?.tintColor = .tintColor
         sortHeader?.textColor = .tintColor
+        if #available(iOS 26.0, *) {
+            backgroundColor = .sileoBackgroundColor
+            isOpaque = true
+        }
     }
     
     public var actionText: String? {

@@ -6,7 +6,6 @@
 //  Copyright © 2022 Sileo Team. All rights reserved.
 //
 
-import Alderis
 import UIKit
 import Evander
 
@@ -291,7 +290,7 @@ extension SettingsViewController { // UITableViewDataSource
             }
         case 1:
             switch indexPath.row {
-            case 1: self.presentAlderis() // Tint color selector
+            case 1: self.presentColorPicker() // Tint color selector
             case 2: SileoThemeManager.shared.resetTintColor() // Tint color reset
             case 3:
 #if targetEnvironment(macCatalyst)
@@ -366,26 +365,12 @@ extension SettingsViewController { // UITableViewDataSource
         self.present(alert, animated: true)
     }
     
-    private func presentAlderis() {
-        if #available(iOS 14, *) {
-            let colorPickerViewController = UIColorPickerViewController()
-            colorPickerViewController.delegate = self
-            colorPickerViewController.supportsAlpha = false
-            colorPickerViewController.selectedColor = .tintColor
-            self.present(colorPickerViewController, animated: true)
-        } else {
-            let colorPickerViewController = ColorPickerViewController()
-            colorPickerViewController.delegate = self
-            colorPickerViewController.configuration = ColorPickerConfiguration(color: .tintColor)
-            if UIDevice.current.userInterfaceIdiom == .pad {
-                if #available(iOS 13, *) {
-                    colorPickerViewController.popoverPresentationController?.sourceView = self.navigationController?.view
-                }
-            }
-            colorPickerViewController.modalPresentationStyle = .overFullScreen
-            self.parent?.present(colorPickerViewController, animated: true, completion: nil)
-        }
-        
+    private func presentColorPicker() {
+        let colorPickerViewController = UIColorPickerViewController()
+        colorPickerViewController.delegate = self
+        colorPickerViewController.supportsAlpha = false
+        colorPickerViewController.selectedColor = .tintColor
+        self.present(colorPickerViewController, animated: true)
     }
     
     override func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
@@ -405,12 +390,6 @@ extension SettingsViewController { // UITableViewDataSource
         SileoThemeManager.shared.activate(theme: SileoThemeManager.shared.themeList[index])
     }
 
-}
-
-extension SettingsViewController: ColorPickerDelegate {
-    func colorPicker(_ colorPicker: ColorPickerViewController, didSelect color: UIColor) {
-        SileoThemeManager.shared.setTintColor(color)
-    }
 }
 
 #if TARGET_SANDBOX
@@ -492,7 +471,6 @@ private final class DemoArchitectureSelectionViewController: BaseSettingsViewCon
 }
 #endif
 
-@available(iOS 14.0, *)
 extension SettingsViewController: UIColorPickerViewControllerDelegate {
 
     func colorPickerViewControllerDidFinish(_ viewController: UIColorPickerViewController) {

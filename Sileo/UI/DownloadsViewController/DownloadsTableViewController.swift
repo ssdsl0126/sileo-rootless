@@ -238,6 +238,15 @@ class DownloadsTableViewController: SileoViewController {
             return
         }
 
+        if #available(iOS 26.0, *) {
+            // iOS 26 的导航栏默认使用 Liquid Glass，避免旧版不透明外观覆盖它。
+            navigationBar.isTranslucent = true
+            navigationBar.barTintColor = nil
+            navigationBar.setBackgroundImage(nil, for: .default)
+            navigationBar.shadowImage = nil
+            return
+        }
+
         navigationBar.isTranslucent = false
 
         if #available(iOS 15.0, *) {
@@ -489,12 +498,13 @@ class DownloadsTableViewController: SileoViewController {
         sheetCardWidthConstraint?.constant = -(floatingContentHorizontalInset * 2)
         let cornerRadius = resolvedFloatingCornerRadius()
         
-        if #available(iOS 13.0, *) {
-            cardView.effect = UIBlurEffect(style: .systemMaterial)
+        SileoGlass.update(cardView,
+                          tintColor: UIColor.sileoBackgroundColor.withAlphaComponent(0.16))
+        if #available(iOS 26.0, *) {
+            cardView.backgroundColor = .clear
         } else {
-            cardView.effect = UIBlurEffect(style: .light)
+            cardView.backgroundColor = UIColor.sileoBackgroundColor.withAlphaComponent(UIColor.isDarkModeEnabled ? 0.05 : 0.08)
         }
-        cardView.backgroundColor = UIColor.sileoBackgroundColor.withAlphaComponent(UIColor.isDarkModeEnabled ? 0.05 : 0.08)
         cardView.layer.cornerRadius = cornerRadius
         if #available(iOS 13.0, *) {
             cardView.layer.cornerCurve = .continuous

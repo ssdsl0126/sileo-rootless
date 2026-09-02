@@ -6,7 +6,7 @@ cd "$ROOT_DIR"
 
 export PATH="/opt/procursus/sbin:/opt/procursus/bin:$PATH"
 
-IOS_TARGET="${IOS_DEPLOYMENT_TARGET:-13.0}"
+IOS_TARGET="${IOS_DEPLOYMENT_TARGET:-15.0}"
 DERIVED_DATA_PATH="${DERIVED_DATA_PATH:-${TMPDIR:-/tmp}/sileo}"
 PLATFORMS_RAW="${SILEO_PLATFORMS:-iphoneos-arm iphoneos-arm64}"
 read -r -a PLATFORMS <<< "$PLATFORMS_RAW"
@@ -18,19 +18,6 @@ ensure_tool() {
   fi
 }
 
-patch_alderis_if_needed() {
-  local alderis_file="$1"
-  if [[ ! -f "$alderis_file" ]]; then
-    echo "ERROR: Alderis source file not found: $alderis_file"
-    exit 1
-  fi
-
-  if ! grep -q 'var pickerTab: ColorPickerTab' "$alderis_file"; then
-    sed -i '' 's/var tab: ColorPickerTab/var pickerTab: ColorPickerTab/' "$alderis_file"
-    sed -i '' 's/tab = configuration.initialTab/pickerTab = configuration.initialTab/' "$alderis_file"
-  fi
-}
-
 resolve_swift_packages() {
   echo "Resolving Swift packages"
   xcodebuild -resolvePackageDependencies \
@@ -38,7 +25,6 @@ resolve_swift_packages() {
     -scheme Sileo \
     -derivedDataPath "$DERIVED_DATA_PATH"
 
-  patch_alderis_if_needed "$DERIVED_DATA_PATH/SourcePackages/checkouts/Alderis/Alderis/ColorPickerInnerViewController.swift"
 }
 
 build_one() {

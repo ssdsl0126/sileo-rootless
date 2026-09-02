@@ -28,6 +28,9 @@ class CategoryViewController: SileoTableViewController {
 
         self.tableView.backgroundColor = .sileoBackgroundColor
         self.tableView.separatorColor = .sileoSeparatorColor
+        if #available(iOS 26.0, *) {
+            SileoGlass.configureScrollSurface(self.tableView, in: self)
+        }
         
         NotificationCenter.default.addObserver(self,
                                                selector: #selector(updateSileoColors),

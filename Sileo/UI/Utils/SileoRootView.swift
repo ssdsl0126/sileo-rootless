@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import UIKit
 
 class SileoRootView: UIView {
     required init?(coder aDecoder: NSCoder) {
@@ -35,5 +36,118 @@ class SileoRootView: UIView {
     
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
         updateSileoColors()
+    }
+}
+
+/// 为 iOS 26 提供原生 Liquid Glass，同时为 iOS 15–18 保留材质回退。
+enum SileoGlass {
+    static var isSupported: Bool {
+        if #available(iOS 26.0, *) {
+            return true
+        }
+        return false
+    }
+
+    static func effect(interactive: Bool = false,
+                       tintColor: UIColor? = nil,
+                       fallbackStyle: UIBlurEffect.Style = .systemMaterial) -> UIVisualEffect {
+        if #available(iOS 26.0, *) {
+            let glassEffect = UIGlassEffect(style: .regular)
+            glassEffect.isInteractive = interactive
+            glassEffect.tintColor = tintColor
+            return glassEffect
+        }
+
+        if #available(iOS 13.0, *) {
+            return UIBlurEffect(style: fallbackStyle)
+        }
+        return UIBlurEffect(style: .light)
+    }
+
+    static func update(_ view: UIVisualEffectView,
+                       interactive: Bool = false,
+                       tintColor: UIColor? = nil,
+                       fallbackStyle: UIBlurEffect.Style = .systemMaterial) {
+        view.effect = effect(interactive: interactive,
+                             tintColor: tintColor,
+                             fallbackStyle: fallbackStyle)
+    }
+
+    /// 将主要操作按钮切换到系统 Liquid Glass 配置，旧系统保持原有样式。
+    static func update(button: UIButton,
+                       isProminent: Bool,
+                       tintColor: UIColor,
+                       title: String? = nil,
+                       contentInsets: NSDirectionalEdgeInsets = .init(top: 6, leading: 12, bottom: 6, trailing: 12)) {
+        guard #available(iOS 26.0, *) else {
+            return
+        }
+
+        // 首页和插件详情 CTA 使用主题色玻璃底，文字固定为白色。
+        // isProminent 仍保留在接口中，旧系统继续由 PackageButton 使用原有实色逻辑。
+        var configuration = UIButton.Configuration.prominentGlass()
+        let preservedTitle = title ?? button.title(for: .normal)
+        if let previousConfiguration = button.configuration {
+            // 切换高亮或 prominent 状态时保留原有标题和内容，避免按钮变成空白胶囊。
+            if let preservedTitle, !preservedTitle.isEmpty {
+                configuration.title = preservedTitle
+                configuration.attributedTitle = nil
+            } else if let attributedTitle = previousConfiguration.attributedTitle {
+                configuration.attributedTitle = attributedTitle
+            } else {
+                configuration.title = previousConfiguration.title
+            }
+            if let attributedSubtitle = previousConfiguration.attributedSubtitle {
+                configuration.attributedSubtitle = attributedSubtitle
+            } else {
+                configuration.subtitle = previousConfiguration.subtitle
+            }
+            configuration.image = previousConfiguration.image
+            configuration.imageColorTransformer = previousConfiguration.imageColorTransformer
+            configuration.preferredSymbolConfigurationForImage = previousConfiguration.preferredSymbolConfigurationForImage
+            configuration.showsActivityIndicator = previousConfiguration.showsActivityIndicator
+        } else if let preservedTitle, !preservedTitle.isEmpty {
+            configuration.title = preservedTitle
+            configuration.attributedTitle = nil
+        }
+        configuration.cornerStyle = .capsule
+        configuration.contentInsets = contentInsets
+        configuration.baseBackgroundColor = tintColor
+        // 首页 CTA 的文字固定为白色，与导航栏顶部按钮的配色方向相反。
+        configuration.baseForegroundColor = .white
+        button.configuration = configuration
+    }
+
+    /// 为 iOS 26 的导航栏按钮保留系统共享玻璃背景，避免全局 tint 覆盖文字颜色。
+    static func configure(barButtonItem: UIBarButtonItem, tintColor: UIColor) {
+        guard #available(iOS 26.0, *) else {
+            return
+        }
+        barButtonItem.tintColor = tintColor
+        barButtonItem.hidesSharedBackground = false
+        barButtonItem.sharesBackground = true
+    }
+
+    /// 为 iOS 26 的列表建立连续内容面，避免滚动回弹时露出第二套背景层。
+    static func configureScrollSurface(_ scrollView: UIScrollView,
+                                       in viewController: UIViewController) {
+        guard #available(iOS 26.0, *) else {
+            return
+        }
+
+        let surfaceColor = UIColor.sileoBackgroundColor
+        viewController.view.backgroundColor = surfaceColor
+        scrollView.backgroundColor = surfaceColor
+        scrollView.isOpaque = true
+        viewController.setContentScrollView(scrollView, for: .bottom)
+        viewController.navigationController?.setContentScrollView(scrollView, for: .bottom)
+    }
+
+    /// iOS 26 不再使用旧版 WhiteBlur 标记，避免旧玻璃层参与顶部合成。
+    static func removeLegacyBlurMarker(from viewController: UIViewController) {
+        guard #available(iOS 26.0, *) else {
+            return
+        }
+        viewController.navigationController?.navigationBar.superview?.tag = 0
     }
 }

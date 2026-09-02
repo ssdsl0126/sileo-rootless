@@ -36,15 +36,23 @@ class BaseSettingsViewController: UITableViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: String(localizationKey: "Done_Editing"),
-                                                                 style: .done,
-                                                                 target: self,
-                                                                 action: #selector(dismissController))
+        let doneStyle: UIBarButtonItem.Style = SileoGlass.isSupported ? .plain : .done
+        let doneItem = UIBarButtonItem(title: String(localizationKey: "Done_Editing"),
+                                       style: doneStyle,
+                                       target: self,
+                                       action: #selector(dismissController))
+        SileoGlass.configure(barButtonItem: doneItem, tintColor: .tintColor)
+        self.navigationItem.rightBarButtonItem = doneItem
        
         self.view.addSubview(headerContainerView)
         headerContainerView.layer.zPosition = 1000
+        if #available(iOS 26.0, *) {
+            SileoGlass.configureScrollSurface(tableView, in: self)
+            self.view.backgroundColor = .sileoBackgroundColor
+        } else {
+            self.view.backgroundColor = .white
+        }
         
-        self.view.backgroundColor = .white
         self.tableView.separatorColor = .clear
         
         self.tableView.backgroundColor = .sileoBackgroundColor
@@ -57,6 +65,10 @@ class BaseSettingsViewController: UITableViewController {
     
     @objc func updateSileoColors() {
         self.tableView.backgroundColor = .sileoBackgroundColor
+        if #available(iOS 26.0, *) {
+            self.view.backgroundColor = .sileoBackgroundColor
+            self.tableView.isOpaque = true
+        }
     }
     
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
@@ -121,6 +133,7 @@ extension BaseSettingsViewController { // Subclass Convenience
 extension BaseSettingsViewController { // Scroll View Delegate
     override func scrollViewDidScroll(_ scrollView: UIScrollView) {
         self.layoutHeader()
+        TabBarController.singleton?.updateLiquidGlassScroll(scrollView)
     }
 }
 

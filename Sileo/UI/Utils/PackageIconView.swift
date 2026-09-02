@@ -12,7 +12,11 @@ class PackageIconView: UIImageView {
     override func didMoveToWindow() {
         super.didMoveToWindow()
         self.backgroundColor = UIColor(white: 246.0/255.0, alpha: 1)
-        self.layer.setValue(true, forKey: "continuousCorners")
+        if #available(iOS 26.0, *) {
+            self.layer.cornerCurve = .continuous
+        } else {
+            self.layer.setValue(true, forKey: "continuousCorners")
+        }
         self.clipsToBounds = true
         self.accessibilityIgnoresInvertColors = true
         self.contentMode = .scaleAspectFill

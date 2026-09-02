@@ -7,7 +7,6 @@
 	
 
 import Foundation
-import Alderis
 import ZippyJSON
 
 fileprivate let defaultTheme = SileoThemeManager.shared.themeList.first
@@ -195,20 +194,11 @@ class ThemeCreatorViewController: BaseSettingsViewController {
     }
     
     func presentColorController() {
-        if #available(iOS 14, *) {
-            let colorPickerViewController = UIColorPickerViewController()
-            colorPickerViewController.delegate = self
-            colorPickerViewController.supportsAlpha = false
-            colorPickerViewController.selectedColor = .tintColor
-            self.present(colorPickerViewController, animated: true)
-        } else {
-            let colorPickerViewController = ColorPickerViewController()
-            colorPickerViewController.delegate = self
-            colorPickerViewController.configuration = ColorPickerConfiguration(color: .tintColor)
-            colorPickerViewController.popoverPresentationController?.sourceView = self.navigationController?.view
-            colorPickerViewController.modalPresentationStyle = .overFullScreen
-            self.parent?.present(colorPickerViewController, animated: true, completion: nil)
-        }
+        let colorPickerViewController = UIColorPickerViewController()
+        colorPickerViewController.delegate = self
+        colorPickerViewController.supportsAlpha = false
+        colorPickerViewController.selectedColor = .tintColor
+        self.present(colorPickerViewController, animated: true)
     }
     
     override func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
@@ -222,19 +212,6 @@ class ThemeCreatorViewController: BaseSettingsViewController {
     }
 }
 
-extension ThemeCreatorViewController: ColorPickerDelegate {
-    func colorPicker(_ colorPicker: ColorPickerViewController, didSelect color: UIColor) {
-        guard let selection = currentThemeComponentSelection else {
-            print("selection is nil, we out.")
-            return
-        }
-        
-        dict[selection] = color
-        tableView.reloadData()
-    }
-}
-
-@available(iOS 14.0, *)
 extension ThemeCreatorViewController: UIColorPickerViewControllerDelegate {
     func colorPickerViewControllerDidFinish(_ viewController: UIColorPickerViewController) {
         guard let selection = currentThemeComponentSelection else {

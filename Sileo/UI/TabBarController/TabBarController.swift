@@ -18,6 +18,8 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     private var fuckedUpSources = false
     private var popupTapGesture: UITapGestureRecognizer?
     private var popupTapCatcher: UIControl?
+    private var liquidGlassQueueBar: LiquidGlassQueueBar?
+    private var liquidGlassPopupBackgroundView: UIVisualEffectView?
     private var isPresentingQueueSheet = false
     private var isQueueSheetVisible = false
 
@@ -58,10 +60,15 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
                                                name: SileoThemeManager.sileoChangedThemeNotification,
                                                object: nil)
         updateSileoColors()
+        updateLiquidGlassTabBarMinimizeBehavior()
     }
     
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+
+        if #available(iOS 26.0, *), usesFloatingQueueCardOnPhone {
+            registerLiquidGlassContentScrollView()
+        }
         
         self.updatePopup()
     }
@@ -120,6 +127,10 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         guard let downloadsController = downloadsController,
               !popupIsPresented
         else {
+            if #available(iOS 26.0, *), usesFloatingQueueCardOnPhone, popupIsPresented {
+                // 队列已经存在时，新增或移除软件包不会再次创建 accessory，直接刷新两行文案。
+                updateLiquidGlassQueueBar()
+            }
             if let completion = completion {
                 completion()
             }
@@ -132,11 +143,20 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         }
         
         popupIsPresented = true
-        self.popupBar.progressViewStyle = .bottom
-        self.popupInteractionStyle = queueCollapsedInteractionStyle
+        updateLiquidGlassTabBarMinimizeBehavior()
         if let queueVC = downloadsController.viewControllers.first as? DownloadsTableViewController {
             queueVC.usesSystemQueueSheetPresentation = false
         }
+
+        if #available(iOS 26.0, *), usesFloatingQueueCardOnPhone {
+            presentLiquidGlassQueueBar()
+            updateSileoColors()
+            completion?()
+            return
+        }
+
+        self.popupBar.progressViewStyle = .bottom
+        self.popupInteractionStyle = queueCollapsedInteractionStyle
         self.presentPopupBar(withContentViewController: downloadsController, animated: true, completion: completion)
         self.configurePopupTapIfNeeded()
         
@@ -161,6 +181,15 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         }
         
         popupIsPresented = false
+        updateLiquidGlassTabBarMinimizeBehavior()
+        if #available(iOS 26.0, *), usesFloatingQueueCardOnPhone {
+            removeLiquidGlassQueueBar()
+            completion?()
+            return
+        }
+        if #available(iOS 26.0, *) {
+            removePopupTapCatcher()
+        }
         self.dismissPopupBar(animated: true, completion: completion)
     }
     
@@ -205,6 +234,11 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
                 self.updatePopup()
                 completion?()
             }
+            return
+        }
+
+        if #available(iOS 26.0, *), usesFloatingQueueCardOnPhone, popupIsPresented {
+            dismissPopup(completion: completion)
             return
         }
 
@@ -315,10 +349,91 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         popupInteractionStyle = queueCollapsedInteractionStyle
     }
 
+    func updateLiquidGlassScroll(_ scrollView: UIScrollView) {
+        guard #available(iOS 26.0, *),
+              usesFloatingQueueCardOnPhone,
+              popupIsPresented,
+              !isQueueSheetVisible,
+              !isPresentingQueueSheet else {
+            return
+        }
+
+        // 当前页面可能是导航栈里的详情页，把实际滚动视图直接交给标签栏控制器和导航容器，
+        // 让 UIKit 的 iOS 26 收缩手势跟踪当前页面，而不是依赖固定的初始页面。
+        setContentScrollView(scrollView, for: .bottom)
+        selectedViewController?.setContentScrollView(scrollView, for: .bottom)
+    }
+
+    @available(iOS 26.0, *)
+    private func registerLiquidGlassContentScrollView() {
+        guard let selectedViewController,
+              let scrollView = liquidGlassContentScrollView(in: selectedViewController) else {
+            return
+        }
+
+        setContentScrollView(scrollView, for: .bottom)
+        selectedViewController.setContentScrollView(scrollView, for: .bottom)
+    }
+
+    @available(iOS 26.0, *)
+    private func liquidGlassContentScrollView(in viewController: UIViewController) -> UIScrollView? {
+        if let scrollView = viewController.contentScrollView(for: .bottom) {
+            return scrollView
+        }
+
+        if let navigationController = viewController as? UINavigationController,
+           let topViewController = navigationController.topViewController {
+            return liquidGlassContentScrollView(in: topViewController)
+        }
+
+        if let splitViewController = viewController as? UISplitViewController {
+            for childViewController in splitViewController.viewControllers {
+                if let scrollView = liquidGlassContentScrollView(in: childViewController) {
+                    return scrollView
+                }
+            }
+        }
+
+        for childViewController in viewController.children {
+            if let scrollView = liquidGlassContentScrollView(in: childViewController) {
+                return scrollView
+            }
+        }
+
+        return nil
+    }
+
     private func configurePopupTapIfNeeded() {
         guard usesFloatingQueueCardOnPhone else {
-            popupTapCatcher?.removeFromSuperview()
-            popupTapCatcher = nil
+            removePopupTapCatcher()
+            return
+        }
+
+        if #available(iOS 26.0, *) {
+            // iOS 26 的 popupBar 内部手势会被玻璃子视图拦截，使用宿主视图上的透明控件承接点击。
+            for recognizer in popupBar.gestureRecognizers ?? [] {
+                recognizer.isEnabled = false
+            }
+            popupTapGesture?.isEnabled = false
+
+            if popupTapCatcher == nil {
+                let catcher = UIControl(frame: .zero)
+                catcher.backgroundColor = .clear
+                catcher.accessibilityLabel = "Package Queue"
+                catcher.accessibilityTraits = .button
+                catcher.addTarget(self, action: #selector(handlePopupBarTap), for: .touchUpInside)
+                popupTapCatcher = catcher
+            }
+
+            if let popupTapCatcher = popupTapCatcher {
+                let frame = popupBar.convert(popupBar.bounds, to: view)
+                popupTapCatcher.frame = frame
+                if popupTapCatcher.superview !== view {
+                    popupTapCatcher.removeFromSuperview()
+                    view.addSubview(popupTapCatcher)
+                }
+                view.bringSubviewToFront(popupTapCatcher)
+            }
             return
         }
 
@@ -351,6 +466,11 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         }
     }
 
+    private func removePopupTapCatcher() {
+        popupTapCatcher?.removeFromSuperview()
+        popupTapCatcher = nil
+    }
+
     @objc private func handlePopupBarTap() {
         guard usesFloatingQueueCardOnPhone,
               popupIsPresented,
@@ -367,36 +487,50 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
               popupIsPresented,
               !isPresentingQueueSheet,
               !isQueueSheetVisible,
-              let downloadsController = downloadsController
+              downloadsController != nil
         else {
             completion?()
             return
         }
 
         isPresentingQueueSheet = true
-        popupIsPresented = false
-        dismissPopupBar(animated: false) { [weak self] in
-            guard let self = self else { return }
-            if let queueVC = downloadsController.viewControllers.first as? DownloadsTableViewController {
-                queueVC.usesSystemQueueSheetPresentation = true
-                queueVC.reloadData()
+        if #available(iOS 26.0, *), usesFloatingQueueCardOnPhone {
+            // 保留 bottomAccessory，让系统在 sheet 关闭后恢复原来的展开/紧凑位置。
+            presentQueueSheet(completion: completion)
+        } else {
+            popupIsPresented = false
+            updateLiquidGlassTabBarMinimizeBehavior()
+            dismissPopupBar(animated: false) { [weak self] in
+                self?.presentQueueSheet(completion: completion)
             }
-            downloadsController.modalPresentationStyle = .pageSheet
-            if #available(iOS 15.0, *) {
-                if let sheet = downloadsController.sheetPresentationController {
-                    sheet.detents = [.large()]
-                    sheet.prefersGrabberVisible = false
-                    sheet.preferredCornerRadius = 22
-                    sheet.prefersScrollingExpandsWhenScrolledToEdge = false
-                }
-            }
+        }
+    }
 
-            self.present(downloadsController, animated: true) {
-                downloadsController.presentationController?.delegate = self
-                self.isQueueSheetVisible = true
-                self.isPresentingQueueSheet = false
-                completion?()
+    private func presentQueueSheet(completion: (() -> Void)?) {
+        guard let downloadsController = downloadsController else {
+            isPresentingQueueSheet = false
+            return
+        }
+
+        if let queueVC = downloadsController.viewControllers.first as? DownloadsTableViewController {
+            queueVC.usesSystemQueueSheetPresentation = true
+            queueVC.reloadData()
+        }
+        downloadsController.modalPresentationStyle = .pageSheet
+        if #available(iOS 15.0, *) {
+            if let sheet = downloadsController.sheetPresentationController {
+                sheet.detents = [.large()]
+                sheet.prefersGrabberVisible = false
+                sheet.preferredCornerRadius = 22
+                sheet.prefersScrollingExpandsWhenScrolledToEdge = false
             }
+        }
+
+        present(downloadsController, animated: true) {
+            downloadsController.presentationController?.delegate = self
+            self.isQueueSheetVisible = true
+            self.isPresentingQueueSheet = false
+            completion?()
         }
     }
 
@@ -414,21 +548,120 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     
     @objc func updateSileoColors() {
         self.popupBar.tintColor = UINavigationBar.appearance().tintColor
+        if #available(iOS 26.0, *), usesFloatingQueueCardOnPhone {
+            updateLiquidGlassQueueBar()
+        } else if #available(iOS 26.0, *) {
+            applyLiquidGlassPopupAppearance()
+        }
         if self.responds(to: NSSelectorFromString("setNeedsPopupBarAppearanceUpdate")) {
             _ = self.perform(NSSelectorFromString("setNeedsPopupBarAppearanceUpdate"))
         }
+    }
+
+    private func updateLiquidGlassTabBarMinimizeBehavior() {
+        guard #available(iOS 26.0, *), usesFloatingQueueCardOnPhone else {
+            return
+        }
+        // 只有存在队列时启用系统收缩；队列消失后恢复完整标签栏。
+        // 当前页面列表下滑时进入胶囊紧凑态。
+        tabBarMinimizeBehavior = popupIsPresented ? .onScrollDown : .never
     }
     
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         
         self.tabBar.itemPositioning = .centered
-        if usesFloatingQueueCardOnPhone {
+        if #available(iOS 26.0, *), usesFloatingQueueCardOnPhone {
+            // accessory 的首次布局可能会重建标签栏，布局完成后再次保持当前策略。
+            tabBarMinimizeBehavior = popupIsPresented ? .onScrollDown : .never
+        } else if usesFloatingQueueCardOnPhone {
             configurePopupTapIfNeeded()
         }
         if UIDevice.current.userInterfaceIdiom == .pad {
             self.updatePopup()
         }
+    }
+
+    @available(iOS 26.0, *)
+    private func presentLiquidGlassQueueBar() {
+        let queueBar: LiquidGlassQueueBar
+        if let existingBar = liquidGlassQueueBar {
+            queueBar = existingBar
+        } else {
+            let createdBar = LiquidGlassQueueBar(frame: .zero)
+            createdBar.addTarget(self, action: #selector(handlePopupBarTap), for: .touchUpInside)
+            liquidGlassQueueBar = createdBar
+            queueBar = createdBar
+        }
+
+        queueBar.update(title: downloadsController?.popupItem.title,
+                        subtitle: downloadsController?.popupItem.subtitle)
+        queueBar.isHidden = false
+        setBottomAccessory(UITabAccessory(contentView: queueBar), animated: false)
+        tabBarMinimizeBehavior = .onScrollDown
+    }
+
+    @available(iOS 26.0, *)
+    private func updateLiquidGlassQueueBar() {
+        liquidGlassQueueBar?.update(title: downloadsController?.popupItem.title,
+                                    subtitle: downloadsController?.popupItem.subtitle)
+    }
+
+    @available(iOS 26.0, *)
+    private func removeLiquidGlassQueueBar() {
+        setBottomAccessory(nil, animated: false)
+        liquidGlassQueueBar?.isHidden = true
+        liquidGlassQueueBar?.removeFromSuperview()
+    }
+
+    @available(iOS 26.0, *)
+    private func applyLiquidGlassPopupAppearance() {
+        // LNPopupController 的旧背景会在布局时重新写入 UIBlurEffect，先将它清空。
+        popupBar.inheritsVisualStyleFromDockingView = false
+        popupBar.isTranslucent = true
+        popupBar.systemBarStyle = .default
+        popupBar.barTintColor = .clear
+        popupBar.backgroundColor = .clear
+        popupBar.titleTextAttributes = [.foregroundColor: UIColor.sileoLabel]
+        popupBar.subtitleTextAttributes = [.foregroundColor: UIColor.sileoLabel.withAlphaComponent(0.72)]
+
+        if let legacyBackgroundView = popupBar.subviews.compactMap({ $0 as? UIVisualEffectView }).first(where: {
+            $0.accessibilityIdentifier == "PopupBarView"
+        }) {
+            legacyBackgroundView.effect = nil
+            legacyBackgroundView.backgroundColor = .clear
+        }
+
+        let glassBackground: UIVisualEffectView
+        if let existingView = liquidGlassPopupBackgroundView {
+            glassBackground = existingView
+        } else {
+            let createdView = UIVisualEffectView(effect: nil)
+            createdView.isUserInteractionEnabled = false
+            liquidGlassPopupBackgroundView = createdView
+            glassBackground = createdView
+        }
+
+        glassBackground.frame = popupBar.bounds
+        glassBackground.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        if glassBackground.superview !== popupBar {
+            glassBackground.removeFromSuperview()
+            popupBar.insertSubview(glassBackground, at: min(1, popupBar.subviews.count))
+        }
+        SileoGlass.update(glassBackground,
+                          tintColor: UIColor.sileoBackgroundColor.withAlphaComponent(0.22))
+        glassBackground.backgroundColor = .clear
+
+        // popupBar 的标题由第三方控件创建，直接刷新其实际 label 的颜色，避免出现深色背景配白字。
+        func updateLabelColors(in view: UIView) {
+            for subview in view.subviews {
+                if let label = subview as? UILabel, label.text != nil {
+                    label.textColor = UIColor.sileoLabel
+                }
+                updateLabelColors(in: subview)
+            }
+        }
+        updateLabelColors(in: popupBar)
     }
     
     public func displayError(_ string: String) {
@@ -441,6 +674,107 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         let alertController = UIAlertController(title: String(localizationKey: "Unknown", type: .error), message: string, preferredStyle: .alert)
         alertController.addAction(UIAlertAction(title: String(localizationKey: "OK"), style: .default))
         self.present(alertController, animated: true, completion: nil)
+    }
+}
+
+private final class LiquidGlassQueueBar: UIControl {
+    private let glassView: UIVisualEffectView
+    private let titleLabel = UILabel()
+    private let subtitleLabel = UILabel()
+
+    override init(frame: CGRect) {
+        glassView = UIVisualEffectView(effect: SileoGlass.effect(interactive: true,
+                                                                 tintColor: UIColor.sileoBackgroundColor.withAlphaComponent(0.18)))
+        super.init(frame: frame)
+
+        backgroundColor = .clear
+        clipsToBounds = true
+        layer.masksToBounds = true
+        glassView.isUserInteractionEnabled = false
+        glassView.clipsToBounds = true
+        addSubview(glassView)
+
+        titleLabel.font = UIFont.systemFont(ofSize: 13, weight: .regular)
+        titleLabel.textColor = .label
+        titleLabel.numberOfLines = 1
+        titleLabel.lineBreakMode = .byTruncatingTail
+        titleLabel.adjustsFontSizeToFitWidth = true
+        titleLabel.minimumScaleFactor = 0.8
+        titleLabel.isUserInteractionEnabled = false
+        titleLabel.layer.zPosition = 1
+        addSubview(titleLabel)
+
+        subtitleLabel.font = UIFont.systemFont(ofSize: 17, weight: .semibold)
+        subtitleLabel.textColor = .label
+        subtitleLabel.numberOfLines = 1
+        subtitleLabel.lineBreakMode = .byTruncatingTail
+        subtitleLabel.adjustsFontSizeToFitWidth = true
+        subtitleLabel.minimumScaleFactor = 0.8
+        subtitleLabel.isUserInteractionEnabled = false
+        subtitleLabel.layer.zPosition = 1
+        addSubview(subtitleLabel)
+
+        accessibilityTraits = .button
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override var intrinsicContentSize: CGSize {
+        CGSize(width: UIView.noIntrinsicMetric, height: 64)
+    }
+
+    func update(title: String?, subtitle: String?) {
+        titleLabel.text = title
+        subtitleLabel.text = subtitle
+        // 队列文案使用系统标签色并保持不透明，避免自定义主题色与玻璃背景对比不足。
+        titleLabel.textColor = .label
+        subtitleLabel.textColor = .label
+        glassView.effect = SileoGlass.effect(interactive: true,
+                                              tintColor: UIColor.sileoBackgroundColor.withAlphaComponent(0.18))
+        accessibilityLabel = [title, subtitle].compactMap { $0 }.joined(separator: ", ")
+        setNeedsLayout()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        glassView.frame = bounds
+        let cornerRadius = min(bounds.width, bounds.height) / 2
+        layer.cornerRadius = cornerRadius
+        layer.cornerCurve = .continuous
+        glassView.layer.cornerRadius = cornerRadius
+        glassView.layer.cornerCurve = .continuous
+        glassView.layer.masksToBounds = true
+        let isInlineEnvironment: Bool
+        if #available(iOS 26.0, *) {
+            isInlineEnvironment = traitCollection.tabAccessoryEnvironment == .inline
+        } else {
+            isInlineEnvironment = false
+        }
+        let isCompactHeight = isInlineEnvironment || bounds.height < 56
+        titleLabel.font = UIFont.systemFont(ofSize: isCompactHeight ? 12 : 13,
+                                             weight: .regular)
+        subtitleLabel.font = UIFont.systemFont(ofSize: isCompactHeight ? 16 : 17,
+                                                weight: .semibold)
+        let horizontalInset = min(22, max(14, bounds.width * 0.06))
+        let titleHeight = ceil(titleLabel.font.lineHeight)
+        let subtitleHeight = ceil(subtitleLabel.font.lineHeight)
+        let verticalGap: CGFloat = isCompactHeight ? 3 : 4
+        let contentHeight = titleHeight + verticalGap + subtitleHeight
+        let verticalInset = max(5, (bounds.height - contentHeight) / 2)
+        titleLabel.frame = CGRect(x: horizontalInset,
+                                  y: verticalInset,
+                                  width: max(0, bounds.width - (horizontalInset * 2)),
+                                  height: titleHeight)
+        subtitleLabel.frame = CGRect(x: horizontalInset,
+                                     y: titleLabel.frame.maxY + verticalGap,
+                                     width: max(0, bounds.width - (horizontalInset * 2)),
+                                     height: subtitleHeight)
+        bringSubviewToFront(titleLabel)
+        bringSubviewToFront(subtitleLabel)
+        layer.borderWidth = 0.5
+        layer.borderColor = UIColor.white.withAlphaComponent(0.28).cgColor
     }
 }
 

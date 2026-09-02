@@ -23,6 +23,9 @@ final class FeaturedViewController: SileoViewController, UIScrollViewDelegate, F
         self.navigationController?.tabBarItem._setInternalTitle(String(localizationKey: "Featured_Page"))
         
         self.setupProfileButton()
+        if #available(iOS 26.0, *), let scrollView = scrollView {
+            SileoGlass.configureScrollSurface(scrollView, in: self)
+        }
         
         NotificationCenter.default.addObserver(self,
                                                selector: #selector(updateSileoColors),
@@ -228,6 +231,11 @@ final class FeaturedViewController: SileoViewController, UIScrollViewDelegate, F
     @objc func updateSileoColors() {
         statusBarStyle = .default
         profileButton?.tintColor = .tintColor
+        if #available(iOS 26.0, *) {
+            view.backgroundColor = .sileoBackgroundColor
+            scrollView?.backgroundColor = .sileoBackgroundColor
+            scrollView?.isOpaque = true
+        }
     }
     
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
@@ -248,7 +256,11 @@ final class FeaturedViewController: SileoViewController, UIScrollViewDelegate, F
         self.navigationItem.hidesSearchBarWhenScrolling = true
         scrollView?.contentInsetAdjustmentBehavior = .always
         
-        self.navigationController?.navigationBar.superview?.tag = WHITE_BLUR_TAG
+        if #available(iOS 26.0, *) {
+            SileoGlass.removeLegacyBlurMarker(from: self)
+        } else {
+            self.navigationController?.navigationBar.superview?.tag = WHITE_BLUR_TAG
+        }
         self.navigationController?.navigationBar._hidesShadow = true
         
         FRUIView.animate(withDuration: 0.2) {
@@ -363,6 +375,7 @@ final class FeaturedViewController: SileoViewController, UIScrollViewDelegate, F
             return
         }
         self.moveAndResizeProfile(height: height)
+        TabBarController.singleton?.updateLiquidGlassScroll(scrollView)
     }
     
     func subviewHeightChanged() {

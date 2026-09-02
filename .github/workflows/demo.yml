@@ -30,7 +30,6 @@ jobs:
       - name: Build Sileo Demo (iphoneos-arm64)
         run: |
           DERIVED_DATA="$TMPDIR/sileo-demo"
-          ALDERIS_FILE="$DERIVED_DATA/SourcePackages/checkouts/Alderis/Alderis/ColorPickerInnerViewController.swift"
           APP_PATH="$DERIVED_DATA/Build/Products/Release-iphoneos/Sileo Demo.app"
           ARTIFACTS_DIR="$GITHUB_WORKSPACE/artifacts"
           PAYLOAD_DIR="$ARTIFACTS_DIR/Payload"
@@ -38,16 +37,6 @@ jobs:
           rm -rf "$DERIVED_DATA" "$ARTIFACTS_DIR"
 
           xcodebuild -resolvePackageDependencies -project Sileo.xcodeproj -scheme "Sileo Demo" -derivedDataPath "$DERIVED_DATA"
-
-          if [ ! -f "$ALDERIS_FILE" ]; then
-            echo "Alderis source file not found: $ALDERIS_FILE"
-            exit 1
-          fi
-
-          if ! grep -q 'var pickerTab: ColorPickerTab' "$ALDERIS_FILE"; then
-            sed -i '' 's/var tab: ColorPickerTab/var pickerTab: ColorPickerTab/' "$ALDERIS_FILE"
-            sed -i '' 's/tab = configuration.initialTab/pickerTab = configuration.initialTab/' "$ALDERIS_FILE"
-          fi
 
           xcodebuild \
             -jobs "$(sysctl -n hw.ncpu)" \
@@ -58,7 +47,7 @@ jobs:
             -sdk iphoneos \
             -derivedDataPath "$DERIVED_DATA" \
             CODE_SIGNING_ALLOWED=NO \
-            IPHONEOS_DEPLOYMENT_TARGET=13.0 \
+            IPHONEOS_DEPLOYMENT_TARGET=15.0 \
             RUN_CLANG_STATIC_ANALYZER=NO
 
           if [ ! -d "$APP_PATH" ]; then

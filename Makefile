@@ -10,7 +10,7 @@ AUTOMATION         ?= 0
 ALL_BOOTSTRAPS     ?= 1
 
 DEBUG              ?= 0
-IOS_DEPLOYMENT_TARGET ?= 11.0
+IOS_DEPLOYMENT_TARGET ?= 15.0
 RUN_CLANG_STATIC_ANALYZER ?= NO
 SWIFT_TREAT_WARNINGS_AS_ERRORS ?= NO
 GCC_TREAT_WARNINGS_AS_ERRORS ?= NO
@@ -182,7 +182,7 @@ endif
 
 giveMeRoot/bin/giveMeRoot: giveMeRoot/giveMeRoot.c
 	$(MAKE) -C giveMeRoot \
-		CC="xcrun -sdk $(PLATFORM) clang -arch $(ARCH) -mios-version-min=11.0"
+		CC="xcrun -sdk $(PLATFORM) clang -arch $(ARCH) -mios-version-min=15.0"
 		
 ifneq ($(MAC), 1)
 all:: giveMeRoot/bin/giveMeRoot
