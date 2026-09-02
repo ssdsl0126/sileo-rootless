@@ -50,31 +50,45 @@ class PackageListHeader: UICollectionReusableView {
     override func layoutSubviews() {
         super.layoutSubviews()
         if #available(iOS 26.0, *) {
-            if usesPinnedGlassSurface {
-                if let label {
-                    SileoGlass.configurePinnedHeaderElementSurface(for: label,
-                                                                    in: self,
-                                                                    identifier: "title")
-                }
-                if let sortContainer {
-                    let sortWidth = (sortHeader?.sizeThatFits(CGSize(width: CGFloat.greatestFiniteMagnitude,
-                                                                       height: sortHeader?.bounds.height ?? 0)).width ?? 0) +
-                        (sortIcon?.bounds.width ?? 16) + 3
-                    SileoGlass.configurePinnedHeaderElementSurface(for: sortContainer,
-                                                                    in: self,
-                                                                    identifier: "sort",
-                                                                    contentWidth: sortWidth,
-                                                                    alignToTrailing: true)
-                }
-                if let upgradeButton {
-                    SileoGlass.configurePinnedHeaderElementSurface(for: upgradeButton,
-                                                                    in: self,
-                                                                    identifier: "action",
-                                                                    alignToTrailing: true)
-                }
-            }
+            refreshPinnedGlassContent()
             // iOS 26 由胶囊玻璃自然过渡到首行，不再绘制旧版硬分隔线。
             separatorView?.isHidden = true
+        }
+    }
+
+    func refreshPinnedGlassContent() {
+        guard #available(iOS 26.0, *), usesPinnedGlassSurface else {
+            return
+        }
+
+        if let label {
+                    SileoGlass.configurePinnedHeaderElementSurface(for: label,
+                                                                    in: self,
+                                                                    identifier: "title",
+                                                                    contentColor: .sileoLabel)
+        }
+        if let sortContainer {
+            let sortWidth = (sortHeader?.sizeThatFits(CGSize(width: CGFloat.greatestFiniteMagnitude,
+                                                               height: sortHeader?.bounds.height ?? 0)).width ?? 0) +
+                (sortIcon?.bounds.width ?? 16) + 3
+            SileoGlass.configurePinnedHeaderElementSurface(for: sortContainer,
+                                                            in: self,
+                                                            identifier: "sort",
+                                                            contentWidth: sortWidth,
+                                                            alignToTrailing: true,
+                                                            contentText: sortHeader?.text,
+                                                            contentFont: sortHeader?.font,
+                                                            contentColor: .tintColor,
+                                                            contentImage: sortIcon?.image,
+                                                            contentImageTintColor: .tintColor)
+            sortHeader?.textColor = .clear
+            sortIcon?.isHidden = true
+        }
+        if let upgradeButton {
+            SileoGlass.configurePinnedHeaderElementSurface(for: upgradeButton,
+                                                            in: self,
+                                                            identifier: "action",
+                                                            alignToTrailing: true)
         }
     }
     

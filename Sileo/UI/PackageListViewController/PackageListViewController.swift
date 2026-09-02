@@ -578,6 +578,12 @@ extension PackageListViewController: UICollectionViewDataSource {
         else {
             return UICollectionReusableView()
         }
+        if #available(iOS 26.0, *) {
+            // 复用标题后文本可能在布局完成后才写入，确保居中胶囊同步最新内容。
+            defer {
+                headerView.refreshPinnedGlassContent()
+            }
+        }
         switch findWhatFuckingSectionThisIs(indexPath.section) {
         case .canister:
             headerView.actionText = nil

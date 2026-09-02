@@ -799,7 +799,8 @@ extension SourcesViewController: UITableViewDataSource { // UITableViewDataSourc
             if #available(iOS 26.0, *) {
                 SileoGlass.configurePinnedHeaderElementSurface(for: titleView,
                                                                 in: headerView,
-                                                                identifier: "title")
+                                                                identifier: "title",
+                                                                contentColor: .sileoLabel)
             }
             
             if #unavailable(iOS 26.0) {

@@ -163,7 +163,12 @@ enum SileoGlass {
                                                      in headerView: UIView,
                                                      identifier: String,
                                                      contentWidth: CGFloat? = nil,
-                                                     alignToTrailing: Bool = false) {
+                                                     alignToTrailing: Bool = false,
+                                                     contentText: String? = nil,
+                                                     contentFont: UIFont? = nil,
+                                                     contentColor: UIColor? = nil,
+                                                     contentImage: UIImage? = nil,
+                                                     contentImageTintColor: UIColor? = nil) {
         guard #available(iOS 26.0, *) else {
             return
         }
@@ -208,7 +213,94 @@ enum SileoGlass {
         surfaceView.backgroundColor = .clear
         update(surfaceView)
         surfaceView.isHidden = element.isHidden
-        headerView.sendSubviewToBack(surfaceView)
+        headerView.bringSubviewToFront(surfaceView)
+
+        let titleLabel: UILabel
+        if let existingLabel = surfaceView.contentView.subviews.first(where: {
+            $0.accessibilityIdentifier == "\(pinnedHeaderSurfaceIdentifier).\(identifier).Title"
+        }) as? UILabel {
+            titleLabel = existingLabel
+        } else {
+            let createdLabel = UILabel()
+            createdLabel.accessibilityIdentifier = "\(pinnedHeaderSurfaceIdentifier).\(identifier).Title"
+            createdLabel.isUserInteractionEnabled = false
+            createdLabel.textAlignment = .center
+            createdLabel.numberOfLines = 1
+            createdLabel.lineBreakMode = .byTruncatingTail
+            surfaceView.contentView.addSubview(createdLabel)
+            titleLabel = createdLabel
+        }
+
+        let resolvedText: String?
+        let resolvedFont: UIFont?
+        let resolvedColor: UIColor?
+        if let label = element as? UILabel {
+            resolvedText = label.text
+            resolvedFont = label.font
+            resolvedColor = contentColor ?? label.textColor
+        } else if let button = element as? UIButton {
+            resolvedText = contentText ?? button.title(for: .normal)
+            resolvedFont = contentFont ?? button.titleLabel?.font
+            resolvedColor = contentColor ?? button.titleColor(for: .normal)
+        } else {
+            resolvedText = contentText
+            resolvedFont = contentFont
+            resolvedColor = contentColor
+        }
+        titleLabel.text = resolvedText
+        titleLabel.font = resolvedFont ?? UIFont.systemFont(ofSize: 17)
+        titleLabel.textColor = resolvedColor ?? .sileoLabel
+        titleLabel.frame = surfaceView.contentView.bounds
+        titleLabel.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+
+        // 原控件保留布局和点击能力，文字由胶囊里的居中标签负责显示。
+        if let label = element as? UILabel {
+            label.textColor = .clear
+        } else if let button = element as? UIButton {
+            button.setTitleColor(.clear, for: .normal)
+        }
+
+        surfaceView.layoutIfNeeded()
+        let contentBounds = surfaceView.contentView.bounds
+        titleLabel.frame = contentBounds
+        let imageViewIdentifier = "\(pinnedHeaderSurfaceIdentifier).\(identifier).Image"
+        if let contentImage {
+            let imageView: UIImageView
+            if let existingImageView = surfaceView.contentView.subviews.first(where: {
+                $0.accessibilityIdentifier == imageViewIdentifier
+            }) as? UIImageView {
+                imageView = existingImageView
+            } else {
+                let createdImageView = UIImageView()
+                createdImageView.accessibilityIdentifier = imageViewIdentifier
+                createdImageView.isUserInteractionEnabled = false
+                createdImageView.contentMode = .scaleAspectFit
+                surfaceView.contentView.addSubview(createdImageView)
+                imageView = createdImageView
+            }
+            imageView.image = contentImage
+            imageView.tintColor = contentImageTintColor
+            let textWidth = min(titleLabel.sizeThatFits(CGSize(width: CGFloat.greatestFiniteMagnitude,
+                                                               height: titleLabel.bounds.height)).width,
+                                max(0, contentBounds.width - 24))
+            let groupSpacing: CGFloat = 4
+            let groupWidth = textWidth + groupSpacing + 16
+            let groupX = max(0, (contentBounds.width - groupWidth) / 2)
+            titleLabel.textAlignment = .left
+            titleLabel.frame = CGRect(x: groupX,
+                                      y: 0,
+                                      width: textWidth,
+                                      height: contentBounds.height)
+            imageView.frame = CGRect(x: groupX + textWidth + groupSpacing,
+                                     y: max(0, (contentBounds.height - 16) / 2),
+                                     width: 16,
+                                     height: 16)
+            imageView.autoresizingMask = [.flexibleLeftMargin, .flexibleTopMargin, .flexibleBottomMargin]
+        } else if let existingImageView = surfaceView.contentView.subviews.first(where: {
+            $0.accessibilityIdentifier == imageViewIdentifier
+        }) {
+            existingImageView.removeFromSuperview()
+        }
     }
 
     /// iOS 26 不再使用旧版 WhiteBlur 标记，避免旧玻璃层参与顶部合成。
