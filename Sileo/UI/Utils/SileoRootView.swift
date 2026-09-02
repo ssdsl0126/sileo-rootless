@@ -158,8 +158,12 @@ enum SileoGlass {
         viewController.navigationController?.setContentScrollView(scrollView, for: .bottom)
     }
 
-    /// 为 iOS 26 的固定分组标题添加与导航栏一致的玻璃表面，避免滚动时出现纯色断层。
-    static func configurePinnedHeaderSurface(_ headerView: UIView) {
+    /// 为 iOS 26 的固定分组标题元素添加按内容自适应的玻璃胶囊。
+    static func configurePinnedHeaderElementSurface(for element: UIView,
+                                                     in headerView: UIView,
+                                                     identifier: String,
+                                                     contentWidth: CGFloat? = nil,
+                                                     alignToTrailing: Bool = false) {
         guard #available(iOS 26.0, *) else {
             return
         }
@@ -169,29 +173,42 @@ enum SileoGlass {
 
         let surfaceView: UIVisualEffectView
         if let existingView = headerView.subviews.first(where: {
-            $0.accessibilityIdentifier == pinnedHeaderSurfaceIdentifier
+            $0.accessibilityIdentifier == "\(pinnedHeaderSurfaceIdentifier).\(identifier)"
         }) as? UIVisualEffectView {
             surfaceView = existingView
         } else {
             let createdView = UIVisualEffectView(effect: nil)
-            createdView.accessibilityIdentifier = pinnedHeaderSurfaceIdentifier
+            createdView.accessibilityIdentifier = "\(pinnedHeaderSurfaceIdentifier).\(identifier)"
             createdView.isUserInteractionEnabled = false
-            createdView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
             headerView.insertSubview(createdView, at: 0)
             surfaceView = createdView
         }
 
-        // 使用带内边距的胶囊玻璃承接导航栏，避免两个层级以直角硬切。
-        let horizontalInset: CGFloat = 12
+        let measuredWidth: CGFloat
+        if let contentWidth, contentWidth > 0 {
+            measuredWidth = contentWidth
+        } else if let label = element as? UILabel {
+            measuredWidth = label.sizeThatFits(CGSize(width: CGFloat.greatestFiniteMagnitude,
+                                                       height: element.bounds.height)).width
+        } else {
+            measuredWidth = element.bounds.width
+        }
+
+        let horizontalPadding: CGFloat = 14
+        let width = max(44, measuredWidth + (horizontalPadding * 2))
+        let height: CGFloat = 44
+        let elementFrame = element.frame
+        let originX = alignToTrailing ? elementFrame.maxX - width : elementFrame.minX
         headerView.clipsToBounds = false
-        surfaceView.frame = CGRect(x: horizontalInset,
-                                   y: 0,
-                                   width: max(0, headerView.bounds.width - (horizontalInset * 2)),
-                                   height: headerView.bounds.height)
+        surfaceView.frame = CGRect(x: originX,
+                                   y: elementFrame.midY - (height / 2),
+                                   width: min(width, max(0, headerView.bounds.width - originX)),
+                                   height: height)
         surfaceView.cornerConfiguration = .capsule()
         surfaceView.backgroundColor = .clear
-        // 不叠加主题色，避免固定标题变成一条偏白的实色带。
         update(surfaceView)
+        surfaceView.isHidden = element.isHidden
+        headerView.sendSubviewToBack(surfaceView)
     }
 
     /// iOS 26 不再使用旧版 WhiteBlur 标记，避免旧玻璃层参与顶部合成。

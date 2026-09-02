@@ -769,8 +769,9 @@ extension SourcesViewController: UITableViewDataSource { // UITableViewDataSourc
         }
         let headerView = UIView(frame: CGRect(origin: .zero, size: CGSize(width: 320, height: headerHeight)))
         if #available(iOS 26.0, *) {
-            // 固定分组标题使用玻璃表面，避免与导航栏之间出现纯色断层。
-            SileoGlass.configurePinnedHeaderSurface(headerView)
+            // 标题只使用按文字宽度自适应的独立胶囊，不铺满整行。
+            headerView.backgroundColor = .clear
+            headerView.isOpaque = false
         } else {
             headerView.backgroundColor = .sileoBackgroundColor
             headerView.isOpaque = true
@@ -795,6 +796,11 @@ extension SourcesViewController: UITableViewDataSource { // UITableViewDataSourc
             titleView.text = text
             titleView.autoresizingMask = .flexibleWidth
             headerView.addSubview(titleView)
+            if #available(iOS 26.0, *) {
+                SileoGlass.configurePinnedHeaderElementSurface(for: titleView,
+                                                                in: headerView,
+                                                                identifier: "title")
+            }
             
             if #unavailable(iOS 26.0) {
                 let separatorView = SileoSeparatorView(frame: CGRect(x: 16, y: separatorY, width: 304, height: 1))

@@ -27,14 +27,9 @@ class PackageListHeader: UICollectionReusableView {
         toolbar?.tag = WHITE_BLUR_TAG
 
         if #available(iOS 26.0, *) {
-            if usesPinnedGlassSurface {
-                // 分组标题使用玻璃表面，遮住后面的首行并与导航栏连续。
-                SileoGlass.configurePinnedHeaderSurface(self)
-            } else {
-                // 新闻日期标题只保留日期胶囊，不铺满整行玻璃。
-                backgroundColor = .clear
-                isOpaque = false
-            }
+            // iOS 26 的分组标题元素分别配置胶囊，新闻日期标题只保留日期胶囊。
+            backgroundColor = .clear
+            isOpaque = false
             toolbar?.isHidden = true
             toolbar?.tag = 0
             toolbar?.isTranslucent = false
@@ -55,7 +50,30 @@ class PackageListHeader: UICollectionReusableView {
     override func layoutSubviews() {
         super.layoutSubviews()
         if #available(iOS 26.0, *) {
-            // iOS 26 由玻璃表面自然过渡到首行，不再绘制旧版硬分隔线。
+            if usesPinnedGlassSurface {
+                if let label {
+                    SileoGlass.configurePinnedHeaderElementSurface(for: label,
+                                                                    in: self,
+                                                                    identifier: "title")
+                }
+                if let sortContainer {
+                    let sortWidth = (sortHeader?.sizeThatFits(CGSize(width: CGFloat.greatestFiniteMagnitude,
+                                                                       height: sortHeader?.bounds.height ?? 0)).width ?? 0) +
+                        (sortIcon?.bounds.width ?? 16) + 3
+                    SileoGlass.configurePinnedHeaderElementSurface(for: sortContainer,
+                                                                    in: self,
+                                                                    identifier: "sort",
+                                                                    contentWidth: sortWidth,
+                                                                    alignToTrailing: true)
+                }
+                if let upgradeButton {
+                    SileoGlass.configurePinnedHeaderElementSurface(for: upgradeButton,
+                                                                    in: self,
+                                                                    identifier: "action",
+                                                                    alignToTrailing: true)
+                }
+            }
+            // iOS 26 由胶囊玻璃自然过渡到首行，不再绘制旧版硬分隔线。
             separatorView?.isHidden = true
         }
     }
@@ -64,11 +82,10 @@ class PackageListHeader: UICollectionReusableView {
         label?.textColor = .sileoLabel
         sortIcon?.tintColor = .tintColor
         sortHeader?.textColor = .tintColor
-        if #available(iOS 26.0, *), usesPinnedGlassSurface {
-            SileoGlass.configurePinnedHeaderSurface(self)
-        } else if #available(iOS 26.0, *) {
+        if #available(iOS 26.0, *) {
             backgroundColor = .clear
             isOpaque = false
+            setNeedsLayout()
         }
     }
     
@@ -80,6 +97,7 @@ class PackageListHeader: UICollectionReusableView {
             } else {
                 upgradeButton?.isHidden = true
             }
+            setNeedsLayout()
         }
     }
 }
