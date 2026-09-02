@@ -14,7 +14,7 @@ class PackageListHeader: UICollectionReusableView {
     @IBOutlet weak var upgradeButton: UIButton?
     @IBOutlet weak var sortIcon: UIImageView?
     @IBOutlet weak var sortHeader: UILabel?
-    @IBOutlet weak var separatorView: UIImageView?
+    @IBOutlet weak var separatorView: UIView?
     @IBOutlet weak var sortContainer: UIControl?
 
     private var usesPinnedGlassSurface: Bool {
@@ -50,9 +50,35 @@ class PackageListHeader: UICollectionReusableView {
     override func layoutSubviews() {
         super.layoutSubviews()
         if #available(iOS 26.0, *) {
+            centerLegacyElementsForCompactGlassHeader()
             refreshPinnedGlassContent()
             // iOS 26 由胶囊玻璃自然过渡到首行，不再绘制旧版硬分隔线。
-            separatorView?.isHidden = true
+            hideLegacySeparatorViews()
+        }
+    }
+
+    private func centerLegacyElementsForCompactGlassHeader() {
+        let elements: [UIView?] = [label, sortContainer, upgradeButton]
+        for element in elements.compactMap({ $0 }) {
+            var frame = element.frame
+            frame.origin.y = (bounds.height - frame.height) / 2
+            element.frame = frame
+        }
+    }
+
+    private func hideLegacySeparatorViews() {
+        guard #available(iOS 26.0, *) else {
+            return
+        }
+
+        separatorView?.isHidden = true
+        separatorView?.alpha = 0
+        for subview in subviews {
+            if subview is SileoSeparatorView ||
+                (subview.bounds.height <= 2 && subview.frame.minY >= bounds.height - 12) {
+                subview.isHidden = true
+                subview.alpha = 0
+            }
         }
     }
 
@@ -60,6 +86,9 @@ class PackageListHeader: UICollectionReusableView {
         guard #available(iOS 26.0, *), usesPinnedGlassSurface else {
             return
         }
+
+        // 固定标题不显示旧版横向分隔线，避免复用后被数据源重新打开。
+        hideLegacySeparatorViews()
 
         if let label {
                     SileoGlass.configurePinnedHeaderElementSurface(for: label,
@@ -88,7 +117,10 @@ class PackageListHeader: UICollectionReusableView {
             SileoGlass.configurePinnedHeaderElementSurface(for: upgradeButton,
                                                             in: self,
                                                             identifier: "action",
-                                                            alignToTrailing: true)
+                                                            alignToTrailing: true,
+                                                            contentText: upgradeButton.title(for: .normal),
+                                                            contentFont: upgradeButton.titleLabel?.font,
+                                                            contentColor: .tintColor)
         }
     }
     

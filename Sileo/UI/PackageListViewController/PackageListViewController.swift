@@ -661,6 +661,15 @@ extension PackageListViewController: UICollectionViewDelegate {
 
 extension PackageListViewController: UICollectionViewDelegateFlowLayout {
     func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, referenceSizeForHeaderInSection section: Int) -> CGSize {
+        if #available(iOS 26.0, *) {
+            // iOS 26 胶囊本身就是 44pt，标题区域不再保留旧版 65pt 的空带。
+            switch findWhatFuckingSectionThisIs(section) {
+            case .reallyBoringList: return .zero
+            case .ignoredUpdates, .updates, .canister, .packages, .searchHistoryList:
+                return CGSize(width: collectionView.bounds.width, height: 44)
+            }
+        }
+
         switch findWhatFuckingSectionThisIs(section) {
         case .reallyBoringList: return .zero
         case .ignoredUpdates, .updates, .canister: return CGSize(width: collectionView.bounds.width, height: 65)

@@ -211,7 +211,10 @@ enum SileoGlass {
                                    height: height)
         surfaceView.cornerConfiguration = .capsule()
         surfaceView.backgroundColor = .clear
-        update(surfaceView)
+        let glassEffect = UIGlassEffect(style: .regular)
+        // 小胶囊需要比整块内容面更稳定，降低底下图标和进度线的穿透感。
+        glassEffect.tintColor = UIColor.sileoBackgroundColor.withAlphaComponent(0.65)
+        surfaceView.effect = glassEffect
         surfaceView.isHidden = element.isHidden
         headerView.bringSubviewToFront(surfaceView)
 
