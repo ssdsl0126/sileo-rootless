@@ -97,8 +97,8 @@ class NewsViewController: SileoViewController, UICollectionViewDataSource, UICol
         self.statusBarStyle = .default
         if #available(iOS 26.0, *) {
             view.backgroundColor = .sileoBackgroundColor
-            collectionView.backgroundColor = .sileoBackgroundColor
-            collectionView.isOpaque = true
+            collectionView.backgroundColor = .clear
+            collectionView.isOpaque = false
         }
     }
     
@@ -125,7 +125,9 @@ class NewsViewController: SileoViewController, UICollectionViewDataSource, UICol
         } else {
             self.navigationController?.navigationBar.superview?.tag = WHITE_BLUR_TAG
         }
-        self.navigationController?.navigationBar._hidesShadow = true
+        if #unavailable(iOS 26.0) {
+            self.navigationController?.navigationBar._hidesShadow = true
+        }
     }
 
     override func viewWillDisappear(_ animated: Bool) {

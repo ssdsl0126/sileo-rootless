@@ -110,10 +110,12 @@ final class SourcesViewController: SileoViewController {
     }
     
     @objc func updateSileoColors() {
-        self.tableView?.backgroundColor = .sileoBackgroundColor
         if #available(iOS 26.0, *) {
             view.backgroundColor = .sileoBackgroundColor
-            tableView?.isOpaque = true
+            tableView?.backgroundColor = .clear
+            tableView?.isOpaque = false
+        } else {
+            self.tableView?.backgroundColor = .sileoBackgroundColor
         }
         self.tableView?.separatorColor = .sileoSeparatorColor
         self.statusBarStyle = .default
@@ -132,8 +134,15 @@ final class SourcesViewController: SileoViewController {
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         normalizeLargeTitleLayoutMargins()
-        self.navigationController?.navigationBar._hidesShadow = true
-        self.tableView?.backgroundColor = .sileoBackgroundColor
+        if #unavailable(iOS 26.0) {
+            self.navigationController?.navigationBar._hidesShadow = true
+        }
+        if #available(iOS 26.0, *) {
+            self.tableView?.backgroundColor = .clear
+            self.tableView?.isOpaque = false
+        } else {
+            self.tableView?.backgroundColor = .sileoBackgroundColor
+        }
     }
     
     override func viewDidDisappear(_ animated: Bool) {
@@ -766,7 +775,11 @@ extension SourcesViewController: UITableViewDataSource { // UITableViewDataSourc
             headerView.backgroundColor = .sileoBackgroundColor
             headerView.isOpaque = true
         }
-        headerView.clipsToBounds = true
+        if #available(iOS 26.0, *) {
+            headerView.clipsToBounds = false
+        } else {
+            headerView.clipsToBounds = true
+        }
         
         if let text = text {
             if #unavailable(iOS 26.0) {
@@ -783,9 +796,11 @@ extension SourcesViewController: UITableViewDataSource { // UITableViewDataSourc
             titleView.autoresizingMask = .flexibleWidth
             headerView.addSubview(titleView)
             
-            let separatorView = SileoSeparatorView(frame: CGRect(x: 16, y: separatorY, width: 304, height: 1))
-            separatorView.autoresizingMask = .flexibleWidth
-            headerView.addSubview(separatorView)
+            if #unavailable(iOS 26.0) {
+                let separatorView = SileoSeparatorView(frame: CGRect(x: 16, y: separatorY, width: 304, height: 1))
+                separatorView.autoresizingMask = .flexibleWidth
+                headerView.addSubview(separatorView)
+            }
         }
         
         return headerView

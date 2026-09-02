@@ -82,8 +82,8 @@ class PackageListViewController: SileoViewController, UIGestureRecognizerDelegat
         }
         if #available(iOS 26.0, *) {
             view.backgroundColor = .sileoBackgroundColor
-            collectionView?.backgroundColor = .sileoBackgroundColor
-            collectionView?.isOpaque = true
+            collectionView?.backgroundColor = .clear
+            collectionView?.isOpaque = false
         }
     }
     
@@ -99,7 +99,9 @@ class PackageListViewController: SileoViewController, UIGestureRecognizerDelegat
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         normalizeLargeTitleLayoutMargins()
-        self.navigationController?.navigationBar._hidesShadow = true
+        if #unavailable(iOS 26.0) {
+            self.navigationController?.navigationBar._hidesShadow = true
+        }
         
         guard #available(iOS 13, *) else {
             if showSearchField {

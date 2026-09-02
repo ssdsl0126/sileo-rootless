@@ -139,8 +139,18 @@ enum SileoGlass {
 
         let surfaceColor = UIColor.sileoBackgroundColor
         viewController.view.backgroundColor = surfaceColor
-        scrollView.backgroundColor = surfaceColor
-        scrollView.isOpaque = true
+        let usesTopGlassTransition = viewController is NewsViewController ||
+            viewController is PackageListViewController ||
+            viewController is SourcesViewController
+        if usesTopGlassTransition {
+            // 这三个列表页需要让系统导航玻璃连续取景。
+            scrollView.backgroundColor = .clear
+            scrollView.isOpaque = false
+        } else {
+            // 其它页面保持现有 iOS 26 内容面，避免扩大本次修复范围。
+            scrollView.backgroundColor = surfaceColor
+            scrollView.isOpaque = true
+        }
         // iOS 26 的导航栏与标签栏必须观察同一个滚动视图，保持上下玻璃边界连续。
         viewController.setContentScrollView(scrollView, for: .top)
         viewController.setContentScrollView(scrollView, for: .bottom)
@@ -171,10 +181,17 @@ enum SileoGlass {
             surfaceView = createdView
         }
 
-        surfaceView.frame = headerView.bounds
+        // 使用带内边距的胶囊玻璃承接导航栏，避免两个层级以直角硬切。
+        let horizontalInset: CGFloat = 12
+        headerView.clipsToBounds = false
+        surfaceView.frame = CGRect(x: horizontalInset,
+                                   y: 0,
+                                   width: max(0, headerView.bounds.width - (horizontalInset * 2)),
+                                   height: headerView.bounds.height)
+        surfaceView.cornerConfiguration = .capsule()
         surfaceView.backgroundColor = .clear
-        update(surfaceView,
-               tintColor: UIColor.sileoBackgroundColor.withAlphaComponent(0.12))
+        // 不叠加主题色，避免固定标题变成一条偏白的实色带。
+        update(surfaceView)
     }
 
     /// iOS 26 不再使用旧版 WhiteBlur 标记，避免旧玻璃层参与顶部合成。
