@@ -75,6 +75,19 @@ class DownloadsTableViewController: SileoViewController {
     }
     private var queueSheetHandleView: UIView?
     private var queueSheetHandleLayer: CAShapeLayer?
+
+    private var usesQueueSheetHeaderChrome: Bool {
+        guard usesSystemQueueSheetPresentation else {
+            return false
+        }
+        if UIDevice.current.userInterfaceIdiom == .phone {
+            return true
+        }
+        if #available(iOS 26.0, *) {
+            return UIDevice.current.userInterfaceIdiom == .pad
+        }
+        return false
+    }
     
     private var supportsFloatingSheetChrome: Bool {
         false
@@ -282,7 +295,7 @@ class DownloadsTableViewController: SileoViewController {
         footerTrailingConstraint?.constant = horizontalInset
         
         let newTopInset: CGFloat
-        if usesSystemQueueSheetPresentation && UIDevice.current.userInterfaceIdiom == .phone {
+        if usesQueueSheetHeaderChrome {
             newTopInset = 43
         } else if supportsFloatingSheetChrome {
             newTopInset = 43 + verticalOffset
@@ -308,7 +321,7 @@ class DownloadsTableViewController: SileoViewController {
     }
 
     private func updateQueueSheetHandle() {
-        let shouldShow = usesSystemQueueSheetPresentation && UIDevice.current.userInterfaceIdiom == .phone
+        let shouldShow = usesQueueSheetHeaderChrome
         if !shouldShow {
             queueSheetHandleView?.removeFromSuperview()
             queueSheetHandleView = nil
@@ -898,7 +911,7 @@ class DownloadsTableViewController: SileoViewController {
             alert.addAction(UIAlertAction(title: String(localizationKey: "Dangerous_Repo.Last_Chance.Continue"), style: .destructive, handler: { _ in
                 self.confirmQueued(nil)
             }))
-            self.present(alert, animated: true, completion: nil)
+            self.presentSileoAlert(alert)
             return
         }
         isDownloading = true

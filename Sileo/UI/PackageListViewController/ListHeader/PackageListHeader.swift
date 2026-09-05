@@ -28,14 +28,21 @@ class PackageListHeader: UICollectionReusableView {
 
         if #available(iOS 26.0, *) {
             // iOS 26 的分组标题元素分别配置胶囊，新闻日期标题只保留日期胶囊。
+            clipsToBounds = false
             backgroundColor = .clear
             isOpaque = false
+            toolbar?.removeFromSuperview()
             toolbar?.isHidden = true
             toolbar?.tag = 0
             toolbar?.isTranslucent = false
             toolbar?.setBackgroundImage(nil, forToolbarPosition: .any, barMetrics: .default)
             toolbar?.setShadowImage(nil, forToolbarPosition: .any)
             toolbar?.backgroundColor = .sileoBackgroundColor
+            for subview in subviews {
+                if subview is SileoSeparatorView || String(describing: type(of: subview)).contains("Separator") {
+                    subview.removeFromSuperview()
+                }
+            }
         }
         
         sortIcon?.image = UIImage(named: "SortChevron")?.withRenderingMode(.alwaysTemplate)
@@ -50,11 +57,42 @@ class PackageListHeader: UICollectionReusableView {
     override func layoutSubviews() {
         super.layoutSubviews()
         if #available(iOS 26.0, *) {
-            centerLegacyElementsForCompactGlassHeader()
+            clipsToBounds = false
+            hideLegacySeparatorViews()
+            if usesPinnedGlassSurface {
+                centerLegacyElementsForCompactGlassHeader()
+            } else {
+                layoutNewsDateHeaderCapsule()
+            }
             refreshPinnedGlassContent()
             // iOS 26 由胶囊玻璃自然过渡到首行，不再绘制旧版硬分隔线。
             hideLegacySeparatorViews()
         }
+    }
+
+    private func layoutNewsDateHeaderCapsule() {
+        guard let label, let container = label.superview else {
+            return
+        }
+        label.numberOfLines = 1
+        label.lineBreakMode = .byTruncatingTail
+        label.adjustsFontSizeToFitWidth = true
+        label.minimumScaleFactor = 0.75
+
+        let maxContainerWidth = max(44, bounds.width - 30)
+        let measuredTextWidth = label.sizeThatFits(CGSize(width: CGFloat.greatestFiniteMagnitude, height: 24)).width
+        let targetContainerWidth = min(maxContainerWidth, max(44, ceil(measuredTextWidth) + 20))
+
+        var containerFrame = container.frame
+        containerFrame.origin.x = 15
+        containerFrame.origin.y = (bounds.height - 24) / 2
+        containerFrame.size.width = targetContainerWidth
+        containerFrame.size.height = 24
+        container.frame = containerFrame
+        container.layer.cornerRadius = 12
+        container.layer.masksToBounds = true
+
+        label.frame = CGRect(x: 10, y: 0, width: max(0, targetContainerWidth - 20), height: 24)
     }
 
     private func centerLegacyElementsForCompactGlassHeader() {
@@ -74,10 +112,11 @@ class PackageListHeader: UICollectionReusableView {
         separatorView?.isHidden = true
         separatorView?.alpha = 0
         for subview in subviews {
-            if subview is SileoSeparatorView ||
-                (subview.bounds.height <= 2 && subview.frame.minY >= bounds.height - 12) {
-                subview.isHidden = true
-                subview.alpha = 0
+            if subview is SileoSeparatorView || subview === separatorView ||
+                String(describing: type(of: subview)).contains("Separator") ||
+                (subview !== label && subview !== sortContainer && subview !== upgradeButton &&
+                 subview.bounds.height <= 3) {
+                subview.removeFromSuperview()
             }
         }
     }

@@ -284,7 +284,7 @@ extension SettingsViewController { // UITableViewDataSource
                 PaymentAuthenticator.shared.authenticate(provider: provider, window: self.view.window) { error, _ in
                     if error != nil {
                         let title: String = String(localizationKey: "Provider_Auth_Fail.Title", type: .error)
-                        self.present(PaymentError.alert(for: error, title: title), animated: true)
+                        self.presentSileoAlert(PaymentError.alert(for: error, title: title))
                     }
                 }
             }
@@ -296,7 +296,7 @@ extension SettingsViewController { // UITableViewDataSource
 #if targetEnvironment(macCatalyst)
                 let errorVC = UIAlertController(title: "Not Supported", message: "Alternate Icons are currently not supported in macOS", preferredStyle: .alert)
                 errorVC.addAction(UIAlertAction(title: "Ok", style: .cancel, handler: { _ in errorVC.dismiss(animated: true) }))
-                self.present(errorVC, animated: true)
+                self.presentSileoAlert(errorVC)
 #else
                 let altVC = AltIconTableViewController()
                 self.navigationController?.pushViewController(altVC, animated: true)
@@ -362,7 +362,7 @@ extension SettingsViewController { // UITableViewDataSource
             self.tableView.reloadData()
         })
         alert.addAction(UIAlertAction(title: String(localizationKey: "Cancel"), style: .cancel))
-        self.present(alert, animated: true)
+        self.presentSileoAlert(alert)
     }
     
     private func presentColorPicker() {
@@ -462,7 +462,7 @@ private final class DemoArchitectureSelectionViewController: BaseSettingsViewCon
                                       message: String(localizationKey: "Demo_Package_Architecture_Apply_Message"),
                                       preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: String(localizationKey: "OK"), style: .default))
-        present(alert, animated: true)
+        presentSileoAlert(alert)
     }
 
     override func tableView(_ tableView: UITableView, titleForFooterInSection section: Int) -> String? {

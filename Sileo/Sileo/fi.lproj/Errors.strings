@@ -59,3 +59,7 @@
 "Purchase_Auth_Complete_Fail.Title" = "Couldn't Complete Authentication";
 
 "Couldnt_Import_Themes" = "Couldn't Import theme(s)";
+
+"Package_Download_URL_Unavailable" = "Tällä paketilla ei ole latausosoitetta.";
+"Package_Download_Local_Missing" = "Paikallista pakettitiedostoa ei löytynyt.";
+"Package_Download_Save_Failed" = "Pakettia ei voitu tallentaa kansioon Downloads.";

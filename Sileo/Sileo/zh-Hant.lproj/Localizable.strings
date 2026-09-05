@@ -244,3 +244,9 @@
 "Whats_Collected" = "What's Collected";
 "Non_Identifying" = "Only package and non-identifying device information is collected.";
 "Privacy_Policy" = "Privacy Policy";
+
+"Package_Copy_Download_URL_Action" = "複製連結";
+"Package_Copy_Download_URL_Success" = "已複製下載連結。";
+"Package_Download_Deb_Action" = "下載";
+"Package_Download_Deb_Success_Title" = "下載完成";
+"Package_Download_Deb_Success" = "已儲存到 %@";

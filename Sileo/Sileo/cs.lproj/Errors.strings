@@ -59,3 +59,7 @@
 "Purchase_Auth_Complete_Fail.Title" = "Couldn't Complete Authentication";
 
 "Couldnt_Import_Themes" = "Nelze importovat motiv(y)";
+
+"Package_Download_URL_Unavailable" = "Tento balíček nemá adresu ke stažení.";
+"Package_Download_Local_Missing" = "Místní soubor balíčku se nepodařilo najít.";
+"Package_Download_Save_Failed" = "Balíček se nepodařilo uložit do Downloads.";

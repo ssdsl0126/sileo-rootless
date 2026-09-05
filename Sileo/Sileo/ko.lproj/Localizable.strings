@@ -244,3 +244,9 @@
 "Whats_Collected" = "What's Collected";
 "Non_Identifying" = "Only package and non-identifying device information is collected.";
 "Privacy_Policy" = "Privacy Policy";
+
+"Package_Copy_Download_URL_Action" = "링크 복사";
+"Package_Copy_Download_URL_Success" = "다운로드 링크가 복사되었습니다.";
+"Package_Download_Deb_Action" = "다운로드";
+"Package_Download_Deb_Success_Title" = "다운로드됨";
+"Package_Download_Deb_Success" = "%@에 저장됨";

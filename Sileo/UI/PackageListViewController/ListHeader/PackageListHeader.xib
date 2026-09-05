@@ -88,6 +88,7 @@
             </constraints>
             <connections>
                 <outlet property="label" destination="Jqr-mH-ppT" id="qpZ-mf-1wS"/>
+                <outlet property="separatorView" destination="cGW-yp-qSd" id="sep-outlet-fix"/>
                 <outlet property="sortContainer" destination="1i8-qo-Aie" id="7Ev-hA-ugt"/>
                 <outlet property="sortHeader" destination="0cI-37-aEA" id="bCu-Ot-NpA"/>
                 <outlet property="sortIcon" destination="oHz-JA-MSF" id="jxI-v9-eiS"/>

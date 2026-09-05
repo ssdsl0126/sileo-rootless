@@ -59,3 +59,7 @@
 "Purchase_Auth_Complete_Fail.Title" = "Tidak Dapat Menyiapkan Pengesahan";
 
 "Couldnt_Import_Themes" = "Tidak dapat import tema(-tema)";
+
+"Package_Download_URL_Unavailable" = "Pakej ini tiada URL muat turun.";
+"Package_Download_Local_Missing" = "Fail pakej setempat tidak dijumpai.";
+"Package_Download_Save_Failed" = "Tidak dapat menyimpan pakej ke Downloads.";

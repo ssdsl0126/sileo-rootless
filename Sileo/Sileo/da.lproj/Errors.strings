@@ -57,3 +57,7 @@
 "Purchase_Initiate_Fail.Title" = "Couldn't Initiate Purchase";
 "Purchase_Complete_Fail.Title" = "Couldn't Complete Purchase";
 "Purchase_Auth_Complete_Fail.Title" = "Couldn't Complete Authentication";
+
+"Package_Download_URL_Unavailable" = "Denne pakke har ikke en download-URL.";
+"Package_Download_Local_Missing" = "Den lokale pakkefil blev ikke fundet.";
+"Package_Download_Save_Failed" = "Pakken kunne ikke gemmes i Downloads.";

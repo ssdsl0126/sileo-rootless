@@ -244,3 +244,9 @@
 "Whats_Collected" = "What's Collected";
 "Non_Identifying" = "Only package and non-identifying device information is collected.";
 "Privacy_Policy" = "Privacy Policy";
+
+"Package_Copy_Download_URL_Action" = "Копирај везу";
+"Package_Copy_Download_URL_Success" = "Веза за преузимање је копирана.";
+"Package_Download_Deb_Action" = "Преузми";
+"Package_Download_Deb_Success_Title" = "Преузето";
+"Package_Download_Deb_Success" = "Сачувано у %@";

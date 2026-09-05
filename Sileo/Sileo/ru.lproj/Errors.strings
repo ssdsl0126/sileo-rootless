@@ -59,3 +59,7 @@
 "Purchase_Auth_Complete_Fail.Title" = "Не удалось завершить аутентифицирование";
 
 "Couldnt_Import_Themes" = "Не удалось импортировать тему(ы)";
+
+"Package_Download_URL_Unavailable" = "У этого пакета нет ссылки для загрузки.";
+"Package_Download_Local_Missing" = "Локальный файл пакета не найден.";
+"Package_Download_Save_Failed" = "Не удалось сохранить пакет в Downloads.";

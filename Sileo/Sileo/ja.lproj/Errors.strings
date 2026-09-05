@@ -59,3 +59,7 @@
 "Purchase_Auth_Complete_Fail.Title" = "認証に失敗しました。";
 
 "Couldnt_Import_Themes" = "Couldn't Import theme(s)";
+
+"Package_Download_URL_Unavailable" = "このパッケージにはダウンロード URL がありません。";
+"Package_Download_Local_Missing" = "ローカルのパッケージファイルが見つかりません。";
+"Package_Download_Save_Failed" = "パッケージを Downloads に保存できませんでした。";

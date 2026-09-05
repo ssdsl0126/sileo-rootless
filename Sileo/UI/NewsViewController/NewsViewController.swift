@@ -133,7 +133,9 @@ class NewsViewController: SileoViewController, UICollectionViewDataSource, UICol
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
 
-        self.navigationController?.navigationBar._hidesShadow = false
+        if #unavailable(iOS 26.0) {
+            self.navigationController?.navigationBar._hidesShadow = false
+        }
     }
     
     override func viewDidDisappear(_ animated: Bool) {
@@ -317,6 +319,7 @@ extension NewsViewController: UICollectionViewDelegateFlowLayout { // Collection
                                                                              for: indexPath) as? PackageListHeader ?? PackageListHeader()
             let date = NSDate(timeIntervalSince1970: TimeInterval(timestamps[indexPath.section - newsBuffer]))
             headerView.label?.text = dateFormatter.string(from: date as Date).uppercased(with: Locale.current)
+            headerView.setNeedsLayout()
             return headerView
         }
         return UICollectionReusableView()

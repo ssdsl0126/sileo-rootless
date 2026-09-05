@@ -10,6 +10,26 @@ import UIKit
 import SwipeCellKit
 import Evander
 
+@available(iOS 26.0, *)
+private struct PackageSwipeActionTransition: SwipeActionTransitioning {
+    let backgroundColor: UIColor
+
+    func didTransition(with context: SwipeActionTransitioningContext) {
+        let button = context.button
+        context.setBackgroundColor(.clear)
+
+        if button.layer.name != "Sileo.PackageSwipeAction" {
+            button.frame = button.frame.insetBy(dx: 4, dy: 4)
+            button.layer.name = "Sileo.PackageSwipeAction"
+        }
+
+        button.backgroundColor = backgroundColor
+        button.layer.cornerCurve = .continuous
+        button.layer.cornerRadius = min(14, button.bounds.height / 2)
+        button.layer.masksToBounds = true
+    }
+}
+
 class PackageCollectionViewCell: SwipeCollectionViewCell {
     @IBOutlet var imageView: UIImageView?
     @IBOutlet var titleLabel: UILabel?
@@ -29,6 +49,17 @@ class PackageCollectionViewCell: SwipeCollectionViewCell {
     
     required init?(coder aDecoder: NSCoder) {
         super.init(coder: aDecoder)
+    }
+
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        if #available(iOS 26.0, *),
+           traitCollection.userInterfaceIdiom == .pad,
+           event?.type != .touches {
+            // SwipeCellKit 会在命中测试离开已展开的 cell 时自动收起；
+            // iPad 鼠标悬停会持续触发非触摸命中测试，因此不能沿用该副作用。
+            return bounds.contains(point)
+        }
+        return super.point(inside: point, with: event)
     }
     
     public var targetPackage: Package? {
@@ -196,12 +227,18 @@ extension PackageCollectionViewCell: SwipeCollectionViewCellDelegate {
               UserDefaults.standard.bool(forKey: "SwipeActions", fallback: true)  else { return nil }
         var actions = [SwipeAction]()
         let queueFound = DownloadManager.shared.find(package: package)
-        // We only want delete if we're going left, and only if it's in the queue
+        // 右滑：取消队列、复制下载链接、下载 deb 到本地
         if orientation == .left {
             if queueFound != .none {
                 actions.append(cancelAction(package))
             }
-            return actions
+            let downloadPackage = packageForInstallActions(from: package)
+            if canCopyOrDownload(downloadPackage) {
+                // SwipeCellKit 最靠近 cell 的按钮排在数组末尾
+                actions.append(downloadToLocalAction(downloadPackage))
+                actions.append(copyDownloadURLAction(downloadPackage))
+            }
+            return actions.isEmpty ? nil : actions
         }
         // Check if the package is actually installed
         if let installedPackage = PackageListManager.shared.installedPackage(identifier: package.packageID) {
@@ -234,15 +271,32 @@ extension PackageCollectionViewCell: SwipeCollectionViewCellDelegate {
     func collectionView(_ collectionView: UICollectionView, editActionsOptionsForItemAt indexPath: IndexPath, for orientation: SwipeActionsOrientation) -> SwipeOptions {
         var options = SwipeOptions()
         options.expansionStyle = .selection
+        if #available(iOS 26.0, *) {
+            options.backgroundColor = .clear
+            options.buttonVerticalAlignment = .center
+        }
         return options
+    }
+
+    private func configureSwipeAction(_ action: SwipeAction, backgroundColor: UIColor, image: UIImage?) {
+        if #available(iOS 26.0, *) {
+            action.backgroundColor = .clear
+            action.image = nil
+            action.font = .systemFont(ofSize: 15, weight: .medium)
+            action.transitionDelegate = PackageSwipeActionTransition(backgroundColor: backgroundColor)
+        } else {
+            action.backgroundColor = backgroundColor
+            action.image = image
+        }
     }
     
     private func addRepo(_ package: ProvisionalPackage) -> SwipeAction {
         let addRepo = SwipeAction(style: .default, title: String(localizationKey: "Add_Source.Title")) { _, _ in
             if let tabBarController = self.window?.rootViewController as? UITabBarController,
-               let sourcesSVC = tabBarController.viewControllers?[2] as? UISplitViewController,
-               let sourcesNavNV = sourcesSVC.viewControllers[0] as? SileoNavigationController {
-                    tabBarController.selectedViewController = sourcesSVC
+               let sourcesNavNV = (tabBarController.viewControllers?[2] as? SileoNavigationController) ??
+                   (tabBarController.viewControllers?[2] as? UISplitViewController)?.viewControllers[0] as? SileoNavigationController,
+               let targetVC = tabBarController.viewControllers?[2] {
+                    tabBarController.selectedViewController = targetVC
                     if let sourcesVC = sourcesNavNV.viewControllers[0] as? SourcesViewController {
                         sourcesVC.presentAddSourceEntryField(url: package.repository.uri)
                     }
@@ -253,8 +307,9 @@ extension PackageCollectionViewCell: SwipeCollectionViewCellDelegate {
             self.hapticResponse()
             self.hideSwipe(animated: true)
         }
-        addRepo.backgroundColor = UIColor.systemPink
-        addRepo.image = UIImage(systemNameOrNil: "plus.app")
+        configureSwipeAction(addRepo,
+                             backgroundColor: .systemPink,
+                             image: UIImage(systemNameOrNil: "plus.app"))
         return addRepo
     }
     
@@ -265,8 +320,60 @@ extension PackageCollectionViewCell: SwipeCollectionViewCellDelegate {
             self.hapticResponse()
             self.hideSwipe(animated: true)
         }
-        cancel.image = UIImage(systemNameOrNil: "x.circle")
+        configureSwipeAction(cancel,
+                             backgroundColor: .systemRed,
+                             image: UIImage(systemNameOrNil: "x.circle"))
         return cancel
+    }
+
+    private func canCopyOrDownload(_ package: Package) -> Bool {
+        if package.package.contains("/") {
+            return true
+        }
+        return package.sourceRepo != nil && !(package.filename ?? "").isEmpty
+    }
+
+    private func copyDownloadURLAction(_ package: Package) -> SwipeAction {
+        let copy = SwipeAction(style: .default, title: String(localizationKey: "Package_Copy_Download_URL_Action")) { _, _ in
+            self.hapticResponse()
+            self.hideSwipe(animated: true)
+            DownloadManager.shared.copyPackageDownloadURL(for: package) { errorMessage, urlString in
+                if let urlString = urlString {
+                    UIPasteboard.general.string = urlString
+                    self.presentPackageAlert(title: String(localizationKey: "Package_Copy_Download_URL_Success"),
+                                             message: nil)
+                } else {
+                    self.presentPackageAlert(title: String(localizationKey: "Unknown", type: .error),
+                                             message: errorMessage)
+                }
+            }
+        }
+        configureSwipeAction(copy,
+                             backgroundColor: .systemBlue,
+                             image: UIImage(systemNameOrNil: "doc.on.doc"))
+        return copy
+    }
+
+    private func downloadToLocalAction(_ package: Package) -> SwipeAction {
+        let download = SwipeAction(style: .default, title: String(localizationKey: "Package_Download_Deb_Action")) { _, _ in
+            self.hapticResponse()
+            self.hideSwipe(animated: true)
+            DownloadManager.shared.savePackageToDownloads(package) { errorMessage, fileURL in
+                DispatchQueue.main.async {
+                    if let fileURL = fileURL {
+                        self.presentPackageAlert(title: String(localizationKey: "Package_Download_Deb_Success_Title"),
+                                                 message: String(format: String(localizationKey: "Package_Download_Deb_Success"), fileURL.path))
+                    } else {
+                        self.presentPackageAlert(title: String(localizationKey: "Unknown", type: .error),
+                                                 message: errorMessage)
+                    }
+                }
+            }
+        }
+        configureSwipeAction(download,
+                             backgroundColor: .systemTeal,
+                             image: UIImage(systemNameOrNil: "arrow.down.circle"))
+        return download
     }
     
     private func uninstallAction(_ package: Package) -> SwipeAction {
@@ -280,7 +387,9 @@ extension PackageCollectionViewCell: SwipeCollectionViewCellDelegate {
             self.hapticResponse()
             self.hideSwipe(animated: true)
         }
-        uninstall.image = UIImage(systemNameOrNil: "trash.circle")
+        configureSwipeAction(uninstall,
+                             backgroundColor: .systemRed,
+                             image: UIImage(systemNameOrNil: "trash.circle"))
         return uninstall
     }
     
@@ -295,8 +404,9 @@ extension PackageCollectionViewCell: SwipeCollectionViewCellDelegate {
             self.hapticResponse()
             self.hideSwipe(animated: true)
         }
-        update.backgroundColor = .systemBlue
-        update.image = UIImage(systemNameOrNil: "icloud.and.arrow.down")
+        configureSwipeAction(update,
+                             backgroundColor: .systemBlue,
+                             image: UIImage(systemNameOrNil: "icloud.and.arrow.down"))
         return update
     }
     
@@ -311,8 +421,9 @@ extension PackageCollectionViewCell: SwipeCollectionViewCellDelegate {
             self.hapticResponse()
             self.hideSwipe(animated: true)
         }
-        reinstall.image = UIImage(systemNameOrNil: "arrow.clockwise.circle")
-        reinstall.backgroundColor = .systemOrange
+        configureSwipeAction(reinstall,
+                             backgroundColor: .systemOrange,
+                             image: UIImage(systemNameOrNil: "arrow.clockwise.circle"))
         return reinstall
     }
 
@@ -356,12 +467,8 @@ extension PackageCollectionViewCell: SwipeCollectionViewCellDelegate {
             self.hapticResponse()
             self.hideSwipe(animated: true)
         }
-        if package.commercial {
-            install.image = UIImage(systemNameOrNil: "dollarsign.circle")
-        } else {
-            install.image = UIImage(systemNameOrNil: "square.and.arrow.down")
-        }
-        install.backgroundColor = .systemGreen
+        let image = package.commercial ? UIImage(systemNameOrNil: "dollarsign.circle") : UIImage(systemNameOrNil: "square.and.arrow.down")
+        configureSwipeAction(install, backgroundColor: .systemGreen, image: image)
         return install
     }
         
@@ -442,10 +549,59 @@ extension PackageCollectionViewCell: SwipeCollectionViewCellDelegate {
     
     private func presentAlert(paymentError: PaymentError?, title: String) {
         DispatchQueue.main.async {
-            UIApplication.shared.windows.last?.rootViewController?.present(PaymentError.alert(for: paymentError,
-                                                                                              title: title),
-                                                                                              animated: true,
-                                                                                              completion: nil)
+            self.presentingViewControllerForAlerts()?.presentSileoAlert(PaymentError.alert(for: paymentError, title: title),
+                                                                        tintColor: .tintColor)
+        }
+    }
+
+    private func presentingViewControllerForAlerts() -> UIViewController? {
+        if let presenter = TabBarController.singleton {
+            return topMostViewController(from: presenter)
+        }
+        guard let window = self.window ?? UIApplication.shared.windows.first(where: { $0.isKeyWindow }) ?? UIApplication.shared.windows.first else {
+            return nil
+        }
+        return topMostViewController(from: window.rootViewController)
+    }
+
+    private func topMostViewController(from root: UIViewController?) -> UIViewController? {
+        var current = root
+        while let presented = current?.presentedViewController {
+            current = presented
+        }
+        if let navigationController = current as? UINavigationController {
+            return topMostViewController(from: navigationController.visibleViewController ?? navigationController.topViewController)
+        }
+        if let tabBarController = current as? UITabBarController {
+            return topMostViewController(from: tabBarController.selectedViewController)
+        }
+        if let splitViewController = current as? UISplitViewController {
+            return topMostViewController(from: splitViewController.viewControllers.last)
+        }
+        return current
+    }
+
+    private func presentPackageAlert(title: String, message: String?) {
+        let present = {
+            let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: String(localizationKey: "OK"), style: .default))
+            let presenter = self.presentingViewControllerForAlerts()
+            if #available(iOS 13.0, *) {
+                switch SileoThemeManager.shared.currentTheme.preferredUserInterfaceStyle {
+                case .light:
+                    alert.overrideUserInterfaceStyle = .light
+                case .dark:
+                    alert.overrideUserInterfaceStyle = .dark
+                default:
+                    alert.overrideUserInterfaceStyle = presenter?.overrideUserInterfaceStyle ?? self.window?.overrideUserInterfaceStyle ?? .unspecified
+                }
+            }
+            presenter?.presentSileoAlert(alert, tintColor: .tintColor)
+        }
+        if Thread.isMainThread {
+            present()
+        } else {
+            DispatchQueue.main.async(execute: present)
         }
     }
     

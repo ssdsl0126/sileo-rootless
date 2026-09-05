@@ -60,3 +60,7 @@
 "Purchase_Auth_Complete_Fail.Title" = "نەیتوانی ڕەسەنایەتی تەواو بکات";
 
 "Couldnt_Import_Themes" = "نەتوانرا ڕوکارەکان هاوردە بکرێت";
+
+"Package_Download_URL_Unavailable" = "ئەم پاکێجە بەستەری دابەزاندنی نییە.";
+"Package_Download_Local_Missing" = "فایلی پاکێجی ناوخۆیی نەدۆزرایەوە.";
+"Package_Download_Save_Failed" = "نەتوانرا پاکێجەکە لە Downloads پاشەکەوت بکرێت.";

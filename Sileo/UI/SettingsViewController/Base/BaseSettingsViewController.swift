@@ -49,13 +49,15 @@ class BaseSettingsViewController: UITableViewController {
         if #available(iOS 26.0, *) {
             SileoGlass.configureScrollSurface(tableView, in: self)
             self.view.backgroundColor = .sileoBackgroundColor
+            self.tableView.backgroundColor = .clear
+            self.tableView.isOpaque = false
+            SileoGlass.removeLegacyBlurMarker(from: self)
         } else {
             self.view.backgroundColor = .white
+            self.tableView.backgroundColor = .sileoBackgroundColor
         }
         
         self.tableView.separatorColor = .clear
-        
-        self.tableView.backgroundColor = .sileoBackgroundColor
         
         NotificationCenter.default.addObserver(self,
                                                selector: #selector(updateSileoColors),
@@ -64,15 +66,21 @@ class BaseSettingsViewController: UITableViewController {
     }
     
     @objc func updateSileoColors() {
-        self.tableView.backgroundColor = .sileoBackgroundColor
         if #available(iOS 26.0, *) {
             self.view.backgroundColor = .sileoBackgroundColor
-            self.tableView.isOpaque = true
+            self.tableView.backgroundColor = .clear
+            self.tableView.isOpaque = false
+        } else {
+            self.tableView.backgroundColor = .sileoBackgroundColor
         }
     }
     
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
-        if #available(iOS 13, *) {
+        if #available(iOS 26.0, *) {
+            self.view.backgroundColor = .sileoBackgroundColor
+            self.tableView.backgroundColor = .clear
+            self.tableView.isOpaque = false
+        } else if #available(iOS 13, *) {
             self.tableView.backgroundColor = .sileoBackgroundColor
         }
     }

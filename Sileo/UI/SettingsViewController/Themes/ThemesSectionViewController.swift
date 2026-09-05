@@ -29,7 +29,7 @@ class ThemesSectionViewController: BaseSettingsViewController {
             print("Imported theme(s)")
         } catch {
             let controller = UIAlertController(title: String(localizationKey: "Couldnt_Import_Themes", type: .error), message: "Error: \(error.localizedDescription)", preferredStyle: .alert)
-            self.present(controller, animated: true, completion: nil)
+            self.presentSileoAlert(controller)
         }
         
     }
@@ -78,8 +78,8 @@ class ThemesSectionViewController: BaseSettingsViewController {
         controller.addAction(.init(title: String(localizationKey: "Cancel"), style: .cancel, handler: { _ in
             controller.dismiss(animated: true, completion: nil)
         }))
-        
-        self.present(controller, animated: true)
+
+        self.presentSileoAlert(controller)
     }
     
     var userThemes: [SileoTheme] {

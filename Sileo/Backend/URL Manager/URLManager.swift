@@ -62,6 +62,7 @@ class URLManager {
                                                             message: String(localizationKey: "No_Package.Body", type: .error),
                                                             preferredStyle: .alert)
                     alertController.addAction(UIAlertAction(title: String(localizationKey: "OK"), style: .cancel, handler: nil))
+                    SileoGlass.configure(alertController: alertController, tintColor: .tintColor)
                     return alertController
                 }
             } else if url.host == "url" && url.absoluteString.count >= 12 {
@@ -83,6 +84,7 @@ class URLManager {
                                                 message: nil,
                                                 preferredStyle: .alert)
         alertController.addAction(UIAlertAction(title: String(localizationKey: "OK"), style: .cancel, handler: nil))
+        SileoGlass.configure(alertController: alertController, tintColor: .tintColor)
         return alertController
     }
     

@@ -244,3 +244,9 @@
 "Whats_Collected" = "What's Collected";
 "Non_Identifying" = "Only package and non-identifying device information is collected.";
 "Privacy_Policy" = "Privacy Policy";
+
+"Package_Copy_Download_URL_Action" = "Copiază linkul";
+"Package_Copy_Download_URL_Success" = "URL-ul de descărcare a fost copiat.";
+"Package_Download_Deb_Action" = "Descarcă";
+"Package_Download_Deb_Success_Title" = "Descărcat";
+"Package_Download_Deb_Success" = "Salvat în %@";

@@ -244,3 +244,9 @@
 "Whats_Collected" = "What's Collected";
 "Non_Identifying" = "Only package and non-identifying device information is collected.";
 "Privacy_Policy" = "Privacy Policy";
+
+"Package_Copy_Download_URL_Action" = "Kopírovat odkaz";
+"Package_Copy_Download_URL_Success" = "Odkaz ke stažení byl zkopírován.";
+"Package_Download_Deb_Action" = "Stáhnout";
+"Package_Download_Deb_Success_Title" = "Staženo";
+"Package_Download_Deb_Success" = "Uloženo do %@";

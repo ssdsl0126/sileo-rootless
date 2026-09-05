@@ -106,7 +106,7 @@ class PaymentProfileViewController: BaseSettingsViewController, UICollectionView
                 }
             }
         })
-        self.present(alert, animated: true)
+        self.presentSileoAlert(alert)
     }
 }
 
@@ -193,7 +193,7 @@ extension PaymentProfileViewController { // Table View Delegate
                 popoverController.sourceView = cellcv
                 popoverController.sourceRect = CGRect(x: cellcv.bounds.midX, y: cellcv.bounds.midY, width: 0, height: 0)
             }
-            self.present(alert, animated: true)
+            self.presentSileoAlert(alert)
         }
         tableView.deselectRow(at: indexPath, animated: true)
     }

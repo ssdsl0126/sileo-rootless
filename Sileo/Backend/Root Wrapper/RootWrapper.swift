@@ -309,3 +309,24 @@ func moveFileAsRoot(from: URL, to: URL) {
     #endif
 }
 
+func ensureDirectoryAsRoot(_ url: URL, owner: String = CommandPath.group) {
+    #if targetEnvironment(simulator) || TARGET_SANDBOX
+    try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+    #else
+    spawnAsRoot(args: [CommandPath.mkdir, "-p", "\(url.path)"])
+    spawnAsRoot(args: [CommandPath.chown, owner, "\(url.path)"])
+    spawnAsRoot(args: [CommandPath.chmod, "0755", "\(url.path)"])
+    #endif
+}
+
+func copyFileAsRoot(from: URL, to: URL, owner: String = CommandPath.group) {
+    deleteFileAsRoot(to)
+
+    #if targetEnvironment(simulator) || TARGET_SANDBOX
+    try? FileManager.default.copyItem(at: from, to: to)
+    #else
+    spawnAsRoot(args: [CommandPath.cp, "-f", "\(from.path)", "\(to.path)"])
+    spawnAsRoot(args: [CommandPath.chown, owner, "\(to.path)"])
+    spawnAsRoot(args: [CommandPath.chmod, "0644", "\(to.path)"])
+    #endif
+}

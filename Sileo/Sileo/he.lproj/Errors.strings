@@ -59,3 +59,7 @@
 "Purchase_Auth_Complete_Fail.Title" = "לא ניתן להשלים את פעולת האימות";
 
 "Couldnt_Import_Themes" = "Couldn't Import theme(s)";
+
+"Package_Download_URL_Unavailable" = "לחבילה זו אין קישור הורדה.";
+"Package_Download_Local_Missing" = "קובץ החבילה המקומי לא נמצא.";
+"Package_Download_Save_Failed" = "לא ניתן לשמור את החבילה בתיקיית Downloads.";

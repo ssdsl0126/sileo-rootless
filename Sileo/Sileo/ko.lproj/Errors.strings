@@ -59,3 +59,7 @@
 "Purchase_Auth_Complete_Fail.Title" = "인증을 완료할 수 없습니다";
 
 "Couldnt_Import_Themes" = "Couldn't Import theme(s)";
+
+"Package_Download_URL_Unavailable" = "이 패키지에는 다운로드 URL이 없습니다.";
+"Package_Download_Local_Missing" = "로컬 패키지 파일을 찾을 수 없습니다.";
+"Package_Download_Save_Failed" = "패키지를 Downloads에 저장할 수 없습니다.";

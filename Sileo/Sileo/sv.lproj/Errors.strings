@@ -59,3 +59,7 @@
 "Purchase_Auth_Complete_Fail.Title" = "Kunde Ej Genomföra Autentisering";
 
 "Couldnt_Import_Themes" = "Couldn't Import theme(s)";
+
+"Package_Download_URL_Unavailable" = "Det här paketet har ingen nedladdningsadress.";
+"Package_Download_Local_Missing" = "Den lokala paketfilen hittades inte.";
+"Package_Download_Save_Failed" = "Paketet kunde inte sparas i Downloads.";

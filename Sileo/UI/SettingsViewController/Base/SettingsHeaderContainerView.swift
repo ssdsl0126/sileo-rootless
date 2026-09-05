@@ -69,6 +69,11 @@ class SettingsHeaderContainerView: UIView {
         blurView.frame = self.bounds
         self.addSubview(blurView)
         self.blurView = blurView
+        if #available(iOS 26.0, *) {
+            // iOS 26 的导航区域由 UINavigationBar 提供玻璃，旧的整块标题 blur 会遮住它。
+            blurView.effect = nil
+            blurView.isHidden = true
+        }
         
         let colourInfluenceView: UIView = UIView()
         colourInfluenceView.autoresizingMask = [.flexibleHeight, .flexibleWidth]
@@ -89,6 +94,9 @@ class SettingsHeaderContainerView: UIView {
         let separatorView: UIView = UIView()
         separatorView.translatesAutoresizingMaskIntoConstraints = false
         separatorView.backgroundColor = UIColor(white: 0, alpha: 0.07)
+        if #available(iOS 26.0, *) {
+            separatorView.isHidden = true
+        }
         self.addSubview(separatorView)
         
         separatorView.leftAnchor.constraint(equalTo: self.leftAnchor).isActive = true
@@ -100,9 +108,14 @@ class SettingsHeaderContainerView: UIView {
     
     @objc func updateSileoColors() {
         if let blurView = blurView {
-            SileoGlass.update(blurView,
-                              tintColor: UIColor.sileoHeaderColor,
-                              fallbackStyle: .light)
+            if #available(iOS 26.0, *) {
+                blurView.effect = nil
+                blurView.isHidden = true
+            } else {
+                SileoGlass.update(blurView,
+                                  tintColor: UIColor.sileoHeaderColor,
+                                  fallbackStyle: .light)
+            }
         }
         if #available(iOS 26.0, *) {
             colorInfluenceView?.backgroundColor = .clear

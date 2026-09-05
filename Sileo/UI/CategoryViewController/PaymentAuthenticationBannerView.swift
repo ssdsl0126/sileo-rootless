@@ -88,9 +88,8 @@ final class PaymentAuthenticationBannerView: UIView {
         PaymentAuthenticator.shared.authenticate(provider: provider, window: self.window) { [weak self] error, success in
             guard let self = self else { return }
             if let error = error {
-                self.viewController?.present(PaymentError.alert(for: error,
-                                                                title: String(localizationKey: "Provider_Auth_Fail.Title", type: .error)),
-                                            animated: true, completion: nil)
+                self.viewController?.presentSileoAlert(PaymentError.alert(for: error,
+                                                                           title: String(localizationKey: "Provider_Auth_Fail.Title", type: .error)))
                 return
             }
             if success {

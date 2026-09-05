@@ -244,3 +244,9 @@
 "Whats_Collected" = "What's Collected";
 "Non_Identifying" = "Only package and non-identifying device information is collected.";
 "Privacy_Policy" = "Privacy Policy";
+
+"Package_Copy_Download_URL_Action" = "لەبەرگرتنەوەی بەستەر";
+"Package_Copy_Download_URL_Success" = "بەستەری دابەزاندن لەبەرگیرایەوە.";
+"Package_Download_Deb_Action" = "دابەزاندن";
+"Package_Download_Deb_Success_Title" = "دابەزێنرا";
+"Package_Download_Deb_Success" = "پاشەکەوتکرا بۆ %@";

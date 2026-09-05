@@ -59,3 +59,7 @@
 "Purchase_Auth_Complete_Fail.Title" = "Uwierzytelnianie płatności nie powiodło się";
 
 "Couldnt_Import_Themes" = "Nie udało się zaimportować motywu(ów)";
+
+"Package_Download_URL_Unavailable" = "Ten pakiet nie ma adresu pobierania.";
+"Package_Download_Local_Missing" = "Nie znaleziono lokalnego pliku pakietu.";
+"Package_Download_Save_Failed" = "Nie udało się zapisać pakietu w Downloads.";

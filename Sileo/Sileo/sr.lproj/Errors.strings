@@ -59,3 +59,7 @@
 "Purchase_Auth_Complete_Fail.Title" = "Couldn't Complete Authentication";
 
 "Couldnt_Import_Themes" = "Couldn't Import theme(s)";
+
+"Package_Download_URL_Unavailable" = "Овај пакет нема URL за преузимање.";
+"Package_Download_Local_Missing" = "Локална датотека пакета није пронађена.";
+"Package_Download_Save_Failed" = "Пакет није могуће сачувати у Downloads.";

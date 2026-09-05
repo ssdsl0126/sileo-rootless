@@ -59,6 +59,10 @@ hook(_UIVisualEffectSubview)
 }
 
 - (void)setBackgroundColor:(UIColor *)backgroundColor {
+    if (@available(iOS 26.0, *)) {
+        _orig(void, backgroundColor);
+        return;
+    }
     if (@available(iOS 13, *)){
         
     } else {

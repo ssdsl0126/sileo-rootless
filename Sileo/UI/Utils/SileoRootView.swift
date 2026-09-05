@@ -130,6 +130,120 @@ enum SileoGlass {
         barButtonItem.sharesBackground = true
     }
 
+    /// iOS 26 不再稳定地让弹窗操作继承控制器 tint，需要在生成首帧前写入操作颜色。
+    static func configure(alertController: UIAlertController, tintColor: UIColor) {
+        guard #available(iOS 26.0, *) else {
+            return
+        }
+
+        let resolvedTint = tintColor.resolvedColor(with: alertController.traitCollection)
+        applyAlertTint(to: alertController, tintColor: resolvedTint)
+
+        // iPhone 和 iPad 的 26 弹窗都会在 present 后再生成玻璃按钮，需要在下一帧再刷一次。
+        DispatchQueue.main.async {
+            applyAlertTint(to: alertController, tintColor: resolvedTint)
+            if UIDevice.current.userInterfaceIdiom == .pad {
+                // iPadOS 26 会把 alert 放进独立 presentation container，split 布局完成后再刷一次。
+                DispatchQueue.main.async {
+                    applyAlertTint(to: alertController, tintColor: resolvedTint)
+                }
+            }
+        }
+    }
+
+    /// 保留已有调用入口，统一转发到同时覆盖 alert 与 action sheet 的实现。
+    static func configure(actionSheet: UIAlertController, tintColor: UIColor) {
+        configure(alertController: actionSheet, tintColor: tintColor)
+    }
+
+    @available(iOS 26.0, *)
+    private static func applyAlertTint(to alertController: UIAlertController, tintColor: UIColor) {
+        alertController.view.tintColor = tintColor
+        alertController.view.tintAdjustmentMode = .normal
+
+        // UIKit 没有公开 UIAlertAction 的标题颜色接口；Sileo 本身不通过 App Store 分发，
+        // 因而在 iOS 26+ 写入 UIKit 已长期提供的 KVC 属性，确保动画第一帧就是主题色。
+        alertController.actions.forEach { action in
+            guard action.isEnabled, action.style != .destructive else {
+                return
+            }
+            action.setValue(tintColor, forKey: "titleTextColor")
+        }
+
+        alertController.view.setNeedsLayout()
+        alertController.view.layoutIfNeeded()
+
+        let tintedActionTitles = Set(alertController.actions.compactMap { action -> String? in
+            guard action.isEnabled, action.style != .destructive else {
+                return nil
+            }
+            return action.title
+        })
+        applyAlertTint(in: alertController.view,
+                       actionTitles: tintedActionTitles,
+                       tintColor: tintColor)
+
+        if UIDevice.current.userInterfaceIdiom == .pad,
+           let containerView = alertController.presentationController?.containerView {
+            applyAlertTint(in: containerView,
+                           actionTitles: tintedActionTitles,
+                           tintColor: tintColor)
+        }
+    }
+
+    @available(iOS 26.0, *)
+    private static func applyAlertTint(in view: UIView,
+                                       actionTitles: Set<String>,
+                                       tintColor: UIColor,
+                                       insideActionChrome: Bool = false) {
+        let className = NSStringFromClass(type(of: view))
+        let isActionChrome = insideActionChrome ||
+            className.contains("Action") ||
+            className.contains("InterfaceAction")
+
+        if let label = view as? UILabel {
+            let labelText = label.text ?? label.attributedText?.string
+            if isActionChrome || (labelText != nil && actionTitles.contains(labelText ?? "")) {
+                label.tintAdjustmentMode = .normal
+                label.tintColor = tintColor
+                label.textColor = tintColor
+            }
+        }
+
+        if let button = view as? UIButton {
+            let buttonTitle = button.title(for: .normal)
+                ?? button.configuration?.title
+                ?? button.configuration?.attributedTitle.map { String($0.characters) }
+            if isActionChrome || (buttonTitle != nil && actionTitles.contains(buttonTitle ?? "")) {
+                applyAlertTint(to: button, tintColor: tintColor)
+            }
+        }
+
+        view.subviews.forEach {
+            applyAlertTint(in: $0,
+                           actionTitles: actionTitles,
+                           tintColor: tintColor,
+                           insideActionChrome: isActionChrome)
+        }
+    }
+
+    @available(iOS 26.0, *)
+    private static func applyAlertTint(to button: UIButton, tintColor: UIColor) {
+        button.tintAdjustmentMode = .normal
+        button.tintColor = tintColor
+        button.setTitleColor(tintColor, for: .normal)
+        button.setTitleColor(tintColor, for: .highlighted)
+        if var configuration = button.configuration {
+            configuration.baseForegroundColor = tintColor
+            configuration.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { incoming in
+                var outgoing = incoming
+                outgoing.foregroundColor = tintColor
+                return outgoing
+            }
+            button.configuration = configuration
+        }
+    }
+
     /// 为 iOS 26 的列表建立连续内容面，避免滚动回弹时露出第二套背景层。
     static func configureScrollSurface(_ scrollView: UIScrollView,
                                        in viewController: UIViewController) {
@@ -141,7 +255,8 @@ enum SileoGlass {
         viewController.view.backgroundColor = surfaceColor
         let usesTopGlassTransition = viewController is NewsViewController ||
             viewController is PackageListViewController ||
-            viewController is SourcesViewController
+            viewController is SourcesViewController ||
+            viewController.navigationController is SettingsNavigationController
         if usesTopGlassTransition {
             // 这三个列表页需要让系统导航玻璃连续取景。
             scrollView.backgroundColor = .clear
@@ -151,10 +266,10 @@ enum SileoGlass {
             scrollView.backgroundColor = surfaceColor
             scrollView.isOpaque = true
         }
-        // iOS 26 的导航栏与标签栏必须观察同一个滚动视图，保持上下玻璃边界连续。
+        // 导航栏和标签栏观察同一内容面，避免 UIKit 用启发式选中其它滚动视图。
         viewController.setContentScrollView(scrollView, for: .top)
-        viewController.setContentScrollView(scrollView, for: .bottom)
         viewController.navigationController?.setContentScrollView(scrollView, for: .top)
+        viewController.setContentScrollView(scrollView, for: .bottom)
         viewController.navigationController?.setContentScrollView(scrollView, for: .bottom)
     }
 
@@ -212,8 +327,6 @@ enum SileoGlass {
         surfaceView.cornerConfiguration = .capsule()
         surfaceView.backgroundColor = .clear
         let glassEffect = UIGlassEffect(style: .regular)
-        // 小胶囊需要比整块内容面更稳定，降低底下图标和进度线的穿透感。
-        glassEffect.tintColor = UIColor.sileoBackgroundColor.withAlphaComponent(0.65)
         surfaceView.effect = glassEffect
         surfaceView.isHidden = element.isHidden
         headerView.bringSubviewToFront(surfaceView)
@@ -258,6 +371,7 @@ enum SileoGlass {
 
         // 原控件保留布局和点击能力，文字由胶囊里的居中标签负责显示。
         if let label = element as? UILabel {
+            label.alpha = 0
             label.textColor = .clear
         } else if let button = element as? UIButton {
             button.setTitleColor(.clear, for: .normal)
@@ -312,5 +426,31 @@ enum SileoGlass {
             return
         }
         viewController.navigationController?.navigationBar.superview?.tag = 0
+    }
+}
+
+extension UIViewController {
+    /// 统一展示 Sileo 弹窗；iOS 26+ 在转场首帧前恢复主题操作色。
+    func presentSileoAlert(_ alertController: UIAlertController,
+                           animated: Bool = true,
+                           tintColor: UIColor = .tintColor,
+                           completion: (() -> Void)? = nil) {
+        if #available(iOS 13.0, *) {
+            switch SileoThemeManager.shared.currentTheme.preferredUserInterfaceStyle {
+            case .light:
+                alertController.overrideUserInterfaceStyle = .light
+            case .dark:
+                alertController.overrideUserInterfaceStyle = .dark
+            default:
+                alertController.overrideUserInterfaceStyle = overrideUserInterfaceStyle
+            }
+        }
+        SileoGlass.configure(alertController: alertController, tintColor: tintColor)
+        present(alertController, animated: animated) {
+            SileoGlass.configure(alertController: alertController, tintColor: tintColor)
+            completion?()
+        }
+        // present 会同步安装弹窗视图层级，在进入下一次绘制前再覆盖一次新生成的按钮。
+        SileoGlass.configure(alertController: alertController, tintColor: tintColor)
     }
 }

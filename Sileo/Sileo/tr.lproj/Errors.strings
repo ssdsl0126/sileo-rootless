@@ -59,3 +59,7 @@
 "Purchase_Auth_Complete_Fail.Title" = "Kimlik Doğrulama Tamamlanamadı";
 
 "Couldnt_Import_Themes" = "Tema(lar) İçe Aktarılamadı";
+
+"Package_Download_URL_Unavailable" = "Bu paketin bir indirme URL’si yok.";
+"Package_Download_Local_Missing" = "Yerel paket dosyası bulunamadı.";
+"Package_Download_Save_Failed" = "Paket Downloads klasörüne kaydedilemedi.";

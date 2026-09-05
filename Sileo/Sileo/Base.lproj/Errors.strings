@@ -23,6 +23,10 @@
 
 "Insecure_Paid_Download" = "Payment-authorized package download URLs must be secure (HTTPS).";
 
+"Package_Download_URL_Unavailable" = "This package does not have a download URL.";
+"Package_Download_Local_Missing" = "The local package file could not be found.";
+"Package_Download_Save_Failed" = "Couldn't save the package to Downloads.";
+
 "Invalid_Payment_Provider_Response" = "The payment provider issued an invalid response.";
 "No_Payment_Provider" = "This repo does not support Sileo purchases. If this is a Cydia Store package that you have already purchased, you may link your account to download it.";
 

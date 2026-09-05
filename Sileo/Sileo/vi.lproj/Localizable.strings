@@ -244,3 +244,9 @@
 "Whats_Collected" = "What's Collected";
 "Non_Identifying" = "Only package and non-identifying device information is collected.";
 "Privacy_Policy" = "Privacy Policy";
+
+"Package_Copy_Download_URL_Action" = "Sao chép liên kết";
+"Package_Copy_Download_URL_Success" = "Đã sao chép liên kết tải xuống.";
+"Package_Download_Deb_Action" = "Tải xuống";
+"Package_Download_Deb_Success_Title" = "Đã tải xuống";
+"Package_Download_Deb_Success" = "Đã lưu vào %@";

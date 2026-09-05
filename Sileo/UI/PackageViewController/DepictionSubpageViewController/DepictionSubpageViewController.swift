@@ -86,7 +86,7 @@ class DepictionSubpageViewController: UIViewController {
         alertController.addAction(UIAlertAction(title: String(localizationKey: "OK"), style: .cancel, handler: { _ in
             self.dismiss(animated: true, completion: nil)
         }))
-        self.present(alertController, animated: true, completion: nil)
+        self.presentSileoAlert(alertController)
     }
 
     func subviewHeightChanged() {

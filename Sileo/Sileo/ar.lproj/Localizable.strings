@@ -244,3 +244,9 @@
 "Whats_Collected" = "مالذي يتم جمعه";
 "Non_Identifying" = "فقط معلومات عن الحزم وبعض المعلومات عن الجهاز غير الحساسة هي التي يتم جمعها.";
 "Privacy_Policy" = "سياسة الخصوصية";
+
+"Package_Copy_Download_URL_Action" = "نسخ الرابط";
+"Package_Copy_Download_URL_Success" = "تم نسخ رابط التنزيل.";
+"Package_Download_Deb_Action" = "تنزيل";
+"Package_Download_Deb_Success_Title" = "تم التنزيل";
+"Package_Download_Deb_Success" = "تم الحفظ في %@";

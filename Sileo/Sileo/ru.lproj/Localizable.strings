@@ -244,3 +244,9 @@
 "Whats_Collected" = "What's Collected";
 "Non_Identifying" = "Only package and non-identifying device information is collected.";
 "Privacy_Policy" = "Privacy Policy";
+
+"Package_Copy_Download_URL_Action" = "Скопировать ссылку";
+"Package_Copy_Download_URL_Success" = "Ссылка для загрузки скопирована.";
+"Package_Download_Deb_Action" = "Скачать";
+"Package_Download_Deb_Success_Title" = "Скачано";
+"Package_Download_Deb_Success" = "Сохранено в %@";

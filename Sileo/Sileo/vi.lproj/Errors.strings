@@ -59,3 +59,7 @@
 "Purchase_Auth_Complete_Fail.Title" = "Không thể hoàn thành xác thực";
 
 "Couldnt_Import_Themes" = "Không thể nhập theme";
+
+"Package_Download_URL_Unavailable" = "Gói này không có URL tải xuống.";
+"Package_Download_Local_Missing" = "Không tìm thấy tệp gói cục bộ.";
+"Package_Download_Save_Failed" = "Không thể lưu gói vào Downloads.";

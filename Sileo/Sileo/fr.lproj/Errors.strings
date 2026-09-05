@@ -59,3 +59,7 @@
 "Purchase_Auth_Complete_Fail.Title" = "Impossible de compléter la vérification";
 
 "Couldnt_Import_Themes" = "Couldn't Import theme(s)";
+
+"Package_Download_URL_Unavailable" = "Ce paquet n’a pas d’URL de téléchargement.";
+"Package_Download_Local_Missing" = "Le fichier local du paquet est introuvable.";
+"Package_Download_Save_Failed" = "Impossible d’enregistrer le paquet dans Downloads.";

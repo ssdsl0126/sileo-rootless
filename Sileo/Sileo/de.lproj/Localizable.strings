@@ -246,3 +246,9 @@ Die Quelle ist möglicherweise offline oder du hast sie falsch eingegeben. Möch
 "Whats_Collected" = "Was wurde gesammelt";
 "Non_Identifying" = "Es werden nur Paket- und nicht identifizierende Geräteinformationen gesammelt.";
 "Privacy_Policy" = "Datenschutzerklärung";
+
+"Package_Copy_Download_URL_Action" = "Link kopieren";
+"Package_Copy_Download_URL_Success" = "Download-URL kopiert.";
+"Package_Download_Deb_Action" = "Herunterladen";
+"Package_Download_Deb_Success_Title" = "Heruntergeladen";
+"Package_Download_Deb_Success" = "Gespeichert unter %@";

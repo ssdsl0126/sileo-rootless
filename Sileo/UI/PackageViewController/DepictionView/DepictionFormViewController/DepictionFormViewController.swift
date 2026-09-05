@@ -214,7 +214,7 @@ class DepictionFormViewController: SileoTableViewController {
                         strong.dismiss(animated: true, completion: nil)
                     }
                 }))
-                strong.present(alert, animated: true, completion: nil)
+                strong.presentSileoAlert(alert)
             }
         }
     }
@@ -233,7 +233,7 @@ class DepictionFormViewController: SileoTableViewController {
                                             self.dismiss(animated: true, completion: nil)
                                         }
         }))
-        self.present(alert, animated: true, completion: nil)
+        self.presentSileoAlert(alert)
     }
 
     override func numberOfSections(in tableView: UITableView) -> Int {

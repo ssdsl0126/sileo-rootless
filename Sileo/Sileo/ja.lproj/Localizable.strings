@@ -244,3 +244,9 @@
 "Whats_Collected" = "What's Collected";
 "Non_Identifying" = "Only package and non-identifying device information is collected.";
 "Privacy_Policy" = "Privacy Policy";
+
+"Package_Copy_Download_URL_Action" = "リンクをコピー";
+"Package_Copy_Download_URL_Success" = "ダウンロード URL をコピーしました。";
+"Package_Download_Deb_Action" = "ダウンロード";
+"Package_Download_Deb_Success_Title" = "ダウンロード完了";
+"Package_Download_Deb_Success" = "%@ に保存しました";

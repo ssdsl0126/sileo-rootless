@@ -45,6 +45,7 @@ class PaymentError: CustomStringConvertible {
             }))
         }
         
+        SileoGlass.configure(alertController: alert, tintColor: .tintColor)
         return alert
     }
     

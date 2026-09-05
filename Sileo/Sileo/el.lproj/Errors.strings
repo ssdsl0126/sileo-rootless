@@ -59,3 +59,7 @@
 "Purchase_Auth_Complete_Fail.Title" = "Couldn't Complete Authentication";
 
 "Couldnt_Import_Themes" = "Couldn't Import theme(s)";
+
+"Package_Download_URL_Unavailable" = "Αυτό το πακέτο δεν έχει διεύθυνση λήψης.";
+"Package_Download_Local_Missing" = "Το τοπικό αρχείο πακέτου δεν βρέθηκε.";
+"Package_Download_Save_Failed" = "Δεν ήταν δυνατή η αποθήκευση του πακέτου στο Downloads.";

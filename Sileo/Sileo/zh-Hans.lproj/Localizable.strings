@@ -68,6 +68,12 @@
 "Package_Wishlist_Remove" = "从愿望清单中删除";
 "Wishlist" = "愿望清单";
 
+"Package_Copy_Download_URL_Action" = "复制链接";
+"Package_Copy_Download_URL_Success" = "已复制下载链接。";
+"Package_Download_Deb_Action" = "下载";
+"Package_Download_Deb_Success_Title" = "下载完成";
+"Package_Download_Deb_Success" = "已保存到 %@";
+
 "No_New_Packages" = "没有新的软件包";
 "News_Check_Later" = "还没有新的软件包被列出。等数个小时后再回来，随着软件源更新，你应该会看到这里开始出现软件包。";
 

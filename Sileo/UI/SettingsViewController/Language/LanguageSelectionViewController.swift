@@ -67,8 +67,7 @@ class LanguageSelectionViewController: BaseSettingsViewController, LanguageSelec
         alert.addAction(UIAlertAction(title: String(localizationKey: "Cancel"), style: .cancel, handler: { _ in
             alert.dismiss(animated: true)
         }))
-        alert.view.tintColor = .tintColor
-        self.present(alert, animated: true)
+        self.presentSileoAlert(alert)
     }
 
     // MARK: - Table view data source

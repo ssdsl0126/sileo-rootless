@@ -59,3 +59,7 @@
 "Purchase_Auth_Complete_Fail.Title" = "Couldn't Complete Authentication";
 
 "Couldnt_Import_Themes" = "Couldn't Import theme(s)";
+
+"Package_Download_URL_Unavailable" = "Hierdie pakket het nie 'n aflaaikakel nie.";
+"Package_Download_Local_Missing" = "Die plaaslike pakketlêer kon nie gevind word nie.";
+"Package_Download_Save_Failed" = "Kon nie die pakket in Downloads stoor nie.";

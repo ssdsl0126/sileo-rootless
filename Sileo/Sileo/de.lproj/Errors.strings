@@ -59,3 +59,7 @@
 "Purchase_Auth_Complete_Fail.Title" = "Authentifizierung konnte nicht durchgeführt werden";
 
 "Couldnt_Import_Themes" = "Konnte Theme(s) nicht importieren";
+
+"Package_Download_URL_Unavailable" = "Dieses Paket hat keine Download-URL.";
+"Package_Download_Local_Missing" = "Die lokale Paketdatei wurde nicht gefunden.";
+"Package_Download_Save_Failed" = "Das Paket konnte nicht in Downloads gespeichert werden.";

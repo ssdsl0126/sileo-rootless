@@ -111,10 +111,8 @@ class PackageQueueButton: PackageButton {
             downgradePrompt.popoverPresentationController?.sourceView = self
         }
         let tintColor = self.tintColor
-        downgradePrompt.view.tintColor = tintColor
-        viewControllerForPresentation?.present(downgradePrompt, animated: true, completion: {
-            downgradePrompt.view.tintColor = tintColor
-        })
+        viewControllerForPresentation?.presentSileoAlert(downgradePrompt,
+                                                         tintColor: tintColor ?? .tintColor)
     }
     
     @objc func updateInfo() {
@@ -291,9 +289,10 @@ class PackageQueueButton: PackageButton {
     
     private func addRepo(_ url: URL) {
         if let tabBarController = self.window?.rootViewController as? UITabBarController,
-            let sourcesSVC = tabBarController.viewControllers?[2] as? UISplitViewController,
-              let sourcesNavNV = sourcesSVC.viewControllers[0] as? SileoNavigationController {
-              tabBarController.selectedViewController = sourcesSVC
+            let sourcesNavNV = (tabBarController.viewControllers?[2] as? SileoNavigationController) ??
+                (tabBarController.viewControllers?[2] as? UISplitViewController)?.viewControllers[0] as? SileoNavigationController,
+            let targetVC = tabBarController.viewControllers?[2] {
+              tabBarController.selectedViewController = targetVC
               if let sourcesVC = sourcesNavNV.viewControllers[0] as? SourcesViewController {
                 sourcesVC.presentAddSourceEntryField(url: url)
               }
@@ -351,14 +350,8 @@ class PackageQueueButton: PackageButton {
                 downloadPopup.popoverPresentationController?.sourceView = self
             }
             let tintColor: UIColor! = self.tintColor
-            if tintColor != nil {
-                downloadPopup.view.tintColor = tintColor
-            }
-            self.viewControllerForPresentation?.present(downloadPopup, animated: true, completion: {
-                if tintColor != nil {
-                    downloadPopup.view.tintColor = tintColor
-                }
-            })
+            self.viewControllerForPresentation?.presentSileoAlert(downloadPopup,
+                                                                  tintColor: tintColor ?? .tintColor)
         } else {
             // here's new packages not yet queued
             if let repo = package.sourceRepo,
@@ -435,9 +428,8 @@ class PackageQueueButton: PackageButton {
     
     private func presentAlert(paymentError: PaymentError?, title: String) {
         DispatchQueue.main.async {
-            self.viewControllerForPresentation?.present(PaymentError.alert(for: paymentError, title: title),
-                                                        animated: true,
-                                                        completion: nil)
+            self.viewControllerForPresentation?.presentSileoAlert(PaymentError.alert(for: paymentError,
+                                                                                      title: title))
         }
     }
     

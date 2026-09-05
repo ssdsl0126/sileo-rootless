@@ -244,3 +244,9 @@
 "Whats_Collected" = "Jakie dane zbieramy";
 "Non_Identifying" = "Gromadzone są jedynie dane o pakietach i nieidentyfikujące informacje.";
 "Privacy_Policy" = "Polityka Prywatności";
+
+"Package_Copy_Download_URL_Action" = "Kopiuj link";
+"Package_Copy_Download_URL_Success" = "Skopiowano adres pobierania.";
+"Package_Download_Deb_Action" = "Pobierz";
+"Package_Download_Deb_Success_Title" = "Pobrano";
+"Package_Download_Deb_Success" = "Zapisano w %@";

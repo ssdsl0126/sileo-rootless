@@ -59,3 +59,7 @@
 "Purchase_Auth_Complete_Fail.Title" = "Kon Authenticatie Niet Voltooien";
 
 "Couldnt_Import_Themes" = "Couldn't Import theme(s)";
+
+"Package_Download_URL_Unavailable" = "Dit pakket heeft geen download-URL.";
+"Package_Download_Local_Missing" = "Het lokale pakketbestand is niet gevonden.";
+"Package_Download_Save_Failed" = "Het pakket kon niet in Downloads worden opgeslagen.";

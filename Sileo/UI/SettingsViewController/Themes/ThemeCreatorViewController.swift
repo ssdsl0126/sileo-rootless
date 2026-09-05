@@ -156,7 +156,7 @@ class ThemeCreatorViewController: BaseSettingsViewController {
             guard let themeName = themeName else {
                 let controller = UIAlertController(title: "Please set a name.", message: nil, preferredStyle: .alert)
                 controller.addAction(.init(title: "OK", style: .cancel))
-                self.present(controller, animated: true, completion: nil)
+                self.presentSileoAlert(controller)
                 return
             }
             
@@ -164,7 +164,7 @@ class ThemeCreatorViewController: BaseSettingsViewController {
             guard !SileoThemeManager.shared.themeList.contains(where: { $0.name == themeName || String(localizationKey: $0.name) == themeName }) else {
                 let controller = UIAlertController(title: "Cannot use name", message: "The name \"\(themeName)\" is already being used", preferredStyle: .alert)
                 controller.addAction(.init(title: "OK", style: .cancel, handler: nil))
-                self.present(controller, animated: true, completion: nil)
+                self.presentSileoAlert(controller)
                 return
             }
             

@@ -68,6 +68,12 @@
 "Package_Wishlist_Remove" = "Remove from Wishlist";
 "Wishlist" = "Wishlist";
 
+"Package_Copy_Download_URL_Action" = "Copy Link";
+"Package_Copy_Download_URL_Success" = "Download URL copied.";
+"Package_Download_Deb_Action" = "Download";
+"Package_Download_Deb_Success_Title" = "Downloaded";
+"Package_Download_Deb_Success" = "Saved to %@";
+
 "No_New_Packages" = "No New Packages";
 "News_Check_Later" = "There are no new packages indexed yet. Come back in a few hours and you should see packages start showing up here as repos get updated.";
 

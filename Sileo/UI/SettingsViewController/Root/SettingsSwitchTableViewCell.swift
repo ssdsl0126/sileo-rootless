@@ -69,9 +69,9 @@ class SettingsSwitchTableViewCell: UITableViewCell {
                     UserDefaults.standard.setValue(sender.isOn, forKey: key); NotificationCenter.default.post(name: Notification.Name(key), object: nil)
                     let alert = UIAlertController(title: String(localizationKey: "Pog_Developer"), message: nil, preferredStyle: .alert)
                     alert.addAction(UIAlertAction(title: String(localizationKey: "OK"), style: .default))
-                    view.present(alert, animated: true)
+                    view.presentSileoAlert(alert)
                 })
-                view.present(alert, animated: true)
+                view.presentSileoAlert(alert)
             } else {
                 UserDefaults.standard.setValue(sender.isOn, forKey: key)
                 NotificationCenter.default.post(name: Notification.Name(key), object: nil)

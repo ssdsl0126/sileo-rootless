@@ -180,3 +180,9 @@
 
 // Depcitions
 "View_Depiction" = "View Depiction";
+
+"Package_Copy_Download_URL_Action" = "Kopiér link";
+"Package_Copy_Download_URL_Success" = "Downloadlink kopieret.";
+"Package_Download_Deb_Action" = "Download";
+"Package_Download_Deb_Success_Title" = "Downloadet";
+"Package_Download_Deb_Success" = "Gemt til %@";

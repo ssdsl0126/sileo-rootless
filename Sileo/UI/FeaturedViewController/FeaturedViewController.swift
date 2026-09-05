@@ -73,7 +73,7 @@ final class FeaturedViewController: SileoViewController, UIScrollViewDelegate, F
                         let alertController = UIAlertController(title: String(localizationKey: "Installation_Error.Title", type: .error),
                                                                 message: "\(String(localizationKey: "Installation_Error.Body", type: .error))\n Output = \(output)\n Status = \(status)",
                                                                 preferredStyle: .alert)
-                        self.present(alertController, animated: true, completion: nil)
+                        self.presentSileoAlert(alertController)
                     }
                 }
             }
@@ -90,7 +90,7 @@ final class FeaturedViewController: SileoViewController, UIScrollViewDelegate, F
                     let alertController = UIAlertController(title: String(localizationKey: "FixingDpkg.Title", type: .error),
                                                             message: String(localizationKey: "FixingDpkg.Body", type: .error),
                                                             preferredStyle: .alert)
-                    self.present(alertController, animated: true, completion: nil)
+                    self.presentSileoAlert(alertController)
                 }
                 
                 DispatchQueue.global(qos: .default).async {
@@ -225,7 +225,7 @@ final class FeaturedViewController: SileoViewController, UIScrollViewDelegate, F
         alertController.addAction(UIAlertAction(title: String(localizationKey: "OK"), style: .cancel, handler: { _ in
             self.dismiss(animated: true, completion: nil)
         }))
-        self.present(alertController, animated: true, completion: nil)
+        self.presentSileoAlert(alertController)
     }
     
     @objc func updateSileoColors() {

@@ -244,3 +244,9 @@
 "Whats_Collected" = "What's Collected";
 "Non_Identifying" = "Only package and non-identifying device information is collected.";
 "Privacy_Policy" = "Privacy Policy";
+
+"Package_Copy_Download_URL_Action" = "Salin pautan";
+"Package_Copy_Download_URL_Success" = "URL muat turun disalin.";
+"Package_Download_Deb_Action" = "Muat turun";
+"Package_Download_Deb_Success_Title" = "Dimuat turun";
+"Package_Download_Deb_Success" = "Disimpan ke %@";

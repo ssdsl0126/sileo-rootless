@@ -244,3 +244,9 @@
 "Whats_Collected" = "What's Collected";
 "Non_Identifying" = "Only package and non-identifying device information is collected.";
 "Privacy_Policy" = "Privacy Policy";
+
+"Package_Copy_Download_URL_Action" = "Copiar ligação";
+"Package_Copy_Download_URL_Success" = "URL de transferência copiado.";
+"Package_Download_Deb_Action" = "Transferir";
+"Package_Download_Deb_Success_Title" = "Transferido";
+"Package_Download_Deb_Success" = "Guardado em %@";

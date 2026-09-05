@@ -59,3 +59,7 @@
 "Purchase_Auth_Complete_Fail.Title" = "Hitelesítés befejezése sikertelen";
 
 "Couldnt_Import_Themes" = "Couldn't Import theme(s)";
+
+"Package_Download_URL_Unavailable" = "Ennek a csomagnak nincs letöltési URL-je.";
+"Package_Download_Local_Missing" = "A helyi csomagfájl nem található.";
+"Package_Download_Save_Failed" = "A csomagot nem sikerült a Downloads mappába menteni.";

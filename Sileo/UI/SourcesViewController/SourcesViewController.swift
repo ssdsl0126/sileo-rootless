@@ -13,10 +13,11 @@ final class SourcesViewController: SileoViewController {
     private var sortedRepoList: [Repo] = []
     var updatingRepoList: [Repo] = []
     
-    private var tableView: SileoTableView?
+    private(set) var tableView: SileoTableView?
     public var refreshControl = UIRefreshControl()
-    private var sourceRefreshIndicatorView: UIActivityIndicatorView?
-    private var sourceRefreshIndicatorItem: UIBarButtonItem?
+    private var sourceRefreshIndicatorViews: [UIActivityIndicatorView] = []
+    private var sourceRefreshBadgeViews: [UIView] = []
+    private var sourceRefreshIndicatorIsVisible = false
     
     required init?(coder: NSCoder) {
         super.init(coder: coder)
@@ -58,6 +59,10 @@ final class SourcesViewController: SileoViewController {
         super.viewDidLoad()
         
         tableView = SileoTableView(frame: .zero, style: .plain)
+        if #available(iOS 26.0, *) {
+            tableView?.alwaysBounceVertical = true
+            tableView?.contentInsetAdjustmentBehavior = .always
+        }
         view.addSubview(tableView!)
         tableView?.translatesAutoresizingMaskIntoConstraints = false
         if #available(iOS 26.0, *) {
@@ -108,7 +113,7 @@ final class SourcesViewController: SileoViewController {
             UIKeyCommand(input: "+", modifierFlags: .command, action: #selector(addSource(_:)), discoverabilityTitle: "Add Source")
         ]
     }
-    
+
     @objc func updateSileoColors() {
         if #available(iOS 26.0, *) {
             view.backgroundColor = .sileoBackgroundColor
@@ -140,14 +145,28 @@ final class SourcesViewController: SileoViewController {
         if #available(iOS 26.0, *) {
             self.tableView?.backgroundColor = .clear
             self.tableView?.isOpaque = false
+            if let tableView {
+                SileoGlass.configureScrollSurface(tableView, in: self)
+                TabBarController.singleton?.updateLiquidGlassScroll(tableView)
+            }
         } else {
             self.tableView?.backgroundColor = .sileoBackgroundColor
         }
     }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        if #available(iOS 26.0, *), sourceRefreshIndicatorIsVisible {
+            layoutSourceRefreshIndicatorIfNeeded()
+        }
+    }
+
     
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
-        self.navigationController?.navigationBar._hidesShadow = false
+        if #unavailable(iOS 26.0) {
+            self.navigationController?.navigationBar._hidesShadow = false
+        }
     }
     
     @objc func toggleEditing(_ sender: Any?) {
@@ -169,7 +188,7 @@ final class SourcesViewController: SileoViewController {
                 SileoGlass.configure(barButtonItem: doneItem, tintColor: .tintColor)
                 nav.leftBarButtonItem = doneItem
                 let exportItem = UIBarButtonItem(title: exportTitle, style: .plain, target: self, action: #selector(self.exportSources(_:)))
-                SileoGlass.configure(barButtonItem: exportItem, tintColor: .sileoLabel)
+                SileoGlass.configure(barButtonItem: exportItem, tintColor: .tintColor)
                 nav.rightBarButtonItem = exportItem
             } else {
                 let editStyle: UIBarButtonItem.Style = SileoGlass.isSupported ? .plain : .done
@@ -297,7 +316,7 @@ final class SourcesViewController: SileoViewController {
         }
     }
 
-    /// 在 iOS 26 将刷新状态放在页面内容区域，避免与右上角加号共享玻璃背景。
+    /// iOS 26 使用系统 badge 承接位置和形态变化，再把转圈放进系统 badge 容器。
     private func showSourceRefreshIndicator() {
         guard #available(iOS 26.0, *) else {
             let item = self.splitViewController?.tabBarItem
@@ -314,32 +333,144 @@ final class SourcesViewController: SileoViewController {
             return
         }
 
-        if let indicatorView = sourceRefreshIndicatorView {
-            indicatorView.startAnimating()
-            return
-        }
-
-        let indicatorView = UIActivityIndicatorView(style: .medium)
-        indicatorView.translatesAutoresizingMaskIntoConstraints = false
-        indicatorView.color = .secondaryLabel
-        indicatorView.accessibilityLabel = "Refreshing Sources"
-        indicatorView.isUserInteractionEnabled = false
-        view.addSubview(indicatorView)
-        NSLayoutConstraint.activate([
-            indicatorView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            indicatorView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 76)
-        ])
-
-        indicatorView.startAnimating()
-        sourceRefreshIndicatorView = indicatorView
-        sourceRefreshIndicatorItem = nil
+        let item = splitViewController?.tabBarItem ?? navigationController?.tabBarItem
+        sourceRefreshIndicatorIsVisible = true
+        item?.badgeColor = .systemRed
+        item?.badgeValue = " "
+        scheduleSourceRefreshIndicatorLayout()
     }
 
     private func hideSourceRefreshIndicator() {
-        sourceRefreshIndicatorView?.stopAnimating()
-        sourceRefreshIndicatorView?.removeFromSuperview()
-        sourceRefreshIndicatorView = nil
-        sourceRefreshIndicatorItem = nil
+        sourceRefreshIndicatorIsVisible = false
+        clearSourceRefreshIndicatorViews()
+
+        // iOS 26 在完整与紧凑标签栏之间切换时会保留过渡用的 badge 容器。
+        // badgeValue 清空后再覆盖数个布局周期，避免刷新结束后旧红点残留。
+        for delay in [0.0, 0.05, 0.2, 0.45] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.clearSourceRefreshBadgeIfNeeded()
+            }
+        }
+    }
+
+    @available(iOS 26.0, *)
+    func layoutSourceRefreshIndicatorIfNeeded() {
+        guard sourceRefreshIndicatorIsVisible,
+              let tabBarController else {
+            return
+        }
+
+        let item = splitViewController?.tabBarItem ?? navigationController?.tabBarItem
+        if item?.badgeValue == nil {
+            item?.badgeColor = .systemRed
+            item?.badgeValue = " "
+        }
+
+        tabBarController.view.layoutIfNeeded()
+        let badgeViews = sourceRefreshBadgeViews(in: tabBarController.view)
+        guard !badgeViews.isEmpty else {
+            return
+        }
+
+        for badgeView in badgeViews {
+            badgeView.isHidden = false
+            if !sourceRefreshBadgeViews.contains(where: { $0 === badgeView }) {
+                sourceRefreshBadgeViews.append(badgeView)
+            }
+
+            let indicatorView: UIActivityIndicatorView
+            if let existingIndicatorView = badgeView.subviews.first(where: {
+                $0.accessibilityIdentifier == "Sileo.SourceRefreshIndicator"
+            }) as? UIActivityIndicatorView {
+                indicatorView = existingIndicatorView
+            } else {
+                let createdIndicatorView = UIActivityIndicatorView(style: .medium)
+                createdIndicatorView.translatesAutoresizingMaskIntoConstraints = false
+                createdIndicatorView.color = .white
+                createdIndicatorView.transform = CGAffineTransform(scaleX: 0.56, y: 0.56)
+                createdIndicatorView.isUserInteractionEnabled = false
+                createdIndicatorView.accessibilityIdentifier = "Sileo.SourceRefreshIndicator"
+                badgeView.addSubview(createdIndicatorView)
+                NSLayoutConstraint.activate([
+                    createdIndicatorView.centerXAnchor.constraint(equalTo: badgeView.centerXAnchor),
+                    createdIndicatorView.centerYAnchor.constraint(equalTo: badgeView.centerYAnchor)
+                ])
+                indicatorView = createdIndicatorView
+            }
+
+            badgeView.bringSubviewToFront(indicatorView)
+            indicatorView.startAnimating()
+            if !sourceRefreshIndicatorViews.contains(where: { $0 === indicatorView }) {
+                sourceRefreshIndicatorViews.append(indicatorView)
+            }
+        }
+    }
+
+    @available(iOS 26.0, *)
+    private func sourceRefreshBadgeViews(in view: UIView) -> [UIView] {
+        var badgeViews: [UIView] = []
+        let className = NSStringFromClass(type(of: view))
+        if className.localizedCaseInsensitiveContains("Badge"),
+           view.window != nil,
+           badgeText(in: view).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            badgeViews.append(view)
+        }
+
+        for subview in view.subviews {
+            badgeViews.append(contentsOf: sourceRefreshBadgeViews(in: subview))
+        }
+        return badgeViews
+    }
+
+    @available(iOS 26.0, *)
+    private func badgeText(in view: UIView) -> String {
+        var text = (view as? UILabel)?.text ?? ""
+        for subview in view.subviews {
+            text += badgeText(in: subview)
+        }
+        return text
+    }
+
+    @available(iOS 26.0, *)
+    private func scheduleSourceRefreshIndicatorLayout() {
+        for delay in [0.0, 0.05, 0.2, 0.45] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.layoutSourceRefreshIndicatorIfNeeded()
+            }
+        }
+    }
+
+    private func clearSourceRefreshIndicatorViews() {
+        for indicatorView in sourceRefreshIndicatorViews {
+            indicatorView.stopAnimating()
+            indicatorView.removeFromSuperview()
+        }
+        sourceRefreshIndicatorViews.removeAll()
+    }
+
+    private func clearSourceRefreshBadgeIfNeeded() {
+        guard !sourceRefreshIndicatorIsVisible else {
+            return
+        }
+
+        let item = splitViewController?.tabBarItem ?? navigationController?.tabBarItem
+        item?.badgeValue = nil
+        clearSourceRefreshIndicatorViews()
+
+        if #available(iOS 26.0, *) {
+            if let tabBarController {
+                for badgeView in sourceRefreshBadgeViews(in: tabBarController.view) where
+                    badgeText(in: badgeView).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    badgeView.isHidden = true
+                }
+                tabBarController.tabBar.setNeedsLayout()
+            }
+        }
+
+        for badgeView in sourceRefreshBadgeViews {
+            badgeView.isHidden = true
+        }
+        sourceRefreshBadgeViews.removeAll()
     }
     
     func refreshSources(forceUpdate: Bool, forceReload: Bool, isBackground: Bool, useRefreshControl: Bool, useErrorScreen: Bool, completion: ((Bool, NSAttributedString) -> Void)?) {
@@ -499,7 +630,7 @@ final class SourcesViewController: SileoViewController {
         })
         alert.addAction(noAction)
         
-        self.present(alert, animated: true, completion: nil)
+        self.presentSileoAlert(alert)
     }
     
     public func presentAddSourceEntryField(url: URL?) {
@@ -539,7 +670,7 @@ final class SourcesViewController: SileoViewController {
         })
         alert.addAction(cancelAcction)
         
-        present(alert, animated: true, completion: nil)
+        presentSileoAlert(alert)
     }
     
     func presentAddClipBoardPrompt(sources: [URL]) {
@@ -578,7 +709,7 @@ final class SourcesViewController: SileoViewController {
         })
         alert.addAction(cancelAction)
         
-        self.present(alert, animated: true, completion: nil)
+        self.presentSileoAlert(alert)
     }
     
     func addDistRepo(string: String?) {
@@ -618,7 +749,7 @@ final class SourcesViewController: SileoViewController {
         })
         alert.addAction(cancel)
         
-        self.present(alert, animated: true, completion: nil)
+        self.presentSileoAlert(alert)
     }
     
     #if !targetEnvironment(macCatalyst)
@@ -704,7 +835,7 @@ final class SourcesViewController: SileoViewController {
                             alert.addAction(UIAlertAction(title: String(localizationKey: "Cancel"), style: .cancel, handler: { _ in
                                 alert.dismiss(animated: true)
                             }))
-                            self.present(alert, animated: true)
+                            self.presentSileoAlert(alert)
                         }
                     }
                 }
@@ -860,6 +991,10 @@ extension SourcesViewController: UITableViewDataSource { // UITableViewDataSourc
 }
 
 extension SourcesViewController: UITableViewDelegate { // UITableViewDelegate
+    func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+        TabBarController.singleton?.prepareLiquidGlassScroll(scrollView)
+    }
+
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
         TabBarController.singleton?.updateLiquidGlassScroll(scrollView)
     }
@@ -921,7 +1056,11 @@ extension SourcesViewController: UITableViewDelegate { // UITableViewDelegate
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         let categoryVC = self.controller(indexPath: indexPath)
         let navController = SileoNavigationController(rootViewController: categoryVC)
-        self.splitViewController?.showDetailViewController(navController, sender: self)
+        if let split = self.splitViewController {
+            split.showDetailViewController(navController, sender: self)
+        } else if let nav = self.navigationController {
+            nav.pushViewController(categoryVC, animated: true)
+        }
         
         if self.splitViewController?.isCollapsed ?? false { // Only deselect the row if the split view contoller is not showing multiple
             tableView.deselectRow(at: indexPath, animated: true)

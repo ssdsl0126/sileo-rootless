@@ -390,7 +390,7 @@ class NativePackageViewController: SileoViewController, PackageActions {
                                                             message: String(localizationKey: "Email_Unavailable.Body", type: .error),
                                                             preferredStyle: .alert)
                     alertController.addAction(UIAlertAction(title: String(localizationKey: "OK"), style: .cancel, handler: nil))
-                    self.present(alertController, animated: true, completion: nil)
+                    self.presentSileoAlert(alertController)
                 } else {
                     let composeVC = MFMailComposeViewController()
                     composeVC.setToRecipients([email])
@@ -442,8 +442,7 @@ class NativePackageViewController: SileoViewController, PackageActions {
         if UIDevice.current.userInterfaceIdiom == .pad {
             sharePopup.popoverPresentationController?.sourceView = shareButton
         }
-        sharePopup.view.tintColor = depiction.effectiveTintColor
-        self.present(sharePopup, animated: true)
+        self.presentSileoAlert(sharePopup, tintColor: depiction.effectiveTintColor)
     }
     
     @objc func dismissImmediately() {
@@ -472,9 +471,10 @@ extension NativePackageViewController: DepictionDelegate {
         case .addRepo(url: let url):
             let delegate = UIApplication.shared.delegate as! SileoAppDelegate
             if let tabBarController = delegate.window?.rootViewController as? UITabBarController,
-                let sourcesSVC = tabBarController.viewControllers?[2] as? UISplitViewController,
-                  let sourcesNavNV = sourcesSVC.viewControllers[0] as? SileoNavigationController {
-                  tabBarController.selectedViewController = sourcesSVC
+                let sourcesNavNV = (tabBarController.viewControllers?[2] as? SileoNavigationController) ??
+                    (tabBarController.viewControllers?[2] as? UISplitViewController)?.viewControllers[0] as? SileoNavigationController,
+                let targetVC = tabBarController.viewControllers?[2] {
+                  tabBarController.selectedViewController = targetVC
                   if let sourcesVC = sourcesNavNV.viewControllers[0] as? SourcesViewController {
                     sourcesVC.presentAddSourceEntryField(url: url)
                   }
@@ -490,11 +490,10 @@ extension NativePackageViewController: DepictionDelegate {
     
     func depictionError(error: String) {
         let alert = UIAlertController(title: "Depiction Error", message: error, preferredStyle: .alert)
-        alert.view.tintColor = .tintColor
         alert.addAction(UIAlertAction(title: String(localizationKey: "OK"), style: .default, handler: { _ in
             alert.dismiss(animated: true)
         }))
-        self.present(alert, animated: true)
+        self.presentSileoAlert(alert)
     }
     
     func packageView(for package: DepictionPackage) -> UIView {

@@ -244,3 +244,9 @@
 "Whats_Collected" = "What's Collected";
 "Non_Identifying" = "Only package and non-identifying device information is collected.";
 "Privacy_Policy" = "Privacy Policy";
+
+"Package_Copy_Download_URL_Action" = "Αντιγραφή συνδέσμου";
+"Package_Copy_Download_URL_Success" = "Ο σύνδεσμος λήψης αντιγράφηκε.";
+"Package_Download_Deb_Action" = "Λήψη";
+"Package_Download_Deb_Success_Title" = "Λήφθηκε";
+"Package_Download_Deb_Success" = "Αποθηκεύτηκε στο %@";

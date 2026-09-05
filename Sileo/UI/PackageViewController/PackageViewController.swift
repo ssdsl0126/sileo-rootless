@@ -409,7 +409,7 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
         alertController.addAction(UIAlertAction(title: String(localizationKey: "OK"), style: .cancel, handler: { _ in
             self.dismiss(animated: true, completion: nil)
         }))
-        self.present(alertController, animated: true, completion: nil)
+        self.presentSileoAlert(alertController)
     }
 
     override func viewWillAppear(_ animated: Bool) {
@@ -626,7 +626,7 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
                                                             message: String(localizationKey: "Email_Unavailable.Body", type: .error),
                                                             preferredStyle: .alert)
                     alertController.addAction(UIAlertAction(title: String(localizationKey: "OK"), style: .cancel, handler: nil))
-                    self.present(alertController, animated: true, completion: nil)
+                    self.presentSileoAlert(alertController)
                 }
                 guard let subject = "Sileo/APT(M): \(package.name ?? package.package)".addingPercentEncoding(withAllowedCharacters: .urlFragmentAllowed),
                       let email = email.addingPercentEncoding(withAllowedCharacters: .urlFragmentAllowed),
@@ -669,10 +669,8 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
         if UIDevice.current.userInterfaceIdiom == .pad {
             sharePopup.popoverPresentationController?.sourceView = shareButton
         }
-        if let tintColor = depictionView?.tintColor {
-            sharePopup.view.tintColor = tintColor
-        }
-        self.present(sharePopup, animated: true)
+        let actionTintColor = depictionView?.tintColor ?? .tintColor
+        self.presentSileoAlert(sharePopup, tintColor: actionTintColor)
     }
 
     func mailComposeController(_ controller: MFMailComposeViewController, didFinishWith result: MFMailComposeResult, error: Error?) {

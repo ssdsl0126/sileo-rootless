@@ -59,3 +59,7 @@
 "Purchase_Auth_Complete_Fail.Title" = "無法完成驗證";
 
 "Couldnt_Import_Themes" = "無法滙入主題";
+
+"Package_Download_URL_Unavailable" = "這個套件沒有可用的下載連結。";
+"Package_Download_Local_Missing" = "找不到本機套件檔案。";
+"Package_Download_Save_Failed" = "無法將套件儲存到 Downloads。";

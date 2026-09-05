@@ -644,7 +644,7 @@ final class DownloadManager {
                     self.add(package: downloadPackage.package, queue: .uninstallations, approved: true)
                     self.reloadData(recheckPackages: true)
                 }))
-                TabBarController.singleton?.present(alert, animated: true)
+                TabBarController.singleton?.presentSileoAlert(alert)
                 return
             }
             uninstallations.insert(downloadPackage)
@@ -852,5 +852,141 @@ final class DownloadManager {
                                      progressCallback: progressCallback,
                                      outputCallback: outputCallback,
                                      completionCallback: completionCallback)
+    }
+
+    // MARK: - 独立保存到本地
+
+    static var packageDownloadsDirectory: URL {
+        URL(fileURLWithPath: "\(CommandPath.prefix)/var/mobile/Downloads")
+    }
+
+    func packageDownloadURLString(for package: Package) -> String? {
+        if package.package.contains("/") {
+            return URL(fileURLWithPath: package.package).absoluteString
+        }
+        var filename = package.filename ?? ""
+        guard !filename.isEmpty else { return nil }
+        if filename.hasPrefix("https://") || filename.hasPrefix("http://") {
+            return filename
+        }
+        var packageRepo: Repo?
+        if let sourceFile = package.sourceFile {
+            packageRepo = RepoManager.shared.repoList.first { $0.rawEntry == sourceFile }
+        }
+        packageRepo = packageRepo ?? package.sourceRepo
+        guard let rawURL = packageRepo?.rawURL, !rawURL.isEmpty else { return nil }
+        return URL(string: rawURL)?.appendingPathComponent(filename).absoluteString
+    }
+
+    func resolvePackageDownloadURL(for package: Package, completion: @escaping (String?, URL?) -> Void) {
+        if package.package.contains("/") {
+            completion(nil, URL(fileURLWithPath: package.package))
+            return
+        }
+        var packageRepo: Repo?
+        if let sourceFile = package.sourceFile {
+            packageRepo = RepoManager.shared.repoList.first { $0.rawEntry == sourceFile }
+        }
+        packageRepo = packageRepo ?? package.sourceRepo
+        overrideDownloadURL(package: package, repo: packageRepo) { errorMessage, url in
+            if let url = url {
+                completion(nil, url)
+                return
+            }
+            if let errorMessage = errorMessage {
+                completion(errorMessage, nil)
+                return
+            }
+            guard let filename = self.packageDownloadURLString(for: package),
+                  let downloadURL = URL(string: filename) else {
+                completion(String(localizationKey: "Package_Download_URL_Unavailable", type: .error), nil)
+                return
+            }
+            completion(nil, downloadURL)
+        }
+    }
+
+    func copyPackageDownloadURL(for package: Package, completion: @escaping (String?, String?) -> Void) {
+        // 复制公开的软件源下载地址，不使用付费授权的一次性链接
+        guard let urlString = packageDownloadURLString(for: package), !urlString.isEmpty else {
+            completion(String(localizationKey: "Package_Download_URL_Unavailable", type: .error), nil)
+            return
+        }
+        completion(nil, urlString)
+    }
+
+    func savePackageToDownloads(_ package: Package, completion: @escaping (String?, URL?) -> Void) {
+        let destinationDirectory = Self.packageDownloadsDirectory
+        let destinationURL = destinationDirectory.appendingPathComponent(localDownloadFileName(for: package))
+
+        if package.package.contains("/") {
+            let sourceURL = URL(fileURLWithPath: package.package)
+            guard FileManager.default.fileExists(atPath: sourceURL.path) else {
+                completion(String(localizationKey: "Package_Download_Local_Missing", type: .error), nil)
+                return
+            }
+            ensureDirectoryAsRoot(destinationDirectory)
+            copyFileAsRoot(from: sourceURL, to: destinationURL)
+            guard FileManager.default.fileExists(atPath: destinationURL.path) else {
+                completion(String(localizationKey: "Package_Download_Save_Failed", type: .error), nil)
+                return
+            }
+            completion(nil, destinationURL)
+            return
+        }
+
+        resolvePackageDownloadURL(for: package) { errorMessage, url in
+            guard let downloadURL = url else {
+                completion(errorMessage ?? String(localizationKey: "Package_Download_URL_Unavailable", type: .error), nil)
+                return
+            }
+            if downloadURL.isFileURL {
+                guard FileManager.default.fileExists(atPath: downloadURL.path) else {
+                    completion(String(localizationKey: "Package_Download_Local_Missing", type: .error), nil)
+                    return
+                }
+                ensureDirectoryAsRoot(destinationDirectory)
+                copyFileAsRoot(from: downloadURL, to: destinationURL)
+                guard FileManager.default.fileExists(atPath: destinationURL.path) else {
+                    completion(String(localizationKey: "Package_Download_Save_Failed", type: .error), nil)
+                    return
+                }
+                completion(nil, destinationURL)
+                return
+            }
+
+            RepoManager.shared.queue(from: downloadURL, progress: nil, success: { fileURL in
+                ensureDirectoryAsRoot(destinationDirectory)
+                copyFileAsRoot(from: fileURL, to: destinationURL)
+                try? FileManager.default.removeItem(at: fileURL)
+                guard FileManager.default.fileExists(atPath: destinationURL.path) else {
+                    completion(String(localizationKey: "Package_Download_Save_Failed", type: .error), nil)
+                    return
+                }
+                completion(nil, destinationURL)
+            }, failure: { statusCode, error in
+                let message = error?.localizedDescription ?? String(format: String(localizationKey: "Download_Failing_Status_Code", type: .error), statusCode)
+                completion(message, nil)
+            })?.resume()
+        }
+    }
+
+    private func localDownloadFileName(for package: Package) -> String {
+        if package.package.contains("/") {
+            let name = URL(fileURLWithPath: package.package).lastPathComponent
+            if name.lowercased().hasSuffix(".deb") {
+                return name
+            }
+        }
+        if let filename = package.filename, !filename.isEmpty {
+            let name = URL(fileURLWithPath: filename).lastPathComponent
+            if name.lowercased().hasSuffix(".deb") {
+                return name
+            }
+        }
+        let packageID = aptEncoded(string: package.packageID, isArch: false)
+        let version = aptEncoded(string: package.version, isArch: false)
+        let architecture = aptEncoded(string: package.architecture ?? "", isArch: true)
+        return "\(packageID)_\(version)_\(architecture).deb"
     }
 }

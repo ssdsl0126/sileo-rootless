@@ -8,6 +8,7 @@
 
 import Foundation
 import LNPopupController
+import ObjectiveC
 
 class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdaptivePresentationControllerDelegate {
     static var singleton: TabBarController?
@@ -22,6 +23,8 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     private var liquidGlassPopupBackgroundView: UIVisualEffectView?
     private var isPresentingQueueSheet = false
     private var isQueueSheetVisible = false
+    private var sourcesQueueIsMinimized = false
+    private var sourcesQueueTrackingScrollView: UIScrollView?
 
     var isQueuePresentationVisible: Bool {
         popupIsPresented ||
@@ -38,6 +41,21 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         UIDevice.current.userInterfaceIdiom == .phone
     }
 
+    private var usesLiquidGlassQueueAccessory: Bool {
+        guard #available(iOS 26.0, *) else {
+            return false
+        }
+        let idiom = UIDevice.current.userInterfaceIdiom
+        return idiom == .phone || idiom == .pad
+    }
+
+    private var usesSystemQueueSheetPresentation: Bool {
+        if #available(iOS 26.0, *), UIDevice.current.userInterfaceIdiom == .pad {
+            return true
+        }
+        return usesFloatingQueueCardOnPhone
+    }
+
     private var queueCollapsedInteractionStyle: LNPopupInteractionStyle {
         usesFloatingQueueCardOnPhone ? .none : preferredPopupInteractionStyle
     }
@@ -47,7 +65,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         
         delegate = self
         TabBarController.singleton = self
-        
+
         downloadsController = UINavigationController(rootViewController: DownloadManager.shared.viewController)
         downloadsController?.isNavigationBarHidden = true
         downloadsController?.view.backgroundColor = .sileoBackgroundColor
@@ -79,6 +97,16 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     }
 
     func tabBarController(_ tabBarController: UITabBarController, didSelect viewController: UIViewController) {
+        if #available(iOS 26.0, *), usesFloatingQueueCardOnPhone {
+            registerLiquidGlassContentScrollView()
+            // iOS 26 在切换顶层标签时会重建滚动观察关系，并可能把收缩策略临时重置为 .never。
+            // 等本轮容器布局结束后重新注册当前列表并恢复策略，避免“软件源”页丢失队列收缩能力。
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.registerLiquidGlassContentScrollView()
+                self.restoreLiquidGlassMinimizeBehaviorIfNeeded()
+            }
+        }
         if shouldSelectIndex == tabBarController.selectedIndex {
             if let splitViewController = viewController as? UISplitViewController {
                 if let navController = splitViewController.viewControllers[0] as? UINavigationController {
@@ -101,8 +129,9 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
             }
         }
         if tabBarController.selectedIndex ==  2 && !fuckedUpSources {
-            if let sourcesSVC = tabBarController.viewControllers?[2] as? UISplitViewController,
-               let sourcesNaVC = sourcesSVC.viewControllers[0] as? SileoNavigationController {
+            let sourcesNaVC = (tabBarController.viewControllers?[2] as? SileoNavigationController) ??
+                (tabBarController.viewControllers?[2] as? UISplitViewController)?.viewControllers[0] as? SileoNavigationController
+            if let sourcesNaVC {
                 if sourcesNaVC.presentedViewController == nil {
                     sourcesNaVC.popToRootViewController(animated: false)
                 }
@@ -119,7 +148,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     }
     
     func presentPopup(completion: (() -> Void)?) {
-        if usesFloatingQueueCardOnPhone, (isQueueSheetVisible || isPresentingQueueSheet) {
+        if usesSystemQueueSheetPresentation, (isQueueSheetVisible || isPresentingQueueSheet) {
             completion?()
             return
         }
@@ -127,7 +156,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         guard let downloadsController = downloadsController,
               !popupIsPresented
         else {
-            if #available(iOS 26.0, *), usesFloatingQueueCardOnPhone, popupIsPresented {
+            if #available(iOS 26.0, *), usesLiquidGlassQueueAccessory, popupIsPresented {
                 // 队列已经存在时，新增或移除软件包不会再次创建 accessory，直接刷新两行文案。
                 updateLiquidGlassQueueBar()
             }
@@ -148,7 +177,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
             queueVC.usesSystemQueueSheetPresentation = false
         }
 
-        if #available(iOS 26.0, *), usesFloatingQueueCardOnPhone {
+        if #available(iOS 26.0, *), usesLiquidGlassQueueAccessory {
             presentLiquidGlassQueueBar()
             updateSileoColors()
             completion?()
@@ -182,7 +211,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         
         popupIsPresented = false
         updateLiquidGlassTabBarMinimizeBehavior()
-        if #available(iOS 26.0, *), usesFloatingQueueCardOnPhone {
+        if #available(iOS 26.0, *), usesLiquidGlassQueueAccessory {
             removeLiquidGlassQueueBar()
             completion?()
             return
@@ -198,7 +227,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     }
     
     func presentPopupController(completion: (() -> Void)?) {
-        if usesFloatingQueueCardOnPhone {
+        if usesSystemQueueSheetPresentation {
             presentSystemQueueSheet(completion: completion)
             return
         }
@@ -224,7 +253,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     }
     
     func dismissPopupController(completion: (() -> Void)?) {
-        if usesFloatingQueueCardOnPhone,
+        if usesSystemQueueSheetPresentation,
            isQueueSheetVisible,
            let downloadsController = downloadsController,
            downloadsController.presentingViewController != nil {
@@ -237,7 +266,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
             return
         }
 
-        if #available(iOS 26.0, *), usesFloatingQueueCardOnPhone, popupIsPresented {
+        if #available(iOS 26.0, *), usesLiquidGlassQueueAccessory, popupIsPresented {
             dismissPopup(completion: completion)
             return
         }
@@ -266,6 +295,11 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         }
 
         func hideRegardless() {
+            if #available(iOS 26.0, *), UIDevice.current.userInterfaceIdiom == .pad {
+                // iPadOS 26 不再常驻一个“0 个软件包”的旧 popup bar。
+                self.dismissPopup(completion: completion)
+                return
+            }
             if UIDevice.current.userInterfaceIdiom == .pad && self.view.frame.width >= 768 {
                 downloadsController?.popupItem.title = String(localizationKey: "Queued_Package_Status")
                 downloadsController?.popupItem.subtitle = String(format: String(localizationKey: "Package_Queue_Count"), 0)
@@ -352,18 +386,223 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     func updateLiquidGlassScroll(_ scrollView: UIScrollView) {
         guard #available(iOS 26.0, *),
               usesFloatingQueueCardOnPhone,
-              popupIsPresented,
+              popupIsPresented || bottomAccessory != nil,
               !isQueueSheetVisible,
               !isPresentingQueueSheet else {
             return
         }
 
-        // 当前页面可能是导航栈里的详情页，把实际滚动视图直接交给标签栏控制器和导航容器，
-        // 让 UIKit 的 iOS 26 收缩手势跟踪当前页面，而不是依赖固定的初始页面。
-        setContentScrollView(scrollView, for: .top)
+        restoreLiquidGlassMinimizeBehaviorIfNeeded()
+
+        // 当前页面可能是导航栈里的详情页，把实际滚动视图直接交给顶部导航容器。
+        if !isPackagesTabScrollView(scrollView) {
+            setContentScrollView(scrollView, for: .top)
+            selectedViewController?.setContentScrollView(scrollView, for: .top)
+        }
+        if isSourcesScrollView(scrollView) {
+            driveSourcesQueueMinimizeIfNeeded(from: scrollView)
+        } else {
+            setContentScrollView(scrollView, for: .bottom)
+            selectedViewController?.setContentScrollView(scrollView, for: .bottom)
+        }
+    }
+
+    func prepareLiquidGlassScroll(_ scrollView: UIScrollView) {
+        guard #available(iOS 26.0, *),
+              usesFloatingQueueCardOnPhone,
+              popupIsPresented || bottomAccessory != nil,
+              isSourcesScrollView(scrollView) else {
+            return
+        }
+
+        let topOffset = -scrollView.adjustedContentInset.top
+        guard scrollView.contentOffset.y > topOffset + 0.5 else {
+            registerSourcesScrollView(scrollView)
+            return
+        }
+
+        // 新一轮拖动开始前锁住已经完成的系统紧凑态，避免反向滑动立刻触发系统展开。
+        if currentLiquidGlassMorphTarget() == 2 {
+            sourcesQueueIsMinimized = true
+            registerSourcesQueueTrackingScrollView()
+        } else {
+            sourcesQueueIsMinimized = false
+            registerSourcesScrollView(scrollView)
+        }
+    }
+
+    @available(iOS 26.0, *)
+    private func isPackagesTabScrollView(_ scrollView: UIScrollView) -> Bool {
+        guard selectedIndex == 3 else {
+            return false
+        }
+        if let nav = selectedViewController as? UINavigationController,
+           let packageList = nav.topViewController as? PackageListViewController {
+            return packageList.collectionView === scrollView
+        }
+        if let packageList = selectedViewController as? PackageListViewController {
+            return packageList.collectionView === scrollView
+        }
+        return false
+    }
+
+    @available(iOS 26.0, *)
+    private func isSourcesScrollView(_ scrollView: UIScrollView) -> Bool {
+        guard let selectedViewController,
+              let sourcesViewController = sourcesViewController(in: selectedViewController) else {
+            return false
+        }
+        return sourcesViewController.tableView === scrollView
+    }
+
+    @available(iOS 26.0, *)
+    private func sourcesViewController(in viewController: UIViewController) -> SourcesViewController? {
+        if let sourcesViewController = viewController as? SourcesViewController {
+            return sourcesViewController
+        }
+        if let navigationController = viewController as? UINavigationController,
+           let topViewController = navigationController.topViewController {
+            return sourcesViewController(in: topViewController)
+        }
+        if let splitViewController = viewController as? UISplitViewController {
+            for childViewController in splitViewController.viewControllers {
+                if let sourcesViewController = sourcesViewController(in: childViewController) {
+                    return sourcesViewController
+                }
+            }
+        }
+        return nil
+    }
+
+    @available(iOS 26.0, *)
+    private func driveSourcesQueueMinimizeIfNeeded(from scrollView: UIScrollView) {
+        guard isSourcesScrollView(scrollView) else {
+            return
+        }
+
+        let topOffset = -scrollView.adjustedContentInset.top
+        if scrollView.contentOffset.y <= topOffset + 0.5 {
+            // 离开顶部后的反向滚动不能展开队列，只有内容真正回到顶部才恢复完整标签栏。
+            if currentLiquidGlassMorphTarget() == 2 {
+                sourcesQueueIsMinimized = true
+                setLiquidGlassQueueMinimized(false)
+            } else {
+                sourcesQueueIsMinimized = false
+            }
+            registerSourcesScrollView(scrollView)
+            return
+        }
+
+        if currentLiquidGlassMorphTarget() == 2 {
+            sourcesQueueIsMinimized = true
+            registerSourcesQueueTrackingScrollView()
+            return
+        }
+
+        // 第一次向内容下方滚动时让 UIKit 自己完成完整的 accessory/tab morph；
+        // 这样系统会正确生成“当前标签 + 队列 + 搜索”的三段紧凑布局。
+        sourcesQueueIsMinimized = false
+        registerSourcesScrollView(scrollView)
+    }
+
+    @available(iOS 26.0, *)
+    @discardableResult
+    private func setLiquidGlassQueueMinimized(_ minimized: Bool) -> Bool {
+        guard sourcesQueueIsMinimized != minimized,
+              popupIsPresented || bottomAccessory != nil,
+              let visualProviderIvar = class_getInstanceVariable(UITabBar.self, "_visualProvider"),
+              let visualProvider = object_getIvar(tabBar, visualProviderIvar) as? NSObject,
+              NSStringFromClass(type(of: visualProvider)).contains("_UITabBarVisualProvider_Floating") else {
+            return sourcesQueueIsMinimized == minimized
+        }
+
+        // UITabBar._setMinimized: 在 iOS 26 内部只允许 Photos 调用，会触发断言。
+        // 浮动 visual provider 才是系统滚动交互最终调用的原生 morph 入口。
+        let selector = NSSelectorFromString("setMinimized:")
+        guard visualProvider.responds(to: selector) else {
+            return false
+        }
+
+        typealias SetMinimizedImplementation = @convention(c) (AnyObject, Selector, Bool) -> Void
+        let implementation = visualProvider.method(for: selector)
+        let setMinimized = unsafeBitCast(implementation, to: SetMinimizedImplementation.self)
+        setMinimized(visualProvider, selector, minimized)
+        sourcesQueueIsMinimized = minimized
+        DispatchQueue.main.async { [weak self] in
+            guard let self,
+                  let sourcesRootController = self.viewControllers?[safe: 2] else {
+                return
+            }
+            self.sourcesViewController(in: sourcesRootController)?.layoutSourceRefreshIndicatorIfNeeded()
+        }
+        return true
+    }
+
+    @available(iOS 26.0, *)
+    private func currentLiquidGlassMorphTarget() -> Int? {
+        guard let visualProviderIvar = class_getInstanceVariable(UITabBar.self, "_visualProvider"),
+              let visualProvider = object_getIvar(tabBar, visualProviderIvar) as? NSObject,
+              NSStringFromClass(type(of: visualProvider)).contains("_UITabBarVisualProvider_Floating") else {
+            return nil
+        }
+        return (visualProvider.value(forKey: "_currentMorphTarget") as? NSNumber)?.intValue
+    }
+
+    @available(iOS 26.0, *)
+    private func registerSourcesScrollView(_ scrollView: UIScrollView) {
         setContentScrollView(scrollView, for: .bottom)
-        selectedViewController?.setContentScrollView(scrollView, for: .top)
         selectedViewController?.setContentScrollView(scrollView, for: .bottom)
+    }
+
+    @available(iOS 26.0, *)
+    private func registerSourcesQueueTrackingScrollView() {
+        guard let selectedViewController else {
+            return
+        }
+
+        let trackingScrollView: UIScrollView
+        if let existingScrollView = sourcesQueueTrackingScrollView {
+            trackingScrollView = existingScrollView
+        } else {
+            let createdScrollView = UIScrollView(frame: CGRect(x: 0, y: 0, width: 1, height: 1))
+            createdScrollView.isUserInteractionEnabled = false
+            createdScrollView.alpha = 0.001
+            createdScrollView.contentSize = CGSize(width: 1, height: 2)
+            createdScrollView.isAccessibilityElement = false
+            createdScrollView.accessibilityElementsHidden = true
+            createdScrollView.accessibilityIdentifier = "Sileo.SourcesQueueTrackingScrollView"
+            sourcesQueueTrackingScrollView = createdScrollView
+            trackingScrollView = createdScrollView
+        }
+
+        if trackingScrollView.superview !== selectedViewController.view {
+            trackingScrollView.removeFromSuperview()
+            selectedViewController.view.insertSubview(trackingScrollView, at: 0)
+        }
+        setContentScrollView(trackingScrollView, for: .bottom)
+        selectedViewController.setContentScrollView(trackingScrollView, for: .bottom)
+    }
+
+    @available(iOS 26.0, *)
+    private func desiredLiquidGlassMinimizeBehavior() -> UITabBarController.MinimizeBehavior {
+        guard popupIsPresented || bottomAccessory != nil else {
+            return .never
+        }
+        return .onScrollDown
+    }
+
+    @available(iOS 26.0, *)
+    private func restoreLiquidGlassMinimizeBehaviorIfNeeded() {
+        guard usesFloatingQueueCardOnPhone,
+              popupIsPresented || bottomAccessory != nil,
+              !isQueueSheetVisible,
+              !isPresentingQueueSheet else {
+            return
+        }
+        let desiredBehavior = desiredLiquidGlassMinimizeBehavior()
+        if tabBarMinimizeBehavior != desiredBehavior {
+            tabBarMinimizeBehavior = desiredBehavior
+        }
     }
 
     @available(iOS 26.0, *)
@@ -373,14 +612,30 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
             return
         }
 
-        setContentScrollView(scrollView, for: .top)
-        setContentScrollView(scrollView, for: .bottom)
-        selectedViewController.setContentScrollView(scrollView, for: .top)
-        selectedViewController.setContentScrollView(scrollView, for: .bottom)
+        if !isPackagesTabScrollView(scrollView) {
+            setContentScrollView(scrollView, for: .top)
+            selectedViewController.setContentScrollView(scrollView, for: .top)
+        }
+        if isSourcesScrollView(scrollView) {
+            if currentLiquidGlassMorphTarget() == 2 {
+                sourcesQueueIsMinimized = true
+                registerSourcesQueueTrackingScrollView()
+            } else {
+                sourcesQueueIsMinimized = false
+                registerSourcesScrollView(scrollView)
+            }
+        } else {
+            setContentScrollView(scrollView, for: .bottom)
+            selectedViewController.setContentScrollView(scrollView, for: .bottom)
+        }
+        restoreLiquidGlassMinimizeBehaviorIfNeeded()
     }
 
     @available(iOS 26.0, *)
     private func liquidGlassContentScrollView(in viewController: UIViewController) -> UIScrollView? {
+        if let sourcesVC = viewController as? SourcesViewController, let tv = sourcesVC.tableView {
+            return tv
+        }
         if let scrollView = viewController.contentScrollView(for: .bottom) {
             return scrollView
         }
@@ -476,7 +731,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     }
 
     @objc private func handlePopupBarTap() {
-        guard usesFloatingQueueCardOnPhone,
+        guard usesSystemQueueSheetPresentation,
               popupIsPresented,
               !isQueueSheetVisible,
               !isPresentingQueueSheet
@@ -487,7 +742,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     }
 
     private func presentSystemQueueSheet(completion: (() -> Void)?) {
-        guard usesFloatingQueueCardOnPhone,
+        guard usesSystemQueueSheetPresentation,
               popupIsPresented,
               !isPresentingQueueSheet,
               !isQueueSheetVisible,
@@ -498,7 +753,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         }
 
         isPresentingQueueSheet = true
-        if #available(iOS 26.0, *), usesFloatingQueueCardOnPhone {
+        if #available(iOS 26.0, *), usesLiquidGlassQueueAccessory {
             // 保留 bottomAccessory，让系统在 sheet 关闭后恢复原来的展开/紧凑位置。
             presentQueueSheet(completion: completion)
         } else {
@@ -539,7 +794,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     }
 
     func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
-        guard usesFloatingQueueCardOnPhone,
+        guard usesSystemQueueSheetPresentation,
               let downloadsController = downloadsController,
               presentationController.presentedViewController === downloadsController
         else {
@@ -552,7 +807,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     
     @objc func updateSileoColors() {
         self.popupBar.tintColor = UINavigationBar.appearance().tintColor
-        if #available(iOS 26.0, *), usesFloatingQueueCardOnPhone {
+        if #available(iOS 26.0, *), usesLiquidGlassQueueAccessory {
             updateLiquidGlassQueueBar()
         } else if #available(iOS 26.0, *) {
             applyLiquidGlassPopupAppearance()
@@ -566,9 +821,10 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         guard #available(iOS 26.0, *), usesFloatingQueueCardOnPhone else {
             return
         }
-        // 只有存在队列时启用系统收缩；队列消失后恢复完整标签栏。
-        // 当前页面列表下滑时进入胶囊紧凑态。
-        tabBarMinimizeBehavior = popupIsPresented ? .onScrollDown : .never
+        tabBarMinimizeBehavior = desiredLiquidGlassMinimizeBehavior()
+        if !popupIsPresented {
+            sourcesQueueIsMinimized = false
+        }
     }
     
     override func viewDidLayoutSubviews() {
@@ -577,7 +833,10 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         self.tabBar.itemPositioning = .centered
         if #available(iOS 26.0, *), usesFloatingQueueCardOnPhone {
             // accessory 的首次布局可能会重建标签栏，布局完成后再次保持当前策略。
-            tabBarMinimizeBehavior = popupIsPresented ? .onScrollDown : .never
+            restoreLiquidGlassMinimizeBehaviorIfNeeded()
+            if let sourcesRootController = viewControllers?[safe: 2] {
+                sourcesViewController(in: sourcesRootController)?.layoutSourceRefreshIndicatorIfNeeded()
+            }
         } else if usesFloatingQueueCardOnPhone {
             configurePopupTapIfNeeded()
         }
@@ -602,7 +861,9 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
                         subtitle: downloadsController?.popupItem.subtitle)
         queueBar.isHidden = false
         setBottomAccessory(UITabAccessory(contentView: queueBar), animated: false)
-        tabBarMinimizeBehavior = .onScrollDown
+        if usesFloatingQueueCardOnPhone {
+            restoreLiquidGlassMinimizeBehaviorIfNeeded()
+        }
     }
 
     @available(iOS 26.0, *)
@@ -614,6 +875,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     @available(iOS 26.0, *)
     private func removeLiquidGlassQueueBar() {
         setBottomAccessory(nil, animated: false)
+        sourcesQueueIsMinimized = false
         liquidGlassQueueBar?.isHidden = true
         liquidGlassQueueBar?.removeFromSuperview()
     }
@@ -677,7 +939,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         }
         let alertController = UIAlertController(title: String(localizationKey: "Unknown", type: .error), message: string, preferredStyle: .alert)
         alertController.addAction(UIAlertAction(title: String(localizationKey: "OK"), style: .default))
-        self.present(alertController, animated: true, completion: nil)
+        self.presentSileoAlert(alertController)
     }
 }
 

@@ -19,12 +19,12 @@ class SettingsNavigationController: UINavigationController, UINavigationControll
                               willShow viewController: UIViewController,
                               animated: Bool) {
         if #available(iOS 26.0, *) {
-            // 让 iOS 26 保留系统导航栏的 Liquid Glass，而不是换成旧的图片背景。
+            // 不再设置背景图片、barTintColor 或 shadowImage，让 UIKit 使用原生 Liquid Glass。
             navigationBar.isTranslucent = true
-            navigationBar.backgroundColor = .clear
-            navigationBar.barTintColor = nil
-            navigationBar.setBackgroundImage(nil, for: .default)
-            navigationBar.shadowImage = nil
+            if let tableViewController = viewController as? UITableViewController {
+                SileoGlass.configureScrollSurface(tableViewController.tableView,
+                                                  in: tableViewController)
+            }
             return
         }
 

@@ -44,6 +44,25 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate, UITabBarControllerDe
         guard let tabBarController = self.window?.rootViewController as? UITabBarController else {
             fatalError("Invalid Storyboard")
         }
+        if #available(iOS 26.0, *),
+           UIDevice.current.userInterfaceIdiom == .pad,
+           var tabViewControllers = tabBarController.viewControllers,
+           tabViewControllers.indices.contains(2),
+           let legacySourcesSplit = tabViewControllers[2] as? SourcesSplitViewController,
+           legacySourcesSplit.style == .unspecified,
+           legacySourcesSplit.viewControllers.count >= 2 {
+            // storyboard 创建的是旧式 split，iPadOS 26 隐藏主栏后仍会残留旧 safe-area。
+            // 仅在新系统上换成现代双栏容器，并继续复用原来的主栏和详情导航栈。
+            let sourceViewControllers = legacySourcesSplit.viewControllers
+            let modernSourcesSplit = SourcesSplitViewController(style: .doubleColumn)
+            modernSourcesSplit.tabBarItem = legacySourcesSplit.tabBarItem
+            modernSourcesSplit.title = legacySourcesSplit.title
+            legacySourcesSplit.viewControllers = []
+            modernSourcesSplit.setViewController(sourceViewControllers[0], for: .primary)
+            modernSourcesSplit.setViewController(sourceViewControllers[1], for: .secondary)
+            tabViewControllers[2] = modernSourcesSplit
+            tabBarController.setViewControllers(tabViewControllers, animated: false)
+        }
         tabBarController.delegate = self
         if #available(iOS 26.0, *) {
             // iOS 26 会为系统标签栏提供 Liquid Glass；不要再覆盖系统材质。
@@ -69,7 +88,7 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate, UITabBarControllerDe
                             alert.dismiss(animated: true, completion: nil)
                         }
                         alert.addAction(okAction)
-                        self.window?.rootViewController?.present(alert, animated: true, completion: nil)
+                        self.window?.rootViewController?.presentSileoAlert(alert)
                         
                         UserDefaults.standard.set(true, forKey: "updatesPrompt")
                     }
@@ -245,15 +264,15 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate, UITabBarControllerDe
                         guard let package = PackageListManager.shared.package(url: url) else {
                             let alert = UIAlertController(title: "Bad Deb", message: "The provided deb file could not be read", preferredStyle: .alert)
                             alert.addAction(UIAlertAction(title: "Ok", style: .cancel))
-                            featuredView.present(alert, animated: true)
+                            featuredView.presentSileoAlert(alert)
                             return
                         }
                         featuredView.showPackage(package)
                         tabBarController.selectedIndex = 0
                     } else {
                         guard let tabBarController = self.window?.rootViewController as? UITabBarController,
-                              let sourcesSVC = tabBarController.viewControllers?[2] as? UISplitViewController,
-                              let sourcesNavNV = sourcesSVC.viewControllers[0] as? SileoNavigationController,
+                              let sourcesNavNV = (tabBarController.viewControllers?[2] as? SileoNavigationController) ??
+                                  (tabBarController.viewControllers?[2] as? UISplitViewController)?.viewControllers[0] as? SileoNavigationController,
                               let sourcesVC = sourcesNavNV.viewControllers[0] as? SourcesViewController,
                               url.startAccessingSecurityScopedResource() else {
                                   return
@@ -265,7 +284,11 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate, UITabBarControllerDe
                     // presentModally ignored; we always present modally for an external URL open.
                     var presentModally = false
                     if let viewController = URLManager.viewController(url: url, isExternalOpen: true, presentModally: &presentModally) {
-                        self.window?.rootViewController?.present(viewController, animated: true, completion: nil)
+                        if let alertController = viewController as? UIAlertController {
+                            self.window?.rootViewController?.presentSileoAlert(alertController)
+                        } else {
+                            self.window?.rootViewController?.present(viewController, animated: true, completion: nil)
+                        }
                     }
                 }
             }
@@ -273,14 +296,15 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate, UITabBarControllerDe
         
         if url.host == "source" && url.scheme == "sileo" {
             guard let tabBarController = self.window?.rootViewController as? UITabBarController,
-                let sourcesSVC = tabBarController.viewControllers?[2] as? UISplitViewController,
-                let sourcesNavNV = sourcesSVC.viewControllers[0] as? SileoNavigationController,
+                let targetVC = tabBarController.viewControllers?[2],
+                let sourcesNavNV = (targetVC as? SileoNavigationController) ??
+                    (targetVC as? UISplitViewController)?.viewControllers[0] as? SileoNavigationController,
                 let sourcesVC = sourcesNavNV.viewControllers[0] as? SourcesViewController else {
                 return false
             }
             let newURL = url.absoluteURL
             tabBarController.closePopup(animated: true)
-            tabBarController.selectedViewController = sourcesSVC
+            tabBarController.selectedViewController = targetVC
             sourcesVC.presentAddSourceEntryField(url: newURL)
         }
         return true
@@ -289,8 +313,9 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate, UITabBarControllerDe
     func application(_ application: UIApplication, performActionFor shortcutItem: UIApplicationShortcutItem, completionHandler: @escaping (Bool) -> Void) {
         guard let tabBarController = TabBarController.singleton,
               let controllers = tabBarController.viewControllers,
-              let sourcesSVC = controllers[2] as? SourcesSplitViewController,
-              let sourcesNVC = sourcesSVC.viewControllers[0] as? SileoNavigationController,
+              let targetVC = controllers[2] as UIViewController?,
+              let sourcesNVC = (targetVC as? SileoNavigationController) ??
+                  (targetVC as? UISplitViewController)?.viewControllers[0] as? SileoNavigationController,
               let sourcesVC = sourcesNVC.viewControllers[0] as? SourcesViewController,
               let packageListNVC = controllers[3] as? SileoNavigationController,
               let packageListVC = packageListNVC.viewControllers[0] as? PackageListViewController
@@ -305,7 +330,7 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate, UITabBarControllerDe
             let title = String(localizationKey: "Sileo")
             let msg = String(localizationKey: "Upgrade_All_Shortcut_Processing_Message")
             let alert = UIAlertController(title: title, message: msg, preferredStyle: .alert)
-            packageListVC.present(alert, animated: true, completion: nil)
+            packageListVC.presentSileoAlert(alert)
             
             sourcesVC.refreshSources(forceUpdate: true, forceReload: true, isBackground: false, useRefreshControl: true, useErrorScreen: true, completion: { _, _ in
                 PackageListManager.shared.upgradeAll(completion: {
@@ -320,11 +345,11 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate, UITabBarControllerDe
             })
         } else if shortcutItem.type.hasSuffix(".Refresh") {
             tabBarController.closePopup(animated: true)
-            tabBarController.selectedViewController = sourcesSVC
+            tabBarController.selectedViewController = targetVC
             sourcesVC.refreshSources(forceUpdate: true, forceReload: true, isBackground: false, useRefreshControl: true, useErrorScreen: true, completion: nil)
         } else if shortcutItem.type.hasSuffix(".AddSource") {
             tabBarController.closePopup(animated: true)
-            tabBarController.selectedViewController = sourcesSVC
+            tabBarController.selectedViewController = targetVC
             sourcesVC.addSource(nil)
         } else if shortcutItem.type.hasSuffix(".Packages") {
             tabBarController.closePopup(animated: true)

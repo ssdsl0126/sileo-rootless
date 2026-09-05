@@ -245,3 +245,9 @@
 "Whats_Collected" = "What's Collected";
 "Non_Identifying" = "Only package and non-identifying device information is collected.";
 "Privacy_Policy" = "Privacy Policy";
+
+"Package_Copy_Download_URL_Action" = "Copia l’enllaç";
+"Package_Copy_Download_URL_Success" = "S’ha copiat l’URL de baixada.";
+"Package_Download_Deb_Action" = "Baixa";
+"Package_Download_Deb_Success_Title" = "Baixat";
+"Package_Download_Deb_Success" = "S’ha desat a %@";

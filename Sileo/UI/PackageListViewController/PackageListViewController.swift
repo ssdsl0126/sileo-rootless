@@ -75,6 +75,15 @@ class PackageListViewController: SileoViewController, UIGestureRecognizerDelegat
         return !searchHistory.isEmpty && (searchController.searchBar.text?.isEmpty ?? false)
     }
 
+    private var usesExpandedSourceDetailLayout: Bool {
+        guard #available(iOS 26.0, *),
+              UIDevice.current.userInterfaceIdiom == .pad,
+              let splitViewController = splitViewController as? SourcesSplitViewController else {
+            return false
+        }
+        return !splitViewController.isCollapsed
+    }
+
     @objc func updateSileoColors() {
         self.statusBarStyle = .default
         if let textField = searchController.searchBar.value(forKey: "searchField") as? UITextField {
@@ -89,6 +98,13 @@ class PackageListViewController: SileoViewController, UIGestureRecognizerDelegat
     
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
         updateSileoColors()
+    }
+
+    override func viewSafeAreaInsetsDidChange() {
+        super.viewSafeAreaInsetsDidChange()
+        if #available(iOS 26.0, *), usesExpandedSourceDetailLayout {
+            collectionView?.collectionViewLayout.invalidateLayout()
+        }
     }
     
     override func viewWillAppear(_ animated: Bool) {
@@ -110,10 +126,13 @@ class PackageListViewController: SileoViewController, UIGestureRecognizerDelegat
             return
         }
     }
+
     
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
-        self.navigationController?.navigationBar._hidesShadow = false
+        if #unavailable(iOS 26.0) {
+            self.navigationController?.navigationBar._hidesShadow = false
+        }
         
         guard let visibleCells = collectionView?.visibleCells else {
             return
@@ -195,7 +214,12 @@ class PackageListViewController: SileoViewController, UIGestureRecognizerDelegat
         searchController.searchBar.delegate = self
         searchController.searchResultsUpdater = self
         searchController.obscuresBackgroundDuringPresentation = false
-        searchController.hidesNavigationBarDuringPresentation = true
+        if #available(iOS 26.0, *), showSearchField {
+            // 独立搜索标签会把搜索框移到底部；激活时仍需保留顶部导航玻璃。
+            searchController.hidesNavigationBarDuringPresentation = false
+        } else {
+            searchController.hidesNavigationBarDuringPresentation = true
+        }
         
         if #available(iOS 26.0, *) {
             SileoGlass.removeLegacyBlurMarker(from: self)
@@ -205,6 +229,13 @@ class PackageListViewController: SileoViewController, UIGestureRecognizerDelegat
         
         self.navigationItem.hidesSearchBarWhenScrolling = false
         self.navigationItem.searchController = searchController
+        if #available(iOS 26.0, *) {
+            searchController.searchBar.backgroundImage = UIImage()
+            searchController.searchBar.searchBarStyle = .minimal
+            // 保持现在的大搜索栏布局，避免被收进工具栏后改变软件包页结构。
+            navigationItem.preferredSearchBarPlacement = .stacked
+            navigationItem.searchBarPlacementAllowsToolbarIntegration = false
+        }
         self.definesPresentationContext = true
         
         var sbTextField: UITextField?
@@ -372,7 +403,7 @@ class PackageListViewController: SileoViewController, UIGestureRecognizerDelegat
         })
         alert.addAction(cancelAction)
         
-        self.present(alert, animated: true)
+        self.presentSileoAlert(alert)
     }
     
     func getPackages() -> String {
@@ -471,8 +502,8 @@ class PackageListViewController: SileoViewController, UIGestureRecognizerDelegat
             self.dismiss(animated: true, completion: nil)
         })
         alert.addAction(cancelAction)
-        
-        self.present(alert, animated: true, completion: nil)
+
+        self.presentSileoAlert(alert)
     }
     
     @objc
@@ -587,14 +618,18 @@ extension PackageListViewController: UICollectionViewDataSource {
         switch findWhatFuckingSectionThisIs(indexPath.section) {
         case .canister:
             headerView.actionText = nil
-            headerView.separatorView?.isHidden = false
+            if #unavailable(iOS 26.0) {
+                headerView.separatorView?.isHidden = false
+            }
             headerView.sortContainer?.isHidden = true
             headerView.upgradeButton?.isHidden = true
             headerView.label?.text = String(localizationKey: "External_Repo")
             return headerView
         case .ignoredUpdates:
             headerView.actionText = nil
-            headerView.separatorView?.isHidden = false
+            if #unavailable(iOS 26.0) {
+                headerView.separatorView?.isHidden = false
+            }
             headerView.sortContainer?.isHidden = true
             headerView.upgradeButton?.isHidden = true
             headerView.label?.text = String(localizationKey: "Ignored Updates")
@@ -617,11 +652,15 @@ extension PackageListViewController: UICollectionViewDataSource {
                 case .size: headerView.sortHeader?.text = String(localizationKey: "Sort_Install_Size")
                 }
                 headerView.sortContainer?.addTarget(self, action: #selector(self.sortPopup(sender:)), for: .touchUpInside)
-                headerView.separatorView?.isHidden = false
+                if #unavailable(iOS 26.0) {
+                    headerView.separatorView?.isHidden = false
+                }
                 return headerView
             } else if showProvisional && loadProvisional {
                 headerView.actionText = nil
-                headerView.separatorView?.isHidden = false
+                if #unavailable(iOS 26.0) {
+                    headerView.separatorView?.isHidden = false
+                }
                 headerView.sortContainer?.isHidden = true
                 headerView.upgradeButton?.isHidden = true
                 headerView.label?.text = String(localizationKey: "Internal_Repo")
@@ -630,7 +669,9 @@ extension PackageListViewController: UICollectionViewDataSource {
         case .reallyBoringList: fatalError("Literally impossible to be here")
         case .searchHistoryList:
             headerView.actionText = String(localizationKey: "Clear_Search_History")
-            headerView.separatorView?.isHidden = false
+            if #unavailable(iOS 26.0) {
+                headerView.separatorView?.isHidden = false
+            }
             headerView.sortContainer?.isHidden = true
             headerView.upgradeButton?.isHidden = false
             headerView.upgradeButton?.addTarget(nil, action: #selector(clearHistory), for: .touchUpInside)
@@ -660,6 +701,21 @@ extension PackageListViewController: UICollectionViewDelegate {
 }
 
 extension PackageListViewController: UICollectionViewDelegateFlowLayout {
+    func collectionView(_ collectionView: UICollectionView,
+                        layout collectionViewLayout: UICollectionViewLayout,
+                        insetForSectionAt section: Int) -> UIEdgeInsets {
+        guard #available(iOS 26.0, *), usesExpandedSourceDetailLayout else {
+            return (collectionViewLayout as? UICollectionViewFlowLayout)?.sectionInset ?? .zero
+        }
+
+        // iPadOS 26 双栏下，详情真正可用的宽度还受 safe-area 约束。
+        // 布局必须排除这部分区域，否则 FlowLayout 会误排成两列并裁掉第一列。
+        return UIEdgeInsets(top: 0,
+                            left: collectionView.safeAreaInsets.left,
+                            bottom: 0,
+                            right: collectionView.safeAreaInsets.right)
+    }
+
     func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, referenceSizeForHeaderInSection section: Int) -> CGSize {
         if #available(iOS 26.0, *) {
             // iOS 26 胶囊本身就是 44pt，标题区域不再保留旧版 65pt 的空带。
@@ -680,6 +736,9 @@ extension PackageListViewController: UICollectionViewDelegateFlowLayout {
     
     func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, sizeForItemAt indexPath: IndexPath) -> CGSize {
         var width = collectionView.bounds.size.width
+        if #available(iOS 26.0, *), usesExpandedSourceDetailLayout {
+            width -= collectionView.safeAreaInsets.left + collectionView.safeAreaInsets.right
+        }
         if UIDevice.current.userInterfaceIdiom == .pad || UIApplication.shared.statusBarOrientation.isLandscape {
             if width > 330 {
                 width = 330

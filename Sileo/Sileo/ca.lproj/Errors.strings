@@ -59,3 +59,7 @@
 "Purchase_Auth_Complete_Fail.Title" = "No s'ha pogut completar l'autenticació";
 
 "Couldnt_Import_Themes" = "No s'han pogut importar el(s) tema(es)";
+
+"Package_Download_URL_Unavailable" = "Aquest paquet no té cap URL de baixada.";
+"Package_Download_Local_Missing" = "No s’ha trobat el fitxer local del paquet.";
+"Package_Download_Save_Failed" = "No s’ha pogut desar el paquet a Downloads.";

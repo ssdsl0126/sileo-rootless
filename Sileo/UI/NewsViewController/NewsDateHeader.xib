@@ -21,10 +21,10 @@
                     <items/>
                 </toolbar>
                 <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="tER-hV-Qnl" customClass="SileoContentView" customModule="Sileo" customModuleProvider="target">
-                    <rect key="frame" x="15" y="15" width="181.5" height="24"/>
+                    <rect key="frame" x="15" y="15" width="200" height="24"/>
                     <subviews>
-                        <label opaque="NO" clipsSubviews="YES" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="2 FEBRUARY 2019, 2:34 PM" textAlignment="natural" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="Jqr-mH-ppT">
-                            <rect key="frame" x="10" y="0.0" width="161.5" height="24"/>
+                        <label opaque="NO" clipsSubviews="YES" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="2 FEBRUARY 2019, 2:34 PM" textAlignment="natural" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" minimumScaleFactor="0.75" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="Jqr-mH-ppT">
+                            <rect key="frame" x="10" y="0.0" width="180" height="24"/>
                             <fontDescription key="fontDescription" type="system" weight="medium" pointSize="12"/>
                             <color key="textColor" red="0.50980392156862742" green="0.50980392156862742" blue="0.50980392156862742" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
                             <nil key="highlightedColor"/>

@@ -244,3 +244,9 @@
 "Whats_Collected" = "What's Collected";
 "Non_Identifying" = "Only package and non-identifying device information is collected.";
 "Privacy_Policy" = "Privacy Policy";
+
+"Package_Copy_Download_URL_Action" = "Скопіювати посилання";
+"Package_Copy_Download_URL_Success" = "Посилання для завантаження скопійовано.";
+"Package_Download_Deb_Action" = "Завантажити";
+"Package_Download_Deb_Success_Title" = "Завантажено";
+"Package_Download_Deb_Success" = "Збережено в %@";

@@ -244,3 +244,9 @@
 "Whats_Collected" = "What's Collected";
 "Non_Identifying" = "Only package and non-identifying device information is collected.";
 "Privacy_Policy" = "Privacy Policy";
+
+"Package_Copy_Download_URL_Action" = "העתק קישור";
+"Package_Copy_Download_URL_Success" = "קישור ההורדה הועתק.";
+"Package_Download_Deb_Action" = "הורד";
+"Package_Download_Deb_Success_Title" = "הורד";
+"Package_Download_Deb_Success" = "נשמר אל %@";

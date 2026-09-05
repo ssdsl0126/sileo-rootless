@@ -199,7 +199,7 @@ class FeaturedPackageView: FeaturedBaseView, PackageQueueButtonDataProvider {
             alertController.addAction(UIAlertAction(title: String(localizationKey: "OK"), style: .cancel, handler: { _ in
                 alertController.dismiss(animated: true, completion: nil)
             }))
-            self.parentViewController?.present(alertController, animated: true, completion: nil)
+            self.parentViewController?.presentSileoAlert(alertController)
         }
     }
     

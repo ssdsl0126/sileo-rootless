@@ -59,3 +59,7 @@
 "Purchase_Auth_Complete_Fail.Title" = "Falha ao Completar autenticação";
 
 "Couldnt_Import_Themes" = "Couldn't Import theme(s)";
+
+"Package_Download_URL_Unavailable" = "Este pacote não tem um URL de transferência.";
+"Package_Download_Local_Missing" = "Não foi possível encontrar o ficheiro local do pacote.";
+"Package_Download_Save_Failed" = "Não foi possível guardar o pacote em Downloads.";

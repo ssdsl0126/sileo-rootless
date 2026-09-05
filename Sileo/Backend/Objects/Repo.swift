@@ -26,8 +26,8 @@ final class Repo: Equatable {
             repoNameTmp = false
             func reloadData() {
                 guard let tabBarController = UIApplication.shared.windows.first?.rootViewController as? UITabBarController,
-                    let sourcesSVC = tabBarController.viewControllers?[2] as? UISplitViewController,
-                    let sourcesNavNV = sourcesSVC.viewControllers[0] as? SileoNavigationController,
+                    let sourcesNavNV = (tabBarController.viewControllers?[2] as? SileoNavigationController) ??
+                        (tabBarController.viewControllers?[2] as? UISplitViewController)?.viewControllers[0] as? SileoNavigationController,
                     let sourcesVC = sourcesNavNV.viewControllers[0] as? SourcesViewController else {
                     return
                 }

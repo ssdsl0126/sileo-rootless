@@ -59,3 +59,7 @@
 "Purchase_Auth_Complete_Fail.Title" = "ไม่สามารถตรวจสอบสิทธิ์ให้เสร็จสมบูรณ์ได้";
 
 "Couldnt_Import_Themes" = "Couldn't Import theme(s)";
+
+"Package_Download_URL_Unavailable" = "แพ็กเกจนี้ไม่มี URL สำหรับดาวน์โหลด";
+"Package_Download_Local_Missing" = "ไม่พบไฟล์แพ็กเกจในเครื่อง";
+"Package_Download_Save_Failed" = "ไม่สามารถบันทึกแพ็กเกจไปยัง Downloads ได้";

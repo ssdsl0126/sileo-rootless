@@ -101,7 +101,11 @@ class DepictionButton: UIButton {
                 var presentModally = false
                 if let controller = URLManager.viewController(url: url, isExternalOpen: true, presentModally: &presentModally) {
                     if presentModally {
-                        parentViewController?.present(controller, animated: true, completion: nil)
+                        if let alertController = controller as? UIAlertController {
+                            parentViewController?.presentSileoAlert(alertController)
+                        } else {
+                            parentViewController?.present(controller, animated: true, completion: nil)
+                        }
                     } else {
                         parentViewController?.navigationController?.pushViewController(controller, animated: true)
                     }
