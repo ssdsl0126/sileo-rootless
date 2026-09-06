@@ -150,7 +150,7 @@ class ThemeCreatorViewController: BaseSettingsViewController {
         switch indexPath.section {
         case 1:
             currentThemeComponentSelection = .init(rawValue: indexPath.row)
-            presentColorController()
+            presentColorController(for: indexPath)
             tableView.deselectRow(at: indexPath, animated: true)
         case 2:
             guard let themeName = themeName else {
@@ -193,11 +193,20 @@ class ThemeCreatorViewController: BaseSettingsViewController {
         }
     }
     
-    func presentColorController() {
+    func presentColorController(for indexPath: IndexPath? = nil) {
         let colorPickerViewController = UIColorPickerViewController()
         colorPickerViewController.delegate = self
         colorPickerViewController.supportsAlpha = false
         colorPickerViewController.selectedColor = .tintColor
+        if let popover = colorPickerViewController.popoverPresentationController {
+            if let indexPath = indexPath, let cell = tableView.cellForRow(at: indexPath) {
+                popover.sourceView = cell
+                popover.sourceRect = cell.bounds
+            } else {
+                popover.sourceView = self.view
+                popover.sourceRect = CGRect(x: self.view.bounds.midX, y: self.view.bounds.midY, width: 0, height: 0)
+            }
+        }
         self.present(colorPickerViewController, animated: true)
     }
     

@@ -78,6 +78,13 @@ class NewsViewController: SileoViewController, UICollectionViewDataSource, UICol
                                                name: NewsViewController.reloadNotification,
                                                object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(self.reloadStates(_:)), name: PackageListManager.stateChange, object: nil)
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(reloadData),
+                                               name: NewsResolver.ShowNews,
+                                               object: nil)
+
+        // Scene 创建页面前，软件包缓存可能已经加载完毕，不能只依赖完成通知。
+        reloadData()
     }
     
     @objc func reloadStates(_ notification: Notification) {
@@ -173,22 +180,11 @@ extension NewsViewController { // Get Data
     func loadNextBatch() {
         updateQueue.async {
             let packageListManager = PackageListManager.shared
+            // 必须先加载软件源中的软件包，否则已有历史记录也会被解析成空列表。
+            packageListManager.initWait()
             let databaseManager = DatabaseManager.shared
             
             let timestampsWeCareAbout = PackageStub.timestamps().sorted { $0 > $1 }
-            if timestampsWeCareAbout.isEmpty {
-                DispatchQueue.main.async {
-                    if self.activityIndicatorView.isAnimating {
-                        FRUIView.animate(withDuration: 0.3, animations: {
-                            self.activityIndicatorView.alpha = 0
-                        }, completion: { _ in
-                            self.collectionView.isHidden = false
-                            self.activityIndicatorView.stopAnimating()
-                        })
-                    }
-                }
-                return
-            }
             // Ok so we've got a list of timestamps we haven't bothered to load yet
             // We're gonna load the batches, until we get to 100 or over
             // Thanks to new repo contexts, loading packages is signifcantly faster anyway
@@ -235,11 +231,8 @@ extension NewsViewController { // Get Data
                 let sorted = packageListManager.sortPackages(packages: Array(packageArray), search: nil)
                 packages[timestamp] = ContiguousArray(sorted)
             }
-            // Merge with the master array
-            // This is the dumbest shit ever, it's literally the master array that shows
-            // swiftlint:disable inclusive_language
-            var master = self.sections
-            master.removeAll()
+            // 包括空结果在内，都统一提交快照，避免残留旧分组或漏掉占位内容。
+            var master = [Int64: [Package]]()
             for timestamp in packages.keys {
                 if let packages = packages[timestamp],
                       !packages.isEmpty {
@@ -253,15 +246,9 @@ extension NewsViewController { // Get Data
                 self.timestamps = Array(master.keys).sorted { $0 > $1 }
                 self.collectionView.reloadData()
 
-                // Hide spinner if necessary
-                if self.activityIndicatorView.isAnimating {
-                    FRUIView.animate(withDuration: 0.3, animations: {
-                        self.activityIndicatorView.alpha = 0
-                    }, completion: { _ in
-                        self.collectionView.isHidden = false
-                        self.activityIndicatorView.stopAnimating()
-                    })
-                }
+                // 不让上一轮淡出动画在新一轮加载途中提前停止指示器。
+                self.activityIndicatorView.stopAnimating()
+                self.collectionView.isHidden = false
             }
         }
     }

@@ -1045,8 +1045,58 @@ private final class LiquidGlassQueueBar: UIControl {
         fatalError("init(coder:) has not been implemented")
     }
 
+    private var padWidthConstraint: NSLayoutConstraint?
+
+    func calculatedPadWidth() -> CGFloat {
+        let hostWidth: CGFloat
+        if let parentWidth = TabBarController.singleton?.view.bounds.width, parentWidth > 100 {
+            hostWidth = parentWidth
+        } else if let windowWidth = window?.bounds.width, windowWidth > 100 {
+            hostWidth = windowWidth
+        } else {
+            hostWidth = UIScreen.main.bounds.width
+        }
+        return max(320, hostWidth - 32)
+    }
+
+    func updatePadWidthConstraintIfNeeded() {
+        guard UIDevice.current.userInterfaceIdiom == .pad else { return }
+        let targetWidth = calculatedPadWidth()
+        if let constraint = padWidthConstraint {
+            if constraint.constant != targetWidth {
+                constraint.constant = targetWidth
+                invalidateIntrinsicContentSize()
+            }
+        } else {
+            translatesAutoresizingMaskIntoConstraints = false
+            let constraint = widthAnchor.constraint(equalToConstant: targetWidth)
+            constraint.priority = UILayoutPriority(999)
+            constraint.isActive = true
+            padWidthConstraint = constraint
+            invalidateIntrinsicContentSize()
+        }
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            updatePadWidthConstraintIfNeeded()
+        }
+    }
+
     override var intrinsicContentSize: CGSize {
-        CGSize(width: UIView.noIntrinsicMetric, height: 64)
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            return CGSize(width: calculatedPadWidth(), height: 64)
+        }
+        return CGSize(width: UIView.noIntrinsicMetric, height: 64)
+    }
+
+    override func sizeThatFits(_ size: CGSize) -> CGSize {
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            let width = size.width > 100 ? size.width : calculatedPadWidth()
+            return CGSize(width: width, height: 64)
+        }
+        return super.sizeThatFits(size)
     }
 
     func update(title: String?, subtitle: String?) {
@@ -1058,11 +1108,17 @@ private final class LiquidGlassQueueBar: UIControl {
         glassView.effect = SileoGlass.effect(interactive: true,
                                               tintColor: UIColor.sileoBackgroundColor.withAlphaComponent(0.18))
         accessibilityLabel = [title, subtitle].compactMap { $0 }.joined(separator: ", ")
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            updatePadWidthConstraintIfNeeded()
+        }
         setNeedsLayout()
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            updatePadWidthConstraintIfNeeded()
+        }
         glassView.frame = bounds
         let cornerRadius = min(bounds.width, bounds.height) / 2
         layer.cornerRadius = cornerRadius

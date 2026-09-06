@@ -370,6 +370,16 @@ extension SettingsViewController { // UITableViewDataSource
         colorPickerViewController.delegate = self
         colorPickerViewController.supportsAlpha = false
         colorPickerViewController.selectedColor = .tintColor
+        if let popover = colorPickerViewController.popoverPresentationController {
+            let indexPath = IndexPath(row: 1, section: 1)
+            if let cell = tableView.cellForRow(at: indexPath) {
+                popover.sourceView = cell
+                popover.sourceRect = cell.bounds
+            } else {
+                popover.sourceView = self.view
+                popover.sourceRect = CGRect(x: self.view.bounds.midX, y: self.view.bounds.midY, width: 0, height: 0)
+            }
+        }
         self.present(colorPickerViewController, animated: true)
     }
     

@@ -15,17 +15,54 @@ import BackgroundTasks
 #endif
 
 @main
-class SileoAppDelegate: UIResponder, UIApplicationDelegate, UITabBarControllerDelegate {
+class SileoAppDelegate: UIResponder, UIApplicationDelegate {
     public var window: UIWindow?
-    
-    func applicationDidFinishLaunching(_ application: UIApplication) {
-        EvanderNetworking.CACHE_FORCE = .libraryDirectory
+    private var didConfigureInterface = false
+
+    func application(_ application: UIApplication,
+                     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        prepareProcessLaunch()
+        // 无 scene 的旧路径仍可能带 window；有 scene 时 window 在 SceneDelegate 里再挂上。
+        if window != nil {
+            configureInterfaceIfNeeded()
+        }
+        return true
+    }
+
+    func application(_ application: UIApplication,
+                     configurationForConnecting connectingSceneSession: UISceneSession,
+                     options: UIScene.ConnectionOptions) -> UISceneConfiguration {
+        let configuration = UISceneConfiguration(name: "Default Configuration", sessionRole: connectingSceneSession.role)
+        configuration.delegateClass = SceneDelegate.self
+        return configuration
+    }
+
+    func attachMainWindow(_ window: UIWindow) {
+        self.window = window
+        configureInterfaceIfNeeded()
+    }
+
+    private func prepareProcessLaunch() {
+        EvanderNetworking.CACHE_FORCE = .cachesDirectory
+        #if !TARGET_SANDBOX && !targetEnvironment(simulator)
         let prefix = CommandPath.prefix
         let old = EvanderNetworking._cacheDirectory
-        EvanderNetworking._cacheDirectory = URL(fileURLWithPath: prefix + old.path)
-        if prefix != "" && old.dirExists {
-            deleteFileAsRoot(old)
+        if prefix != "" && !old.path.hasPrefix(prefix) && !old.path.contains("/Containers/") {
+            EvanderNetworking._cacheDirectory = URL(fileURLWithPath: prefix + old.path)
+            if old.dirExists {
+                deleteFileAsRoot(old)
+            }
+            if let bundleID = Bundle.main.bundleIdentifier {
+                let jbCacheDir = URL(fileURLWithPath: "\(prefix)/var/mobile/Library/Caches/\(bundleID)")
+                try? FileManager.default.createDirectory(at: jbCacheDir, withIntermediateDirectories: true)
+                URLCache.shared = URLCache(
+                    memoryCapacity: 20 * 1024 * 1024,
+                    diskCapacity: 100 * 1024 * 1024,
+                    directory: jbCacheDir
+                )
+            }
         }
+        #endif
         // Prepare the Evander manifest
         Evander.prepare()
         #if targetEnvironment(macCatalyst)
@@ -40,12 +77,17 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate, UITabBarControllerDe
         _ = DownloadManager.shared
         // Start the language helper for customised localizations
         _ = LanguageHelper.shared
+    }
 
+    private func configureInterfaceIfNeeded() {
+        guard !didConfigureInterface else {
+            return
+        }
         guard let tabBarController = self.window?.rootViewController as? UITabBarController else {
             fatalError("Invalid Storyboard")
         }
+        didConfigureInterface = true
         modernizeSourcesSplitIfNeeded(in: tabBarController)
-        tabBarController.delegate = self
         if #available(iOS 26.0, *) {
             // iOS 26 会为系统标签栏提供 Liquid Glass；不要再覆盖系统材质。
             tabBarController.tabBar.isTranslucent = true
@@ -283,7 +325,8 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate, UITabBarControllerDe
         }
     }
     
-    func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
+    @discardableResult
+    func handleOpenURL(_ url: URL) -> Bool {
         DispatchQueue.global(qos: .default).async {
             PackageListManager.shared.initWait()
             DispatchQueue.main.async {
@@ -344,7 +387,15 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate, UITabBarControllerDe
         return true
     }
     
+    func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
+        handleOpenURL(url)
+    }
+
     func application(_ application: UIApplication, performActionFor shortcutItem: UIApplicationShortcutItem, completionHandler: @escaping (Bool) -> Void) {
+        handleShortcutItem(shortcutItem, completionHandler: completionHandler)
+    }
+
+    func handleShortcutItem(_ shortcutItem: UIApplicationShortcutItem, completionHandler: @escaping (Bool) -> Void) {
         guard let tabBarController = TabBarController.singleton,
               let controllers = tabBarController.viewControllers,
               let targetVC = controllers[2] as UIViewController?,
@@ -354,6 +405,7 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate, UITabBarControllerDe
               let packageListNVC = controllers[3] as? SileoNavigationController,
               let packageListVC = packageListNVC.viewControllers[0] as? PackageListViewController
         else {
+            completionHandler(false)
             return
         }
         
@@ -389,6 +441,7 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate, UITabBarControllerDe
             tabBarController.closePopup(animated: true)
             tabBarController.selectedViewController = packageListNVC
         }
+        completionHandler(true)
     }
     
     func applicationDidEnterBackground(_ application: UIApplication) {

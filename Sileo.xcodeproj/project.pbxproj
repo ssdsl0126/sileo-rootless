@@ -848,6 +848,9 @@
 		F18383F520FBFFB700450EED /* libiconv.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = F18383F420FBFFB700450EED /* libiconv.tbd */; };
 		F183CFB02318D1FF00D3AF3B /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F183CFAF2318D1FF00D3AF3B /* AppDelegate.swift */; };
 		F183CFB12318D1FF00D3AF3B /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F183CFAF2318D1FF00D3AF3B /* AppDelegate.swift */; };
+		C8F3A1012709060A000002 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F3A1012709060A000001 /* SceneDelegate.swift */; };
+		C8F3A1012709060A000003 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F3A1012709060A000001 /* SceneDelegate.swift */; };
+		C8F3A1012709060A000004 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F3A1012709060A000001 /* SceneDelegate.swift */; };
 		F183CFC7231A563500D3AF3B /* PackageViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F183CFC6231A563500D3AF3B /* PackageViewController.swift */; };
 		F183CFCC231C246600D3AF3B /* PackageViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F183CFC6231A563500D3AF3B /* PackageViewController.swift */; };
 		F18B58482581A7E90064CD71 /* CSActionItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18B58472581A7E90064CD71 /* CSActionItem.swift */; };
@@ -1541,6 +1544,7 @@
 		F178CD8821323E3800F927FA /* DownloadsTableViewController.xib */ = {isa = PBXFileReference; lastKnownFileType = file.xib; path = DownloadsTableViewController.xib; sourceTree = "<group>"; };
 		F18383F420FBFFB700450EED /* libiconv.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libiconv.tbd; path = usr/lib/libiconv.tbd; sourceTree = SDKROOT; };
 		F183CFAF2318D1FF00D3AF3B /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		C8F3A1012709060A000001 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		F183CFC6231A563500D3AF3B /* PackageViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackageViewController.swift; sourceTree = "<group>"; };
 		F18B58472581A7E90064CD71 /* CSActionItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CSActionItem.swift; sourceTree = "<group>"; };
 		F1974938213695660065E630 /* PackageListHeaderBlank.xib */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.xib; path = PackageListHeaderBlank.xib; sourceTree = "<group>"; };
@@ -2644,6 +2648,7 @@
 			isa = PBXGroup;
 			children = (
 				F183CFAF2318D1FF00D3AF3B /* AppDelegate.swift */,
+				C8F3A1012709060A000001 /* SceneDelegate.swift */,
 				F1B99EE720DB671B00374C27 /* Backend */,
 				F1B3960420E5AFCE00AF3D04 /* Contrib */,
 				F1B99EE620DB671300374C27 /* UI */,
@@ -3984,6 +3989,7 @@
 			files = (
 				E128181E26BBFAA500D2553B /* APTWrapper.swift in Sources */,
 				E128181F26BBFAA500D2553B /* AppDelegate.swift in Sources */,
+				C8F3A1012709060A000004 /* SceneDelegate.swift in Sources */,
 				E128182026BBFAA500D2553B /* SileoSeparatorView.swift in Sources */,
 				E128182126BBFAA500D2553B /* DepictionButton.swift in Sources */,
 				E128182226BBFAA500D2553B /* LanguageSelectionCell.swift in Sources */,
@@ -4198,6 +4204,7 @@
 				F1DD3CD023132D1F00D86A52 /* APTWrapper.swift in Sources */,
 				E1D44BB92665093A00A12A77 /* SileoTableView.swift in Sources */,
 				F183CFB12318D1FF00D3AF3B /* AppDelegate.swift in Sources */,
+				C8F3A1012709060A000003 /* SceneDelegate.swift in Sources */,
 				F1C85B4E2325835D0064D3A2 /* SileoSeparatorView.swift in Sources */,
 				E15A954D26B99408000DB10E /* LanguageSelectionCell.swift in Sources */,
 				E18CD2D2262C8E7500FF499C /* NewsResolver.swift in Sources */,
@@ -4382,6 +4389,7 @@
 			files = (
 				F1DD3CCD231118A500D86A52 /* APTWrapper.swift in Sources */,
 				F183CFB02318D1FF00D3AF3B /* AppDelegate.swift in Sources */,
+				C8F3A1012709060A000002 /* SceneDelegate.swift in Sources */,
 				F1C85B4D2325835D0064D3A2 /* SileoSeparatorView.swift in Sources */,
 				F16115CE244D827A003BF1E6 /* DepictionButton.swift in Sources */,
 				E15A954C26B99408000DB10E /* LanguageSelectionCell.swift in Sources */,
@@ -4873,7 +4881,7 @@
 					"$(PROJECT_DIR)/Deps/libzstd",
 					"$(PROJECT_DIR)/Deps/liblz4",
 				);
-				MARKETING_VERSION = 2.7;
+				MARKETING_VERSION = 2.7.1;
 				OTHER_CFLAGS = "$(inherited)";
 				OTHER_LDFLAGS = "";
 				PRODUCT_BUNDLE_IDENTIFIER = org.coolstar.SileoStore;
@@ -4925,7 +4933,7 @@
 					"$(PROJECT_DIR)/Deps/libzstd",
 					"$(PROJECT_DIR)/Deps/liblz4",
 				);
-				MARKETING_VERSION = 2.7;
+				MARKETING_VERSION = 2.7.1;
 				OTHER_CFLAGS = "$(inherited)";
 				OTHER_LDFLAGS = "";
 				PRODUCT_BUNDLE_IDENTIFIER = org.coolstar.SileoStore;
@@ -4976,7 +4984,7 @@
 					"$(PROJECT_DIR)/Deps/libzstd",
 					"$(PROJECT_DIR)/Deps/liblz4",
 				);
-				MARKETING_VERSION = 2.7;
+				MARKETING_VERSION = 2.7.1;
 				OTHER_CFLAGS = "$(inherited)";
 				OTHER_LDFLAGS = "";
 				PRODUCT_BUNDLE_IDENTIFIER = sileostore;
@@ -5160,7 +5168,7 @@
 					"$(PROJECT_DIR)/Deps/libzstd",
 					"$(PROJECT_DIR)/Deps/liblz4",
 				);
-				MARKETING_VERSION = 2.7;
+				MARKETING_VERSION = 2.7.1;
 				OTHER_CFLAGS = "$(inherited)";
 				OTHER_LDFLAGS = "";
 				PRODUCT_BUNDLE_IDENTIFIER = com.amywhile.sileo;
@@ -5214,7 +5222,7 @@
 					"$(PROJECT_DIR)/Deps/liblz4",
 				);
 				LLVM_LTO = YES;
-				MARKETING_VERSION = 2.7;
+				MARKETING_VERSION = 2.7.1;
 				OTHER_CFLAGS = (
 					"-flto",
 					"$(inherited)",
@@ -5379,7 +5387,7 @@
 					"$(PROJECT_DIR)/Deps/liblzma",
 					"$(PROJECT_DIR)/Deps/liblz4",
 				);
-				MARKETING_VERSION = 2.7;
+				MARKETING_VERSION = 2.7.1;
 				OTHER_CFLAGS = (
 					"-flto",
 					"$(inherited)",
@@ -5432,7 +5440,7 @@
 					"$(PROJECT_DIR)/Deps/liblz4",
 				);
 				LLVM_LTO = YES;
-				MARKETING_VERSION = 2.7;
+				MARKETING_VERSION = 2.7.1;
 				OTHER_CFLAGS = (
 					"-flto",
 					"$(inherited)",
@@ -5606,7 +5614,7 @@
 					"$(PROJECT_DIR)/Deps/libzstd",
 					"$(PROJECT_DIR)/Deps/liblz4",
 				);
-				MARKETING_VERSION = 2.7;
+				MARKETING_VERSION = 2.7.1;
 				OTHER_CFLAGS = "$(inherited)";
 				OTHER_LDFLAGS = "";
 				PRODUCT_BUNDLE_IDENTIFIER = com.amywhile.sileo;
@@ -5668,7 +5676,7 @@
 					"$(PROJECT_DIR)/Deps/libzstd",
 					"$(PROJECT_DIR)/Deps/liblz4",
 				);
-				MARKETING_VERSION = 2.7;
+				MARKETING_VERSION = 2.7.1;
 				OTHER_CFLAGS = "$(inherited)";
 				OTHER_LDFLAGS = "";
 				PRODUCT_BUNDLE_IDENTIFIER = com.amywhile.sileo;
