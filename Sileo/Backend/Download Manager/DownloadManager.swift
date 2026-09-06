@@ -20,6 +20,7 @@ public enum DownloadManagerQueue: Int {
 
 final class DownloadManager {
     static let lockStateChangeNotification = Notification.Name("SileoDownloadManagerLockStateChanged")
+    static let localDebDownloadProgressNotification = Notification.Name("SileoLocalDebDownloadProgress")
     static let aptQueue: DispatchQueue = {
         let queue = DispatchQueue(label: "Sileo.AptQueue", qos: .userInteractive)
         queue.setSpecific(key: DownloadManager.queueKey, value: DownloadManager.queueContext)
@@ -77,6 +78,9 @@ final class DownloadManager {
     public var queueStarted = false
     var downloads: [String: Download] = [:]
     var cachedFiles: [URL] = []
+    // 右滑保存 deb 的进行中进度，不进入安装队列
+    private var localDebProgressByKey: [String: CGFloat] = [:]
+    private var localDebLastProgressPost: [String: TimeInterval] = [:]
         
     var repoDownloadOverrideProviders: [String: Set<AnyHashable>] = [:]
     
@@ -856,8 +860,31 @@ final class DownloadManager {
 
     // MARK: - 独立保存到本地
 
+    static var usesSandboxedDownloads: Bool {
+        #if targetEnvironment(simulator) || TARGET_SANDBOX
+        true
+        #else
+        false
+        #endif
+    }
+
     static var packageDownloadsDirectory: URL {
-        URL(fileURLWithPath: "\(CommandPath.prefix)/var/mobile/Downloads")
+        if usesSandboxedDownloads {
+            // Demo 只能先落到沙盒，再交给系统“存储到文件”面板。
+            let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+                ?? URL(fileURLWithPath: NSTemporaryDirectory())
+            return caches.appendingPathComponent("Downloads", isDirectory: true)
+        }
+        return URL(fileURLWithPath: "\(CommandPath.prefix)/var/mobile/Downloads")
+    }
+
+    static func packageDownloadSuccessMessage(for fileURL: URL) -> String {
+        String(format: String(localizationKey: "Package_Download_Deb_Success"), fileURL.path)
+    }
+
+    static func filzaURL(for fileURL: URL) -> URL? {
+        let encodedPath = fileURL.path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? fileURL.path
+        return URL(string: "filza://\(encodedPath)")
     }
 
     func packageDownloadURLString(for package: Package) -> String? {
@@ -915,7 +942,20 @@ final class DownloadManager {
         completion(nil, urlString)
     }
 
+    func localDebDownloadKey(for package: Package) -> String {
+        "\(package.packageID)|\(package.version)"
+    }
+
+    func localDebProgress(for package: Package) -> CGFloat? {
+        localDebProgressByKey[localDebDownloadKey(for: package)]
+    }
+
     func savePackageToDownloads(_ package: Package, completion: @escaping (String?, URL?) -> Void) {
+        let key = localDebDownloadKey(for: package)
+        if localDebProgressByKey[key] != nil {
+            return
+        }
+
         let destinationDirectory = Self.packageDownloadsDirectory
         let destinationURL = destinationDirectory.appendingPathComponent(localDownloadFileName(for: package))
 
@@ -935,39 +975,105 @@ final class DownloadManager {
             return
         }
 
+        beginLocalDebProgress(key)
         resolvePackageDownloadURL(for: package) { errorMessage, url in
             guard let downloadURL = url else {
+                self.endLocalDebProgress(key)
                 completion(errorMessage ?? String(localizationKey: "Package_Download_URL_Unavailable", type: .error), nil)
                 return
             }
             if downloadURL.isFileURL {
                 guard FileManager.default.fileExists(atPath: downloadURL.path) else {
+                    self.endLocalDebProgress(key)
                     completion(String(localizationKey: "Package_Download_Local_Missing", type: .error), nil)
                     return
                 }
                 ensureDirectoryAsRoot(destinationDirectory)
                 copyFileAsRoot(from: downloadURL, to: destinationURL)
                 guard FileManager.default.fileExists(atPath: destinationURL.path) else {
+                    self.endLocalDebProgress(key)
                     completion(String(localizationKey: "Package_Download_Save_Failed", type: .error), nil)
                     return
                 }
+                self.completeLocalDebProgress(key)
                 completion(nil, destinationURL)
                 return
             }
 
-            RepoManager.shared.queue(from: downloadURL, progress: nil, success: { fileURL in
+            guard let task = RepoManager.shared.queue(from: downloadURL, progress: { progress in
+                self.updateLocalDebProgress(key: key, from: progress)
+            }, success: { fileURL in
                 ensureDirectoryAsRoot(destinationDirectory)
                 copyFileAsRoot(from: fileURL, to: destinationURL)
                 try? FileManager.default.removeItem(at: fileURL)
                 guard FileManager.default.fileExists(atPath: destinationURL.path) else {
+                    self.endLocalDebProgress(key)
                     completion(String(localizationKey: "Package_Download_Save_Failed", type: .error), nil)
                     return
                 }
+                self.completeLocalDebProgress(key)
                 completion(nil, destinationURL)
             }, failure: { statusCode, error in
+                self.endLocalDebProgress(key)
                 let message = error?.localizedDescription ?? String(format: String(localizationKey: "Download_Failing_Status_Code", type: .error), statusCode)
                 completion(message, nil)
-            })?.resume()
+            }) else {
+                self.endLocalDebProgress(key)
+                completion(String(localizationKey: "Package_Download_URL_Unavailable", type: .error), nil)
+                return
+            }
+            task.resume()
+        }
+    }
+
+    private func beginLocalDebProgress(_ key: String) {
+        performOnMain {
+            self.localDebProgressByKey[key] = 0
+            self.postLocalDebProgress(key)
+        }
+    }
+
+    private func updateLocalDebProgress(key: String, from progress: DownloadProgress) {
+        guard progress.expected > 0 else { return }
+        let fraction = min(1, max(0, CGFloat(Double(progress.total) / Double(progress.expected))))
+        performOnMain {
+            let now = Date().timeIntervalSince1970
+            if let last = self.localDebLastProgressPost[key], now - last < 0.08, fraction < 1 {
+                return
+            }
+            self.localDebLastProgressPost[key] = now
+            self.localDebProgressByKey[key] = fraction
+            self.postLocalDebProgress(key)
+        }
+    }
+
+    private func completeLocalDebProgress(_ key: String) {
+        performOnMain {
+            self.localDebProgressByKey[key] = 1
+            self.postLocalDebProgress(key)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                self.endLocalDebProgress(key)
+            }
+        }
+    }
+
+    private func endLocalDebProgress(_ key: String) {
+        performOnMain {
+            self.localDebProgressByKey.removeValue(forKey: key)
+            self.localDebLastProgressPost.removeValue(forKey: key)
+            self.postLocalDebProgress(key)
+        }
+    }
+
+    private func postLocalDebProgress(_ key: String) {
+        NotificationCenter.default.post(name: Self.localDebDownloadProgressNotification, object: key)
+    }
+
+    private func performOnMain(_ work: @escaping () -> Void) {
+        if Thread.isMainThread {
+            work()
+        } else {
+            DispatchQueue.main.async(execute: work)
         }
     }
 

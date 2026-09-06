@@ -162,24 +162,12 @@ enum SileoGlass {
         viewController.navigationController?.navigationBar.tintColor = tintColor
     }
 
-    /// iOS 26 不再稳定地让弹窗操作继承控制器 tint，需要在生成首帧前写入操作颜色。
+    /// 弹窗标题和按钮使用主题色。仅 iOS 26 / iPadOS 26 需要额外避免整块玻璃被染色。
     static func configure(alertController: UIAlertController, tintColor: UIColor) {
-        guard #available(iOS 26.0, *) else {
-            return
-        }
-
         let resolvedTint = tintColor.resolvedColor(with: alertController.traitCollection)
         applyAlertTint(to: alertController, tintColor: resolvedTint)
-
-        // iPhone 和 iPad 的 26 弹窗都会在 present 后再生成玻璃按钮，需要在下一帧再刷一次。
         DispatchQueue.main.async {
             applyAlertTint(to: alertController, tintColor: resolvedTint)
-            if UIDevice.current.userInterfaceIdiom == .pad {
-                // iPadOS 26 会把 alert 放进独立 presentation container，split 布局完成后再刷一次。
-                DispatchQueue.main.async {
-                    applyAlertTint(to: alertController, tintColor: resolvedTint)
-                }
-            }
         }
     }
 
@@ -188,13 +176,11 @@ enum SileoGlass {
         configure(alertController: actionSheet, tintColor: tintColor)
     }
 
-    @available(iOS 26.0, *)
     private static func applyAlertTint(to alertController: UIAlertController, tintColor: UIColor) {
-        alertController.view.tintColor = tintColor
+        isolateIOS26AlertGlass(alertController)
         alertController.view.tintAdjustmentMode = .normal
+        applyAttributedAlertTitle(alertController, tintColor: tintColor)
 
-        // UIKit 没有公开 UIAlertAction 的标题颜色接口；Sileo 本身不通过 App Store 分发，
-        // 因而在 iOS 26+ 写入 UIKit 已长期提供的 KVC 属性，确保动画第一帧就是主题色。
         alertController.actions.forEach { action in
             guard action.isEnabled, action.style != .destructive else {
                 return
@@ -212,19 +198,65 @@ enum SileoGlass {
             return action.title
         })
         applyAlertTint(in: alertController.view,
+                       titleText: alertController.title,
+                       messageText: alertController.message,
                        actionTitles: tintedActionTitles,
                        tintColor: tintColor)
 
         if UIDevice.current.userInterfaceIdiom == .pad,
            let containerView = alertController.presentationController?.containerView {
             applyAlertTint(in: containerView,
+                           titleText: alertController.title,
+                           messageText: alertController.message,
                            actionTitles: tintedActionTitles,
                            tintColor: tintColor)
         }
     }
 
+    private static func isolateIOS26AlertGlass(_ alertController: UIAlertController) {
+        guard #available(iOS 26.0, *) else {
+            return
+        }
+        // 阻断 window 强调色，避免整块弹窗玻璃被主题色洗掉。
+        alertController.view.tintColor = .label
+        clearUntintedAlertGlass(in: alertController.view)
+        if UIDevice.current.userInterfaceIdiom == .pad,
+           let containerView = alertController.presentationController?.containerView {
+            clearUntintedAlertGlass(in: containerView)
+        }
+    }
+
     @available(iOS 26.0, *)
+    private static func clearUntintedAlertGlass(in view: UIView, insideActionChrome: Bool = false) {
+        let className = NSStringFromClass(type(of: view))
+        let isActionChrome = insideActionChrome ||
+            className.contains("Action") ||
+            className.contains("InterfaceAction")
+        if let effectView = view as? UIVisualEffectView,
+           let glassEffect = effectView.effect as? UIGlassEffect,
+           !isActionChrome {
+            glassEffect.tintColor = nil
+            effectView.effect = glassEffect
+        }
+        view.subviews.forEach {
+            clearUntintedAlertGlass(in: $0, insideActionChrome: isActionChrome)
+        }
+    }
+
+    private static func applyAttributedAlertTitle(_ alertController: UIAlertController, tintColor: UIColor) {
+        guard let title = alertController.title, !title.isEmpty else {
+            return
+        }
+        let attributedTitle = NSAttributedString(string: title, attributes: [
+            .foregroundColor: tintColor,
+            .font: UIFont.systemFont(ofSize: 17, weight: .semibold)
+        ])
+        alertController.setValue(attributedTitle, forKey: "attributedTitle")
+    }
+
     private static func applyAlertTint(in view: UIView,
+                                       titleText: String?,
+                                       messageText: String?,
                                        actionTitles: Set<String>,
                                        tintColor: UIColor,
                                        insideActionChrome: Bool = false) {
@@ -235,9 +267,11 @@ enum SileoGlass {
 
         if let label = view as? UILabel {
             let labelText = label.text ?? label.attributedText?.string
-            if isActionChrome || (labelText != nil && actionTitles.contains(labelText ?? "")) {
+            let isMessage = !(messageText ?? "").isEmpty && labelText == messageText
+            let isTitle = !(titleText ?? "").isEmpty && labelText == titleText
+            let isAction = isActionChrome || (labelText != nil && actionTitles.contains(labelText ?? ""))
+            if !isMessage && (isTitle || isAction) {
                 label.tintAdjustmentMode = .normal
-                label.tintColor = tintColor
                 label.textColor = tintColor
             }
         }
@@ -253,16 +287,16 @@ enum SileoGlass {
 
         view.subviews.forEach {
             applyAlertTint(in: $0,
+                           titleText: titleText,
+                           messageText: messageText,
                            actionTitles: actionTitles,
                            tintColor: tintColor,
                            insideActionChrome: isActionChrome)
         }
     }
 
-    @available(iOS 26.0, *)
     private static func applyAlertTint(to button: UIButton, tintColor: UIColor) {
         button.tintAdjustmentMode = .normal
-        button.tintColor = tintColor
         button.setTitleColor(tintColor, for: .normal)
         button.setTitleColor(tintColor, for: .highlighted)
         if var configuration = button.configuration {
@@ -462,7 +496,7 @@ enum SileoGlass {
 }
 
 extension UIViewController {
-    /// 统一展示 Sileo 弹窗；iOS 26+ 在转场首帧前恢复主题操作色。
+    /// 统一展示 Sileo 弹窗；标题和按钮使用主题色，正文保持系统默认。
     func presentSileoAlert(_ alertController: UIAlertController,
                            animated: Bool = true,
                            tintColor: UIColor = .tintColor,

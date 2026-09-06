@@ -42,6 +42,16 @@ class PackageCollectionViewCell: SwipeCollectionViewCell {
     var numberOfItems: CGFloat = 0
     var alwaysHidesSeparator = false
     var stateBadgeView: PackageStateBadgeView?
+    private let localDebProgressView: UIProgressView = {
+        let view = UIProgressView(progressViewStyle: .default)
+        view.translatesAutoresizingMaskIntoConstraints = false
+        view.isUserInteractionEnabled = false
+        view.isHidden = true
+        view.progress = 0
+        view.clipsToBounds = true
+        view.layer.cornerRadius = 1.5
+        return view
+    }()
     
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -126,10 +136,23 @@ class PackageCollectionViewCell: SwipeCollectionViewCell {
                 stateBadgeView.centerYAnchor.constraint(equalTo: imageView.bottomAnchor).isActive = true
             }
         }
+
+        contentView.insertSubview(localDebProgressView, at: 0)
+        NSLayoutConstraint.activate([
+            localDebProgressView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            localDebProgressView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+            localDebProgressView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -1),
+            localDebProgressView.heightAnchor.constraint(equalToConstant: 3)
+        ])
+        updateLocalDebProgressAppearance()
         
         NotificationCenter.default.addObserver(self,
                                                selector: #selector(updateSileoColors),
                                                name: SileoThemeManager.sileoChangedThemeNotification,
+                                               object: nil)
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(localDebDownloadProgressDidChange(_:)),
+                                               name: DownloadManager.localDebDownloadProgressNotification,
                                                object: nil)
     }
     
@@ -137,6 +160,13 @@ class PackageCollectionViewCell: SwipeCollectionViewCell {
         if !(targetPackage?.commercial ?? false) {
             titleLabel?.textColor = .sileoLabel
         }
+        updateLocalDebProgressAppearance()
+    }
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        localDebProgressView.isHidden = true
+        localDebProgressView.setProgress(0, animated: false)
     }
     
     override func layoutSubviews() {
@@ -147,7 +177,7 @@ class PackageCollectionViewCell: SwipeCollectionViewCell {
             numberOfItemsInRow = (self.superview?.bounds.width ?? 0) / 300
         }
         
-        if alwaysHidesSeparator || ceil((item + 1) / numberOfItemsInRow) == ceil(numberOfItems / numberOfItemsInRow) {
+        if alwaysHidesSeparator || !localDebProgressView.isHidden || ceil((item + 1) / numberOfItemsInRow) == ceil(numberOfItems / numberOfItemsInRow) {
             separatorView?.isHidden = true
         } else {
             separatorView?.isHidden = false
@@ -167,9 +197,11 @@ class PackageCollectionViewCell: SwipeCollectionViewCell {
         }
         
         unreadView?.backgroundColor = self.tintColor
+        updateLocalDebProgressAppearance()
     }
     
     @objc func refreshState() {
+        applyLocalDebProgress()
         guard let targetPackage = targetPackage else {
             stateBadgeView?.isHidden = true
             return
@@ -189,6 +221,37 @@ class PackageCollectionViewCell: SwipeCollectionViewCell {
             stateBadgeView?.state = .installed
             stateBadgeView?.isHidden = !isInstalled
         }
+    }
+
+    @objc private func localDebDownloadProgressDidChange(_ notification: Notification) {
+        guard let package = targetPackage,
+              let key = notification.object as? String,
+              DownloadManager.shared.localDebDownloadKey(for: package) == key else { return }
+        applyLocalDebProgress()
+    }
+
+    private func applyLocalDebProgress() {
+        guard let package = targetPackage,
+              let progress = DownloadManager.shared.localDebProgress(for: package) else {
+            if !localDebProgressView.isHidden {
+                localDebProgressView.isHidden = true
+                localDebProgressView.setProgress(0, animated: false)
+                setNeedsLayout()
+            }
+            return
+        }
+        let wasHidden = localDebProgressView.isHidden
+        localDebProgressView.isHidden = false
+        separatorView?.isHidden = true
+        localDebProgressView.setProgress(Float(min(1, max(0, progress))), animated: !wasHidden && progress > 0)
+        if wasHidden {
+            setNeedsLayout()
+        }
+    }
+
+    private func updateLocalDebProgressAppearance() {
+        localDebProgressView.progressTintColor = SileoThemeManager.shared.tintColor
+        localDebProgressView.trackTintColor = UIColor.sileoSeparatorColor
     }
 
 }
@@ -361,8 +424,13 @@ extension PackageCollectionViewCell: SwipeCollectionViewCellDelegate {
             DownloadManager.shared.savePackageToDownloads(package) { errorMessage, fileURL in
                 DispatchQueue.main.async {
                     if let fileURL = fileURL {
+                        #if targetEnvironment(simulator) || TARGET_SANDBOX
+                        self.presentSaveToFiles(fileURL)
+                        #else
                         self.presentPackageAlert(title: String(localizationKey: "Package_Download_Deb_Success_Title"),
-                                                 message: String(format: String(localizationKey: "Package_Download_Deb_Success"), fileURL.path))
+                                                 message: DownloadManager.packageDownloadSuccessMessage(for: fileURL),
+                                                 fileURL: fileURL)
+                        #endif
                     } else {
                         self.presentPackageAlert(title: String(localizationKey: "Unknown", type: .error),
                                                  message: errorMessage)
@@ -581,9 +649,23 @@ extension PackageCollectionViewCell: SwipeCollectionViewCellDelegate {
         return current
     }
 
-    private func presentPackageAlert(title: String, message: String?) {
+    private func presentSaveToFiles(_ fileURL: URL) {
+        guard let presenter = presentingViewControllerForAlerts() else { return }
+        LocalDebFilesExporter.present(fileURL: fileURL, from: presenter)
+    }
+
+    private func presentPackageAlert(title: String, message: String?, fileURL: URL? = nil) {
         let present = {
             let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
+            #if !targetEnvironment(simulator) && !TARGET_SANDBOX
+            if let fileURL = fileURL,
+               let filzaURL = DownloadManager.filzaURL(for: fileURL),
+               UIApplication.shared.canOpenURL(URL(string: "filza:///")!) {
+                alert.addAction(UIAlertAction(title: String(localizationKey: "Open_In_Filza"), style: .default, handler: { _ in
+                    UIApplication.shared.open(filzaURL)
+                }))
+            }
+            #endif
             alert.addAction(UIAlertAction(title: String(localizationKey: "OK"), style: .default))
             let presenter = self.presentingViewControllerForAlerts()
             if #available(iOS 13.0, *) {
@@ -613,5 +695,26 @@ extension PackageCollectionViewCell: SwipeCollectionViewCellDelegate {
             let generator = UINotificationFeedbackGenerator()
             generator.notificationOccurred(.success)
         }
+    }
+}
+
+
+private final class LocalDebFilesExporter: NSObject, UIDocumentPickerDelegate {
+    static var active: LocalDebFilesExporter?
+
+    static func present(fileURL: URL, from presenter: UIViewController) {
+        let exporter = LocalDebFilesExporter()
+        active = exporter
+        let picker = UIDocumentPickerViewController(forExporting: [fileURL], asCopy: true)
+        picker.delegate = exporter
+        presenter.present(picker, animated: true)
+    }
+
+    func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+        Self.active = nil
+    }
+
+    func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+        Self.active = nil
     }
 }
