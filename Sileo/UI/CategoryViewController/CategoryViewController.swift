@@ -16,10 +16,12 @@ class CategoryViewController: SileoTableViewController {
     private var categoriesCountCache: [String: Int]?
     
     private var bannersView: FeaturedBannersView?
+    private var bannersHeightConstraint: NSLayoutConstraint?
     private var showInstalled = false
     
     private var headerStackView: UIStackView?
     private var authenticationBannerView: PaymentAuthenticationBannerView?
+    private var isUpdatingHeaderLayout = false
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -37,18 +39,19 @@ class CategoryViewController: SileoTableViewController {
                                                name: SileoThemeManager.sileoChangedThemeNotification,
                                                object: nil)
         
-        self.reloadData()
-        
-        let headerStackView = UIStackView()
-        headerStackView.translatesAutoresizingMaskIntoConstraints = false
+        let headerView = UIView(frame: CGRect(x: 0,
+                                              y: 0,
+                                              width: tableView.bounds.width,
+                                              height: 0))
+        headerView.autoresizingMask = [.flexibleWidth]
+        let headerStackView = UIStackView(frame: headerView.bounds)
         headerStackView.axis = .vertical
-        self.tableView.tableHeaderView = headerStackView
-        
-        headerStackView.topAnchor.constraint(equalTo: self.tableView.topAnchor).isActive = true
-        headerStackView.centerXAnchor.constraint(equalTo: self.tableView.centerXAnchor).isActive = true
-        headerStackView.widthAnchor.constraint(equalTo: self.tableView.widthAnchor).isActive = true
-        
+        headerStackView.clipsToBounds = true
+        headerView.addSubview(headerStackView)
+        self.tableView.tableHeaderView = headerView
         self.headerStackView = headerStackView
+
+        self.reloadData()
         
         NotificationCenter.default.addObserver([self],
                                                selector: #selector(CategoryViewController.reloadData),
@@ -114,14 +117,15 @@ class CategoryViewController: SileoTableViewController {
                 self.tableView.reloadData()
             }
         }
-        if let headerStackView = headerStackView {
-            for view in headerStackView.arrangedSubviews {
-                view.removeFromSuperview()
-            }
-        }
+        authenticationBannerView?.removeFromSuperview()
+        authenticationBannerView = nil
+        bannersView?.removeFromSuperview()
+        bannersView = nil
+        bannersHeightConstraint = nil
+        updateHeaderStackView()
+
         if let repoContext = repoContext {
             PaymentManager.shared.getPaymentProvider(for: repoContext) { _, provider in
-                self.authenticationBannerView?.removeFromSuperview()
                 guard let provider = provider,
                     !provider.isAuthenticated else {
                     return
@@ -154,12 +158,16 @@ class CategoryViewController: SileoTableViewController {
                 guard let banners = depiction["banners"] as? [[String: Any]],
                       !banners.isEmpty else { return }
                 DispatchQueue.main.async {
-                    if let headerView = FeaturedBannersView.view(dictionary: depiction, viewController: self, tintColor: nil, isActionable: false) {
-                        let newHeight = headerView.depictionHeight(width: self.view.bounds.width)
-                        headerView.heightAnchor.constraint(equalToConstant: newHeight).isActive = true
-                        for view in self.headerStackView?.arrangedSubviews ?? [] {
-                            view.removeFromSuperview()
-                        }
+                    if let headerView = FeaturedBannersView.view(dictionary: depiction,
+                                                                 viewController: self,
+                                                                 tintColor: nil,
+                                                                 isActionable: false) as? FeaturedBannersView {
+                        self.bannersView?.removeFromSuperview()
+                        let newHeight = headerView.depictionHeight(width: self.tableView.bounds.width)
+                        let heightConstraint = headerView.heightAnchor.constraint(equalToConstant: newHeight)
+                        heightConstraint.isActive = true
+                        self.bannersView = headerView
+                        self.bannersHeightConstraint = heightConstraint
                         self.headerStackView?.addArrangedSubview(headerView)
                         self.updateHeaderStackView()
                     }
@@ -169,34 +177,79 @@ class CategoryViewController: SileoTableViewController {
     }
     
     func updateHeaderStackView() {
-        self.updateHeaderStackView(parentSize: self.view.bounds.size)
-    }
-    
-    func updateHeaderStackView(parentSize: CGSize) {
-        guard let headerStackView = self.tableView.tableHeaderView as? UIStackView else {
+        guard let headerStackView,
+              let headerView = tableView.tableHeaderView,
+              !isUpdatingHeaderLayout else {
             return
         }
-        if headerStackView.arrangedSubviews.isEmpty {
-            headerStackView.frame = CGRect(x: .zero, y: .zero, width: parentSize.width, height: 0)
-        } else {
-            for subview in headerStackView.arrangedSubviews {
-                if let bannerView = subview as? FeaturedBannersView {
-                    let newHeight = bannerView.depictionHeight(width: parentSize.width)
-                    subview.frame = CGRect(x: subview.frame.minX, y: subview.frame.minY, width: subview.frame.width, height: newHeight)
-                }
-            }
+        isUpdatingHeaderLayout = true
+        defer { isUpdatingHeaderLayout = false }
+
+        let contentFrame = headerContentFrame
+        let width = contentFrame.width
+        if let bannersView {
+            bannersHeightConstraint?.constant = bannersView.depictionHeight(width: width)
         }
-        self.headerStackView?.layoutIfNeeded()
-        self.tableView.tableHeaderView = self.headerStackView
+
+        let height: CGFloat
+        if headerStackView.arrangedSubviews.isEmpty {
+            height = 0
+        } else {
+            let fittingSize = CGSize(width: width,
+                                     height: UIView.layoutFittingCompressedSize.height)
+            height = ceil(headerStackView.systemLayoutSizeFitting(
+                fittingSize,
+                withHorizontalFittingPriority: .required,
+                verticalFittingPriority: .fittingSizeLevel
+            ).height)
+        }
+
+        headerStackView.frame = CGRect(x: contentFrame.minX, y: 0, width: width, height: height)
+        let newFrame = CGRect(x: 0, y: 0, width: tableView.bounds.width, height: height)
+        guard headerView.frame != newFrame else {
+            return
+        }
+        headerView.frame = newFrame
+        tableView.tableHeaderView = headerView
+    }
+
+    private var headerContentFrame: CGRect {
+        var insets = UIEdgeInsets.zero
+        if #available(iOS 26.0, *), UIDevice.current.userInterfaceIdiom == .pad {
+            // 分栏会让表格延伸到侧栏下方，表头内容需像分类单元格一样避开水平安全区。
+            insets = tableView.safeAreaInsets
+        }
+        return CGRect(x: insets.left,
+                      y: 0,
+                      width: max(0, tableView.bounds.width - insets.left - insets.right),
+                      height: 0)
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+
+        guard let headerStackView else {
+            return
+        }
+        let contentFrame = headerContentFrame
+        if abs(headerStackView.frame.minX - contentFrame.minX) > 0.5 ||
+            abs(headerStackView.bounds.width - contentFrame.width) > 0.5 {
+            updateHeaderStackView()
+        }
+    }
+
+    override func viewSafeAreaInsetsDidChange() {
+        super.viewSafeAreaInsetsDidChange()
+        updateHeaderStackView()
     }
     
     override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
         super.viewWillTransition(to: size, with: coordinator)
-        if self.tableView.tableHeaderView?.isKind(of: FeaturedBannersView.self) ?? false {
-            coordinator.animate(alongsideTransition: { _ in
-                self.updateHeaderStackView(parentSize: size)
-            }, completion: nil)
-        }
+        coordinator.animate(alongsideTransition: { _ in
+            self.updateHeaderStackView()
+        }, completion: { _ in
+            self.updateHeaderStackView()
+        })
     }
     
     override func numberOfSections(in tableView: UITableView) -> Int {

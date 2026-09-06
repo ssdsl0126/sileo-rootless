@@ -44,25 +44,7 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate, UITabBarControllerDe
         guard let tabBarController = self.window?.rootViewController as? UITabBarController else {
             fatalError("Invalid Storyboard")
         }
-        if #available(iOS 26.0, *),
-           UIDevice.current.userInterfaceIdiom == .pad,
-           var tabViewControllers = tabBarController.viewControllers,
-           tabViewControllers.indices.contains(2),
-           let legacySourcesSplit = tabViewControllers[2] as? SourcesSplitViewController,
-           legacySourcesSplit.style == .unspecified,
-           legacySourcesSplit.viewControllers.count >= 2 {
-            // storyboard 创建的是旧式 split，iPadOS 26 隐藏主栏后仍会残留旧 safe-area。
-            // 仅在新系统上换成现代双栏容器，并继续复用原来的主栏和详情导航栈。
-            let sourceViewControllers = legacySourcesSplit.viewControllers
-            let modernSourcesSplit = SourcesSplitViewController(style: .doubleColumn)
-            modernSourcesSplit.tabBarItem = legacySourcesSplit.tabBarItem
-            modernSourcesSplit.title = legacySourcesSplit.title
-            legacySourcesSplit.viewControllers = []
-            modernSourcesSplit.setViewController(sourceViewControllers[0], for: .primary)
-            modernSourcesSplit.setViewController(sourceViewControllers[1], for: .secondary)
-            tabViewControllers[2] = modernSourcesSplit
-            tabBarController.setViewControllers(tabViewControllers, animated: false)
-        }
+        modernizeSourcesSplitIfNeeded(in: tabBarController)
         tabBarController.delegate = self
         if #available(iOS 26.0, *) {
             // iOS 26 会为系统标签栏提供 Liquid Glass；不要再覆盖系统材质。
@@ -111,10 +93,13 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate, UITabBarControllerDe
         
         _ = NotificationCenter.default.addObserver(forName: SileoThemeManager.sileoChangedThemeNotification, object: nil, queue: nil) { _ in
             self.updateTintColor()
-            for window in UIApplication.shared.windows {
-                for view in window.subviews {
-                    view.removeFromSuperview()
-                    window.addSubview(view)
+            if #unavailable(iOS 26.0) {
+                // 旧系统靠拆装 window 子视图强迫 appearance 生效；iOS 26 的玻璃按钮会被这步钉死旧色。
+                for window in UIApplication.shared.windows {
+                    for view in window.subviews {
+                        view.removeFromSuperview()
+                        window.addSubview(view)
+                    }
                 }
             }
         }
@@ -130,6 +115,30 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate, UITabBarControllerDe
                 controller.tabBarItem._setInternalTitle(String(localizationKey: "Search_Page"))
             }
         }
+    }
+
+    private func modernizeSourcesSplitIfNeeded(in tabBarController: UITabBarController) {
+        guard #available(iOS 26.0, *),
+              UIDevice.current.userInterfaceIdiom == .pad,
+              var tabViewControllers = tabBarController.viewControllers,
+              tabViewControllers.indices.contains(2),
+              let legacySourcesSplit = tabViewControllers[2] as? SourcesSplitViewController,
+              legacySourcesSplit.style == .unspecified,
+              legacySourcesSplit.viewControllers.count >= 2 else {
+            return
+        }
+
+        // storyboard 创建的是旧式 split，iPadOS 26 隐藏主栏后仍会残留旧 safe-area。
+        // 仅在新系统上换成现代双栏容器，并继续复用原来的主栏和详情导航栈。
+        let sourceViewControllers = legacySourcesSplit.viewControllers
+        let modernSourcesSplit = SourcesSplitViewController(style: .doubleColumn)
+        modernSourcesSplit.tabBarItem = legacySourcesSplit.tabBarItem
+        modernSourcesSplit.title = legacySourcesSplit.title
+        legacySourcesSplit.viewControllers = []
+        modernSourcesSplit.setViewController(sourceViewControllers[0], for: .primary)
+        modernSourcesSplit.setViewController(sourceViewControllers[1], for: .secondary)
+        tabViewControllers[2] = modernSourcesSplit
+        tabBarController.setViewControllers(tabViewControllers, animated: false)
     }
     
     private func backgroundRepoRefreshTask(_ completion: @escaping () -> Void) {
@@ -236,7 +245,12 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate, UITabBarControllerDe
         UISearchBar.appearance().tintColor = tintColor
         UITabBar.appearance().tintColor = tintColor
         
-        UICollectionView.appearance().tintColor = tintColor
+        if #available(iOS 26.0, *), UIDevice.current.userInterfaceIdiom == .pad {
+            // 浮动标签栏内部也使用 UICollectionView，全局 appearance 会把它固定为创建时的主题色。
+            UICollectionView.appearance().tintColor = nil
+        } else {
+            UICollectionView.appearance().tintColor = tintColor
+        }
         UITableView.appearance().tintColor = tintColor
         DepictionBaseView.appearance().tintColor = tintColor
         self.window?.tintColor = tintColor
@@ -244,8 +258,28 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate, UITabBarControllerDe
         if #available(iOS 26.0, *),
            let tabBarController = self.window?.rootViewController as? UITabBarController {
             // iOS 26 的系统标签栏不再经过旧的 appearance blur，直接刷新选中态颜色。
+            tabBarController.view.tintColor = tintColor
             tabBarController.tabBar.tintColor = tintColor
             tabBarController.tabBar.unselectedItemTintColor = .label
+            if let tabBarController = tabBarController as? TabBarController {
+                tabBarController.updateSileoColors()
+            }
+        }
+
+        if #available(iOS 26.0, *) {
+            refreshPresentedBarButtonItems(from: self.window?.rootViewController, tintColor: tintColor)
+        }
+    }
+
+    @available(iOS 26.0, *)
+    private func refreshPresentedBarButtonItems(from viewController: UIViewController?, tintColor: UIColor) {
+        guard let viewController else {
+            return
+        }
+        SileoGlass.refreshBarButtonItems(in: viewController, tintColor: tintColor)
+        viewController.children.forEach { refreshPresentedBarButtonItems(from: $0, tintColor: tintColor) }
+        if let presented = viewController.presentedViewController {
+            refreshPresentedBarButtonItems(from: presented, tintColor: tintColor)
         }
     }
     

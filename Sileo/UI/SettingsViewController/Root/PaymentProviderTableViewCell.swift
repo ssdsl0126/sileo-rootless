@@ -134,6 +134,7 @@ class PaymentProviderTableViewCell: UITableViewCell {
                                                selector: #selector(updateSileoColors),
                                                name: SileoThemeManager.sileoChangedThemeNotification,
                                                object: nil)
+        updateSileoColors()
     }
     
     override func prepareForReuse() {
@@ -146,8 +147,15 @@ class PaymentProviderTableViewCell: UITableViewCell {
         iconView.image = image
     }
     
+    override func tintColorDidChange() {
+        super.tintColorDidChange()
+        updateSileoColors()
+    }
+
     @objc func updateSileoColors() {
-        titleLabel.textColor = .tintColor
-        subtitleLabel.textColor = .tintColor
+        let tintColor = UIColor.tintColor
+        titleLabel.textColor = tintColor
+        subtitleLabel.textColor = tintColor
+        self.tintColor = tintColor
     }
 }

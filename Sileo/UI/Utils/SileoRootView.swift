@@ -120,14 +120,46 @@ enum SileoGlass {
         button.configuration = configuration
     }
 
-    /// 为 iOS 26 的导航栏按钮保留系统共享玻璃背景，避免全局 tint 覆盖文字颜色。
-    static func configure(barButtonItem: UIBarButtonItem, tintColor: UIColor) {
+    /// 为 iOS 26 的导航栏按钮保留系统共享玻璃背景，并把主题色写到 item 自身。
+    static func configure(barButtonItem: UIBarButtonItem, tintColor: UIColor = .tintColor) {
         guard #available(iOS 26.0, *) else {
             return
         }
         barButtonItem.tintColor = tintColor
         barButtonItem.hidesSharedBackground = false
         barButtonItem.sharesBackground = true
+    }
+
+    /// 主题切换后刷新当前界面已物化的导航栏玻璃按钮。
+    static func refreshBarButtonItems(in viewController: UIViewController?,
+                                      tintColor: UIColor = .tintColor) {
+        guard #available(iOS 26.0, *), let viewController else {
+            return
+        }
+
+        var items: [UIBarButtonItem] = []
+        items.append(contentsOf: viewController.navigationItem.leftBarButtonItems ?? [])
+        items.append(contentsOf: viewController.navigationItem.rightBarButtonItems ?? [])
+        if let backItem = viewController.navigationItem.backBarButtonItem {
+            items.append(backItem)
+        }
+        if let navigationController = viewController.navigationController {
+            items.append(contentsOf: navigationController.navigationBar.items?.flatMap { item in
+                (item.leftBarButtonItems ?? []) + (item.rightBarButtonItems ?? [])
+            } ?? [])
+        }
+
+        var seen = Set<ObjectIdentifier>()
+        for item in items {
+            let identity = ObjectIdentifier(item)
+            guard !seen.contains(identity) else {
+                continue
+            }
+            seen.insert(identity)
+            configure(barButtonItem: item, tintColor: tintColor)
+        }
+
+        viewController.navigationController?.navigationBar.tintColor = tintColor
     }
 
     /// iOS 26 不再稳定地让弹窗操作继承控制器 tint，需要在生成首帧前写入操作颜色。

@@ -160,6 +160,8 @@ class FeaturedPackageView: FeaturedBaseView, PackageQueueButtonDataProvider {
     
     @objc func updateSileoColors() {
         self.separatorView?.backgroundColor = .sileoSeparatorColor
+        packageButton.tintColor = .tintColor
+        packageButton.updateStyle()
     }
     
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
@@ -168,7 +170,8 @@ class FeaturedPackageView: FeaturedBaseView, PackageQueueButtonDataProvider {
     
     override func didMoveToWindow() {
         super.didMoveToWindow()
-        packageButton.tintColor = UINavigationBar.appearance().tintColor
+        packageButton.tintColor = .tintColor
+        packageButton.updateStyle()
         if let separatorHeightConstraint = self.separatorHeightConstraint {
             separatorHeightConstraint.constant = 1 / (self.window?.screen.scale ?? 1)
         }

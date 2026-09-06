@@ -119,6 +119,7 @@ final class SourcesViewController: SileoViewController {
             view.backgroundColor = .sileoBackgroundColor
             tableView?.backgroundColor = .clear
             tableView?.isOpaque = false
+            SileoGlass.refreshBarButtonItems(in: self)
         } else {
             self.tableView?.backgroundColor = .sileoBackgroundColor
         }

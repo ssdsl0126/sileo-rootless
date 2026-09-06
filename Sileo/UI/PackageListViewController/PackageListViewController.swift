@@ -93,6 +93,7 @@ class PackageListViewController: SileoViewController, UIGestureRecognizerDelegat
             view.backgroundColor = .sileoBackgroundColor
             collectionView?.backgroundColor = .clear
             collectionView?.isOpaque = false
+            SileoGlass.refreshBarButtonItems(in: self)
         }
     }
     

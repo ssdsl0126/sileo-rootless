@@ -70,6 +70,7 @@ class BaseSettingsViewController: UITableViewController {
             self.view.backgroundColor = .sileoBackgroundColor
             self.tableView.backgroundColor = .clear
             self.tableView.isOpaque = false
+            SileoGlass.refreshBarButtonItems(in: self)
         } else {
             self.tableView.backgroundColor = .sileoBackgroundColor
         }
@@ -177,7 +178,13 @@ extension BaseSettingsViewController { // Data Source Overrides
 
 extension BaseSettingsViewController { // Table View Delegate Overrides
     override func tableView(_ tableView: UITableView, willDisplay cell: UITableViewCell, forRowAt indexPath: IndexPath) {
-        cell.textLabel?.textColor = cell.tintColor
-        cell.detailTextLabel?.textColor = cell.tintColor
+        // iOS 26 的 cell.tintColor 不会跟着主题切换更新，设置页强调色统一走 UIColor.tintColor。
+        let tintColor = UIColor.tintColor
+        cell.tintColor = tintColor
+        cell.textLabel?.textColor = tintColor
+        cell.detailTextLabel?.textColor = tintColor
+        if let paymentCell = cell as? PaymentProviderTableViewCell {
+            paymentCell.updateSileoColors()
+        }
     }
 }

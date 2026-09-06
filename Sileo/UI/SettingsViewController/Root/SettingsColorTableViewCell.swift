@@ -31,11 +31,28 @@ class SettingsColorTableViewCell: UITableViewCell {
         colorPreview.layer.borderColor = UIColor.sileoContentBackgroundColor.cgColor
         
         accessoryView = colorPreview
+
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(updateSileoColors),
+                                               name: SileoThemeManager.sileoChangedThemeNotification,
+                                               object: nil)
+        updateSileoColors()
+    }
+
+    override func tintColorDidChange() {
+        super.tintColorDidChange()
+        updateSileoColors()
     }
     
     override func layoutSubviews() {
         super.layoutSubviews()
-        
-        accessoryView?.backgroundColor = bgClr ?? .tintColor
+        updateSileoColors()
+    }
+
+    @objc func updateSileoColors() {
+        let tintColor = UIColor.tintColor
+        self.tintColor = tintColor
+        textLabel?.textColor = tintColor
+        accessoryView?.backgroundColor = bgClr ?? tintColor
     }
 }

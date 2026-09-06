@@ -44,7 +44,7 @@ class PackageButton: UIButton {
             self.titleLabel?.adjustsFontSizeToFitWidth = true
             self.titleLabel?.minimumScaleFactor = 0.75
         }
-        tintColor = UINavigationBar.appearance().tintColor
+        tintColor = .tintColor
         self.updateStyle()
         
         NotificationCenter.default.addObserver(self,
@@ -82,13 +82,12 @@ class PackageButton: UIButton {
         }
     }
     
-    private var _tintColor: UIColor = .tintColor
     private var liquidGlassNormalTitle: String?
+    private var isUpdatingStyle = false
     
-    override var tintColor: UIColor! {
-        didSet {
-            _tintColor = tintColor
-        }
+    override func tintColorDidChange() {
+        super.tintColorDidChange()
+        updateStyle()
     }
     
     @objc func updateSileoColors() {
@@ -97,7 +96,13 @@ class PackageButton: UIButton {
     }
     
     public func updateStyle() {
-        var tintColor = _tintColor
+        guard !isUpdatingStyle else {
+            return
+        }
+        isUpdatingStyle = true
+        defer { isUpdatingStyle = false }
+
+        var tintColor = self.tintColor ?? .tintColor
         if self.isHighlighted {
             var tintHue: CGFloat = 0
             var tintSat: CGFloat = 0
