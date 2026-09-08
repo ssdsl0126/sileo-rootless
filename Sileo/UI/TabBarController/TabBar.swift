@@ -108,6 +108,13 @@ class TabBar: UITabBar {
         trackDecorationTransition()
     }
 
+    func trackSourceRefreshScrollTransition() {
+        guard supportsDecorations, sourceRefreshIsVisible, !searchTabIsActive else { return }
+        // 滚动驱动的合成动画不一定触发标签栏布局，不能依赖上一次布局留下的跟踪窗口。
+        updateDecorations()
+        trackDecorationTransition()
+    }
+
     override func layoutSubviews() {
         super.layoutSubviews()
         guard supportsDecorations else { return }
@@ -250,7 +257,9 @@ class TabBar: UITabBar {
             return
         }
         var sourceFrame: CGRect?
-        if searchTabIsActive, let compactFrame {
+        if !searchTabIsActive {
+            sourceFrame = sourceRefreshFrame(in: host, platters: allPlatters, morphLayers: morphLayers)
+        } else if let compactFrame {
             if compactItemIndex == 2 { sourceFrame = compactFrame }
         } else {
             let title = tabTitle(at: 2)
@@ -274,7 +283,7 @@ class TabBar: UITabBar {
         if let sourceFrame {
             lastSourceFrame = sourceFrame
             lastSourceTime = now
-        } else if compactFrame == nil, !hasFullPlatter, now - lastSourceTime < 0.15 {
+        } else if searchTabIsActive, compactFrame == nil, !hasFullPlatter, now - lastSourceTime < 0.15 {
             sourceFrame = lastSourceFrame
         }
         guard let sourceFrame else {
@@ -285,6 +294,57 @@ class TabBar: UITabBar {
         refreshBadge.isHidden = false
         // 角标始终是自有前景层中图标之后的子视图，整个红圈和白色转圈一起置前。
         refreshBadge.setRefreshing(true)
+    }
+
+    private func sourceRefreshFrame(in host: UIView, platters: [UIView], morphLayers: [CALayer]) -> CGRect? {
+        // 与队列滚动逻辑读取同一个原生目标；accessory 的 inline 通知不能代表动画起点。
+        var isMinimized = false
+        if let ivar = class_getInstanceVariable(UITabBar.self, "_visualProvider"),
+           let provider = object_getIvar(self, ivar) as? NSObject,
+           NSStringFromClass(type(of: provider)).contains("_UITabBarVisualProvider_Floating") {
+            isMinimized = (provider.value(forKey: "_currentMorphTarget") as? NSNumber)?.intValue == 2
+        }
+        // 其它页面收缩时软件源图标会退场，不能把它的旧角标留在队列上方。
+        guard !isMinimized || compactItemIndex == 2 else { return nil }
+
+        let barFrame = convert(bounds, to: host)
+        let isRightToLeft = effectiveUserInterfaceLayoutDirection == .rightToLeft
+        for platter in platters where !platter.isHidden {
+            // 用布局终点选择完整或紧凑容器；显示层宽度在动画中仍可能接近完整菜单。
+            let targetPlatterFrame = platter.convert(platter.bounds, to: host)
+            guard validFrame(targetPlatterFrame) else { continue }
+            let isCompact = targetPlatterFrame.width <= targetPlatterFrame.height * 1.5
+            guard isCompact == isMinimized else { continue }
+            if isCompact,
+               isRightToLeft ? targetPlatterFrame.midX <= barFrame.midX : targetPlatterFrame.midX >= barFrame.midX {
+                continue
+            }
+            let source = tabImage(in: platter, title: tabTitle(at: 2))
+            let target: CGRect
+            if let source {
+                target = source.convert(source.bounds, to: host)
+            } else if isCompact {
+                // 紧凑按钮重挂载期间可能没有标题或原图标，使用与现有紧凑图标相同的中心位置。
+                target = CGRect(x: targetPlatterFrame.midX - 13, y: targetPlatterFrame.midY - 13, width: 26, height: 26)
+            } else {
+                continue
+            }
+            guard validFrame(target), targetPlatterFrame.contains(CGPoint(x: target.midX, y: target.midY)) else { continue }
+
+            // morph 按目标矩形匹配，再取移动中的显示矩形，不能拿旧图标的显示矩形匹配终点。
+            if let morph = matchingMorph(in: morphLayers, frame: target, host: host),
+               let displayed = displayedMorphFrame(morph, in: host), validFrame(displayed) {
+                return displayed
+            }
+            if visibleOpacity(of: platter, upTo: self) > 0.01 {
+                let platterFrame = displayedFrame(of: platter, in: host)
+                let displayed = source.map { displayedFrame(of: $0, in: host) }
+                    ?? CGRect(x: platterFrame.midX - 13, y: platterFrame.midY - 13, width: 26, height: 26)
+                if validFrame(displayed) { return displayed }
+            }
+        }
+        // 交接时找不到有效图标就暂时隐藏，不回用完整菜单的旧位置。
+        return nil
     }
 
     private func tabTitle(at index: Int) -> String {

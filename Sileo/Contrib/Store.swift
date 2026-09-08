@@ -16,8 +16,4 @@ func StoreURL(_ relativePath: String) -> URL? {
     URL(string: StoreEndpoint.appending(relativePath))
 }
 
-#if TARGET_SANDBOX || targetEnvironment(simulator)
-let TEST_UDID = "da39a3ee5e6b4b0d3255bfef95601890afd80709"
-let TEST_DEVICE = "iPhone10,3"
-#endif
 // swiftlint:enable all

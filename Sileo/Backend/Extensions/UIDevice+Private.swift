@@ -20,23 +20,17 @@ final class PrivateIdentifiers {
     
     init() {
         #if TARGET_SANDBOX || targetEnvironment(simulator)
-        uniqueIdentifier = TEST_UDID
-        platform = TEST_DEVICE
-        var size: Int = 256
+        uniqueIdentifier = UIDevice.current.identifierForVendor?.uuidString ?? ""
         #else
         let gestalt = dlopen("/usr/lib/libMobileGestalt.dylib", RTLD_GLOBAL | RTLD_LAZY)
         typealias MGCopyAnswerFunc = @convention(c) (CFString) -> CFString
         let MGCopyAnswer = unsafeBitCast(dlsym(gestalt, "MGCopyAnswer"), to: MGCopyAnswerFunc.self)
         uniqueIdentifier = MGCopyAnswer("UniqueDeviceID" as CFString) as String
-        
-        var size: Int = 0
-        sysctlbyname("hw.machine", nil, &size, nil, 0)
-        var machine = [UInt8](repeating: 0, count: size)
-        _ = machine.withUnsafeMutableBufferPointer { sysctlbyname("hw.machine", $0.baseAddress, &size, nil, 0) }
-        platform = String(cString: machine)
-        
-        size = 256
         #endif
+
+        platform = Self.resolvePlatform()
+
+        var size: Int = 256
 
         var ostype = [UInt8](repeating: 0, count: 256)
         _ = ostype.withUnsafeMutableBufferPointer { sysctlbyname("kern.ostype", $0.baseAddress, &size, nil, 0) }
@@ -52,6 +46,26 @@ final class PrivateIdentifiers {
         let cfVersionMultiplied = cfVersionDividedFloored * 100
         let cfVersionInt = Int(cfVersionMultiplied)
         cfMajorVersion = String(format: "%d", cfVersionInt)
+    }
+
+    private static func resolvePlatform() -> String {
+        #if targetEnvironment(simulator)
+        return ProcessInfo.processInfo.environment["SIMULATOR_MODEL_IDENTIFIER"] ?? UIDevice.current.model
+        #else
+        var size: Int = 0
+        guard sysctlbyname("hw.machine", nil, &size, nil, 0) == 0, size > 0 else {
+            return UIDevice.current.model
+        }
+
+        var machine = [UInt8](repeating: 0, count: size)
+        let result = machine.withUnsafeMutableBufferPointer {
+            sysctlbyname("hw.machine", $0.baseAddress, &size, nil, 0)
+        }
+        guard result == 0 else {
+            return UIDevice.current.model
+        }
+        return String(cString: machine)
+        #endif
     }
     
     public lazy var headers: [String: String] = {

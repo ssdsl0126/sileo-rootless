@@ -494,6 +494,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
             return
         }
 
+        (tabBar as? TabBar)?.trackSourceRefreshScrollTransition()
         restoreLiquidGlassMinimizeBehaviorIfNeeded()
 
         // 当前页面可能是导航栈里的详情页，把实际滚动视图直接交给顶部导航容器。
