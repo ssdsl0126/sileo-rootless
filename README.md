@@ -20,6 +20,25 @@ If you would like to help support the development of Sileo, consider donating at
 * Amy (Sileo Developer): [Patreon](https://www.patreon.com/elihwyma), [Paypal](https://paypal.me/anamy1024)
 * Aarnav (Canister Developer/Maintainer): [Github Sponsors](https://github.com/sponsors/tale), [Patreon](https://www.patreon.com/aarnavtale), [Paypal](https://paypal.me/aatale)
 
+# 构建未签名 Sileo Demo IPA
+
+安装可编译当前代码的完整 Xcode（当前代码使用 iOS 27 SDK），完成首次启动设置，并确保 Git 子模块已拉取后，在项目根目录执行：
+
+```sh
+make
+# 等价命令：make demo 或 make demo-ipa
+```
+
+默认构建 iPhone/iPad 的 arm64 Release 版本，输出 `packages/Sileo-Demo_<版本号>-unsigned.ipa`。无需配置开发者团队、证书、描述文件，也不依赖 `ldid` 或 `dpkg`。IPA 内保留应用所需框架，清除签名及描述文件，可交给支持导入未签名 IPA 的签名工具签名安装。
+
+构建默认使用两个并行任务，可通过 `DEMO_JOBS` 调整；`DEBUG=1` 可构建 Debug 版本。构建缓存默认位于 `build/demo-ipa`，可通过 `DEMO_DERIVED_DATA_PATH` 修改；输出目录可通过 `DEMO_OUTPUT_DIR` 修改。例如指定 Xcode：
+
+```sh
+DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer make demo-ipa
+```
+
+越狱版 `.deb` 仍使用原有命令，例如 `make package SILEO_PLATFORM=iphoneos-arm64`。
+
 # Contribute
 
 For localization, [join our Crowdin project](https://crowdin.com/project/sileo) and submit your translations there.

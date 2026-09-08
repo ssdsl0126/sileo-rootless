@@ -85,6 +85,9 @@
 		C373924A21D5F80300E6F704 /* Categories.strings in Resources */ = {isa = PBXBuildFile; fileRef = C373924721D5F80300E6F704 /* Categories.strings */; };
 		C373925921D60B2600E6F704 /* Localizable.stringsdict in Resources */ = {isa = PBXBuildFile; fileRef = C373925721D60B2600E6F704 /* Localizable.stringsdict */; };
 		C3D58BDA21D728BD001E0ABE /* NewsArticleCollectionViewCell.xib in Resources */ = {isa = PBXBuildFile; fileRef = C3D58BD821D728BD001E0ABE /* NewsArticleCollectionViewCell.xib */; };
+		C8F3A1012709060A000002 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F3A1012709060A000001 /* SceneDelegate.swift */; };
+		C8F3A1012709060A000003 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F3A1012709060A000001 /* SceneDelegate.swift */; };
+		C8F3A1012709060A000004 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F3A1012709060A000001 /* SceneDelegate.swift */; };
 		CEDEBA6C29CC93A00096ACF0 /* SearchHistoryCollectionViewCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEDEBA6B29CC93A00096ACF0 /* SearchHistoryCollectionViewCell.swift */; };
 		CEDEBA6D29CC93A80096ACF0 /* SearchHistoryCollectionViewCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEDEBA6B29CC93A00096ACF0 /* SearchHistoryCollectionViewCell.swift */; };
 		CEDEBA6E29CC93A90096ACF0 /* SearchHistoryCollectionViewCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEDEBA6B29CC93A00096ACF0 /* SearchHistoryCollectionViewCell.swift */; };
@@ -232,7 +235,6 @@
 		E128188826BBFAA500D2553B /* DepictionFormTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1C9025C263C852100569D1E /* DepictionFormTextView.swift */; };
 		E128188926BBFAA500D2553B /* FileNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = F13AEE7B22F76DE6004BAA05 /* FileNode.swift */; };
 		E128188A26BBFAA500D2553B /* SileoViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F170605B24CF4DFD001596A0 /* SileoViewController.swift */; };
-		E1281A0126BBFAA500D2553B /* SileoRuntimeEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1B3D7112BD5000100A77C11 /* SileoRuntimeEnvironment.swift */; };
 		E128188B26BBFAA500D2553B /* LanguageHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = E15A954126B981E4000DB10E /* LanguageHelper.swift */; };
 		E128188C26BBFAA500D2553B /* FlaggedSourceWarningViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 172B2ED622F09E8F000155B9 /* FlaggedSourceWarningViewController.swift */; };
 		E128188D26BBFAA500D2553B /* LanguageSelectionViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E15A954826B99104000DB10E /* LanguageSelectionViewController.swift */; };
@@ -388,6 +390,7 @@
 		E128193B26BBFAA500D2553B /* MangoCrazy~ipad@3x.png in Resources */ = {isa = PBXBuildFile; fileRef = 49CE7CBD2607F9A400A20711 /* MangoCrazy~ipad@3x.png */; };
 		E128194026BBFAA500D2553B /* SileoRootDaemon in Copy Files */ = {isa = PBXBuildFile; fileRef = E1D338FE269C3ECB00933AA5 /* SileoRootDaemon */; platformFilter = maccatalyst; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		E12819A026BC16ED00D2553B /* status in Resources */ = {isa = PBXBuildFile; fileRef = E128199F26BC16ED00D2553B /* status */; };
+		E1281A0126BBFAA500D2553B /* SileoRuntimeEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1B3D7112BD5000100A77C11 /* SileoRuntimeEnvironment.swift */; };
 		E13488E829CC842300B0A8D5 /* Maintainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E13488E729CC842300B0A8D5 /* Maintainer.swift */; };
 		E13488E929CC842300B0A8D5 /* Maintainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E13488E729CC842300B0A8D5 /* Maintainer.swift */; };
 		E13488EA29CC842300B0A8D5 /* Maintainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E13488E729CC842300B0A8D5 /* Maintainer.swift */; };
@@ -833,12 +836,12 @@
 		F170600224CCC7E6001596A0 /* PackageQueueButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = F170600024CCC7E6001596A0 /* PackageQueueButton.swift */; };
 		F170605C24CF4DFD001596A0 /* SileoViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F170605B24CF4DFD001596A0 /* SileoViewController.swift */; };
 		F170605D24CF4DFD001596A0 /* SileoViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F170605B24CF4DFD001596A0 /* SileoViewController.swift */; };
-		F170607124CF4DFD001596A0 /* SileoRuntimeEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1B3D7112BD5000100A77C11 /* SileoRuntimeEnvironment.swift */; };
-		F170607224CF4DFD001596A0 /* SileoRuntimeEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1B3D7112BD5000100A77C11 /* SileoRuntimeEnvironment.swift */; };
 		F170605F24CF50C7001596A0 /* SileoNavigationController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F170605E24CF50C7001596A0 /* SileoNavigationController.swift */; };
 		F170606024CF50C7001596A0 /* SileoNavigationController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F170605E24CF50C7001596A0 /* SileoNavigationController.swift */; };
 		F170606224CF54E0001596A0 /* SileoTableViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F170606124CF54E0001596A0 /* SileoTableViewController.swift */; };
 		F170606324CF54E0001596A0 /* SileoTableViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F170606124CF54E0001596A0 /* SileoTableViewController.swift */; };
+		F170607124CF4DFD001596A0 /* SileoRuntimeEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1B3D7112BD5000100A77C11 /* SileoRuntimeEnvironment.swift */; };
+		F170607224CF4DFD001596A0 /* SileoRuntimeEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1B3D7112BD5000100A77C11 /* SileoRuntimeEnvironment.swift */; };
 		F170DD7D22CFE79800196FDA /* RootWrapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = F170DD7C22CFE79800196FDA /* RootWrapper.swift */; };
 		F172581924EB848E000F2FAF /* NewsArticle.swift in Sources */ = {isa = PBXBuildFile; fileRef = F172581824EB848E000F2FAF /* NewsArticle.swift */; };
 		F172581A24EB848E000F2FAF /* NewsArticle.swift in Sources */ = {isa = PBXBuildFile; fileRef = F172581824EB848E000F2FAF /* NewsArticle.swift */; };
@@ -848,9 +851,6 @@
 		F18383F520FBFFB700450EED /* libiconv.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = F18383F420FBFFB700450EED /* libiconv.tbd */; };
 		F183CFB02318D1FF00D3AF3B /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F183CFAF2318D1FF00D3AF3B /* AppDelegate.swift */; };
 		F183CFB12318D1FF00D3AF3B /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F183CFAF2318D1FF00D3AF3B /* AppDelegate.swift */; };
-		C8F3A1012709060A000002 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F3A1012709060A000001 /* SceneDelegate.swift */; };
-		C8F3A1012709060A000003 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F3A1012709060A000001 /* SceneDelegate.swift */; };
-		C8F3A1012709060A000004 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F3A1012709060A000001 /* SceneDelegate.swift */; };
 		F183CFC7231A563500D3AF3B /* PackageViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F183CFC6231A563500D3AF3B /* PackageViewController.swift */; };
 		F183CFCC231C246600D3AF3B /* PackageViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F183CFC6231A563500D3AF3B /* PackageViewController.swift */; };
 		F18B58482581A7E90064CD71 /* CSActionItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18B58472581A7E90064CD71 /* CSActionItem.swift */; };
@@ -1302,6 +1302,7 @@
 		C373924821D5F80300E6F704 /* Base */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = Base; path = Sileo/Base.lproj/Categories.strings; sourceTree = "<group>"; };
 		C373925821D60B2600E6F704 /* Base */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = Base; path = Sileo/Base.lproj/Localizable.stringsdict; sourceTree = "<group>"; };
 		C3D58BD821D728BD001E0ABE /* NewsArticleCollectionViewCell.xib */ = {isa = PBXFileReference; lastKnownFileType = file.xib; path = NewsArticleCollectionViewCell.xib; sourceTree = "<group>"; };
+		C8F3A1012709060A000001 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		CEDEBA6B29CC93A00096ACF0 /* SearchHistoryCollectionViewCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchHistoryCollectionViewCell.swift; sourceTree = "<group>"; };
 		CFBC7FDE222041290066D501 /* NewsViewController.xib */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.xib; path = NewsViewController.xib; sourceTree = "<group>"; };
 		CFE8CB13227433700066D501 /* NewsDateHeader.xib */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.xib; path = NewsDateHeader.xib; sourceTree = "<group>"; };
@@ -1414,11 +1415,11 @@
 		E1A0646629EB16C400B9E0B1 /* Bootstrap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Bootstrap.swift; sourceTree = "<group>"; };
 		E1A0646A29EB25CF00B9E0B1 /* CommandPaths.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaths.swift; sourceTree = "<group>"; };
 		E1ADDD1C2643145B00E94655 /* Entitlements.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Entitlements.entitlements; sourceTree = "<group>"; };
+		E1B3D7112BD5000100A77C11 /* SileoRuntimeEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SileoRuntimeEnvironment.swift; sourceTree = "<group>"; };
 		E1B3FBBA2601256500F2E07F /* pt-BR */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "pt-BR"; path = "Sileo/pt-BR.lproj/Localizable.strings"; sourceTree = "<group>"; };
 		E1B3FBBB2601256500F2E07F /* pt-BR */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = "pt-BR"; path = "Sileo/pt-BR.lproj/Localizable.stringsdict"; sourceTree = "<group>"; };
 		E1B3FBBC2601256500F2E07F /* pt-BR */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "pt-BR"; path = "Sileo/pt-BR.lproj/Categories.strings"; sourceTree = "<group>"; };
 		E1B3FBBD2601256600F2E07F /* pt-BR */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "pt-BR"; path = "Sileo/pt-BR.lproj/Errors.strings"; sourceTree = "<group>"; };
-		E1B3D7112BD5000100A77C11 /* SileoRuntimeEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SileoRuntimeEnvironment.swift; sourceTree = "<group>"; };
 		E1B3FBCD2601467500F2E07F /* SettingsSwitchTableViewCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsSwitchTableViewCell.swift; sourceTree = "<group>"; };
 		E1BB50D9260E913A00F870B8 /* OG~ipad@3x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "OG~ipad@3x.png"; sourceTree = "<group>"; };
 		E1BB50DA260E913A00F870B8 /* OG@2x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "OG@2x.png"; sourceTree = "<group>"; };
@@ -1544,7 +1545,6 @@
 		F178CD8821323E3800F927FA /* DownloadsTableViewController.xib */ = {isa = PBXFileReference; lastKnownFileType = file.xib; path = DownloadsTableViewController.xib; sourceTree = "<group>"; };
 		F18383F420FBFFB700450EED /* libiconv.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libiconv.tbd; path = usr/lib/libiconv.tbd; sourceTree = SDKROOT; };
 		F183CFAF2318D1FF00D3AF3B /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
-		C8F3A1012709060A000001 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		F183CFC6231A563500D3AF3B /* PackageViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackageViewController.swift; sourceTree = "<group>"; };
 		F18B58472581A7E90064CD71 /* CSActionItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CSActionItem.swift; sourceTree = "<group>"; };
 		F1974938213695660065E630 /* PackageListHeaderBlank.xib */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.xib; path = PackageListHeaderBlank.xib; sourceTree = "<group>"; };
@@ -5199,7 +5199,7 @@
 				CLANG_STATIC_ANALYZER_MODE = deep;
 				CODE_SIGN_ENTITLEMENTS = "Sileo/Sileo-Mac.entitlements";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = 7J8FJX4SRX;
+				DEVELOPMENT_TEAM = 34X257RZ3R;
 				ENABLE_BITCODE = NO;
 				ENABLE_TESTABILITY = YES;
 				GCC_PREPROCESSOR_DEFINITIONS = "TARGET_SANDBOX=1";
@@ -5362,7 +5362,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Sileo/Sileo-iOS.entitlements";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = 7J8FJX4SRX;
+				DEVELOPMENT_TEAM = 34X257RZ3R;
 				ENABLE_BITCODE = NO;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
@@ -5417,7 +5417,7 @@
 				CLANG_STATIC_ANALYZER_MODE = deep;
 				CODE_SIGN_ENTITLEMENTS = "Sileo/Sileo-iOS.entitlements";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = 7J8FJX4SRX;
+				DEVELOPMENT_TEAM = 34X257RZ3R;
 				ENABLE_BITCODE = NO;
 				ENABLE_TESTABILITY = YES;
 				GCC_PREPROCESSOR_DEFINITIONS = "TARGET_SANDBOX=1";

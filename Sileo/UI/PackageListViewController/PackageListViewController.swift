@@ -233,9 +233,15 @@ class PackageListViewController: SileoViewController, UIGestureRecognizerDelegat
         if #available(iOS 26.0, *) {
             searchController.searchBar.backgroundImage = UIImage()
             searchController.searchBar.searchBarStyle = .minimal
-            // 保持现在的大搜索栏布局，避免被收进工具栏后改变软件包页结构。
-            navigationItem.preferredSearchBarPlacement = .stacked
-            navigationItem.searchBarPlacementAllowsToolbarIntegration = false
+            if #available(iOS 27.0, *), showSearchField, UIDevice.current.userInterfaceIdiom == .phone {
+                // 允许独立搜索标签接管搜索框，恢复底部搜索栏和左侧的标签返回按钮。
+                navigationItem.preferredSearchBarPlacement = .automatic
+                navigationItem.searchBarPlacementAllowsToolbarIntegration = true
+            } else {
+                // 软件包列表继续使用顶部搜索栏，保留旧系统和 iPad 的现有布局。
+                navigationItem.preferredSearchBarPlacement = .stacked
+                navigationItem.searchBarPlacementAllowsToolbarIntegration = false
+            }
         }
         self.definesPresentationContext = true
         
@@ -300,9 +306,9 @@ class PackageListViewController: SileoViewController, UIGestureRecognizerDelegat
             DispatchQueue.main.async {
                 let updates = self.availableUpdates
                 if !updates.isEmpty {
-                    self.navigationController?.tabBarItem.badgeValue = String(format: "%ld", updates.count)
+                    self.navigationController?.setSileoTabBadgeValue(String(format: "%ld", updates.count))
                 } else {
-                    self.navigationController?.tabBarItem.badgeValue = nil
+                    self.navigationController?.setSileoTabBadgeValue(nil)
                 }
 
                 self.updatePackageList()
@@ -372,10 +378,10 @@ class PackageListViewController: SileoViewController, UIGestureRecognizerDelegat
             }
             DispatchQueue.main.async {
                 if !self.availableUpdates.isEmpty {
-                    self.navigationController?.tabBarItem.badgeValue = String(format: "%ld", self.availableUpdates.count)
+                    self.navigationController?.setSileoTabBadgeValue(String(format: "%ld", self.availableUpdates.count))
                     UIApplication.shared.applicationIconBadgeNumber = self.availableUpdates.count
                 } else {
-                    self.navigationController?.tabBarItem.badgeValue = nil
+                    self.navigationController?.setSileoTabBadgeValue(nil)
                     UIApplication.shared.applicationIconBadgeNumber = 0
                 }
                 self.cachedInstalled = nil

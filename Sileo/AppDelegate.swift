@@ -148,7 +148,7 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate {
         self.updateTintColor()
         
         // Force all view controllers to load now
-        for (index, controller) in (tabBarController.viewControllers ?? []).enumerated() {
+        for (index, controller) in (tabBarController.sileoViewControllers ?? []).enumerated() {
             _ = controller.view
             if let navController = controller as? UINavigationController {
                 _ = navController.viewControllers[0].view
@@ -157,12 +157,14 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate {
                 controller.tabBarItem._setInternalTitle(String(localizationKey: "Search_Page"))
             }
         }
+        // 先让各页面完成标题本地化，再为 iOS 27 创建全新的标签项。
+        (tabBarController as? TabBarController)?.configureSearchTabIfNeeded()
     }
 
     private func modernizeSourcesSplitIfNeeded(in tabBarController: UITabBarController) {
         guard #available(iOS 26.0, *),
               UIDevice.current.userInterfaceIdiom == .pad,
-              var tabViewControllers = tabBarController.viewControllers,
+              var tabViewControllers = tabBarController.sileoViewControllers,
               tabViewControllers.indices.contains(2),
               let legacySourcesSplit = tabViewControllers[2] as? SourcesSplitViewController,
               legacySourcesSplit.style == .unspecified,
@@ -334,7 +336,7 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate {
                     if url.pathExtension == "deb" {
                         // The file is a deb. Open the package view controller to that file.
                         guard let tabBarController = self.window?.rootViewController as? UITabBarController,
-                              let featuredVc = tabBarController.viewControllers?[0] as? UINavigationController?,
+                              let featuredVc = tabBarController.sileoViewControllers?[0] as? UINavigationController?,
                               let featuredView = featuredVc?.viewControllers[0] as? FeaturedViewController else {
                                   return
                               }
@@ -345,11 +347,11 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate {
                             return
                         }
                         featuredView.showPackage(package)
-                        tabBarController.selectedIndex = 0
+                        tabBarController.sileoSelectedIndex = 0
                     } else {
                         guard let tabBarController = self.window?.rootViewController as? UITabBarController,
-                              let sourcesNavNV = (tabBarController.viewControllers?[2] as? SileoNavigationController) ??
-                                  (tabBarController.viewControllers?[2] as? UISplitViewController)?.viewControllers[0] as? SileoNavigationController,
+                              let sourcesNavNV = (tabBarController.sileoViewControllers?[2] as? SileoNavigationController) ??
+                                  (tabBarController.sileoViewControllers?[2] as? UISplitViewController)?.viewControllers[0] as? SileoNavigationController,
                               let sourcesVC = sourcesNavNV.viewControllers[0] as? SourcesViewController,
                               url.startAccessingSecurityScopedResource() else {
                                   return
@@ -373,7 +375,7 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate {
         
         if url.host == "source" && url.scheme == "sileo" {
             guard let tabBarController = self.window?.rootViewController as? UITabBarController,
-                let targetVC = tabBarController.viewControllers?[2],
+                let targetVC = tabBarController.sileoViewControllers?[2],
                 let sourcesNavNV = (targetVC as? SileoNavigationController) ??
                     (targetVC as? UISplitViewController)?.viewControllers[0] as? SileoNavigationController,
                 let sourcesVC = sourcesNavNV.viewControllers[0] as? SourcesViewController else {
@@ -381,7 +383,7 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate {
             }
             let newURL = url.absoluteURL
             tabBarController.closePopup(animated: true)
-            tabBarController.selectedViewController = targetVC
+            tabBarController.sileoSelectedViewController = targetVC
             sourcesVC.presentAddSourceEntryField(url: newURL)
         }
         return true
@@ -397,7 +399,7 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate {
 
     func handleShortcutItem(_ shortcutItem: UIApplicationShortcutItem, completionHandler: @escaping (Bool) -> Void) {
         guard let tabBarController = TabBarController.singleton,
-              let controllers = tabBarController.viewControllers,
+              let controllers = tabBarController.sileoViewControllers,
               let targetVC = controllers[2] as UIViewController?,
               let sourcesNVC = (targetVC as? SileoNavigationController) ??
                   (targetVC as? UISplitViewController)?.viewControllers[0] as? SileoNavigationController,
@@ -411,7 +413,7 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate {
         
         if shortcutItem.type.hasSuffix(".UpgradeAll") {
             tabBarController.closePopup(animated: true)
-            tabBarController.selectedViewController = packageListNVC
+            tabBarController.sileoSelectedViewController = packageListNVC
             
             let title = String(localizationKey: "Sileo")
             let msg = String(localizationKey: "Upgrade_All_Shortcut_Processing_Message")
@@ -431,15 +433,15 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate {
             })
         } else if shortcutItem.type.hasSuffix(".Refresh") {
             tabBarController.closePopup(animated: true)
-            tabBarController.selectedViewController = targetVC
+            tabBarController.sileoSelectedViewController = targetVC
             sourcesVC.refreshSources(forceUpdate: true, forceReload: true, isBackground: false, useRefreshControl: true, useErrorScreen: true, completion: nil)
         } else if shortcutItem.type.hasSuffix(".AddSource") {
             tabBarController.closePopup(animated: true)
-            tabBarController.selectedViewController = targetVC
+            tabBarController.sileoSelectedViewController = targetVC
             sourcesVC.addSource(nil)
         } else if shortcutItem.type.hasSuffix(".Packages") {
             tabBarController.closePopup(animated: true)
-            tabBarController.selectedViewController = packageListNVC
+            tabBarController.sileoSelectedViewController = packageListNVC
         }
         completionHandler(true)
     }

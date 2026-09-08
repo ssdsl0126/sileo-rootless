@@ -288,12 +288,16 @@ final class FeaturedViewController: SileoViewController, UIScrollViewDelegate, F
         guard let tabBarController = UIApplication.shared.windows.first?.rootViewController as? UITabBarController else {
             fatalError("Invalid Storyboard")
         }
-        for viewController in tabBarController.viewControllers ?? [] {
+        for viewController in tabBarController.sileoViewControllers ?? [] {
             if viewController as? SileoNavigationController != nil { continue }
             if viewController as? SourcesSplitViewController != nil { continue }
-            tabBarController.viewControllers?.removeAll(where: { $0 == viewController })
+            if #available(iOS 18.0, *), !tabBarController.tabs.isEmpty {
+                tabBarController.tabs.removeAll { $0.viewController === viewController }
+            } else {
+                tabBarController.viewControllers?.removeAll { $0 === viewController }
+            }
         }
-        if tabBarController.viewControllers?.count ?? 0 >= 6 {
+        if tabBarController.sileoViewControllers?.count ?? 0 >= 6 {
             fatalError("Invalid View Controllers")
         }
     }

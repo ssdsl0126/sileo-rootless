@@ -356,10 +356,10 @@ extension PackageCollectionViewCell: SwipeCollectionViewCellDelegate {
     private func addRepo(_ package: ProvisionalPackage) -> SwipeAction {
         let addRepo = SwipeAction(style: .default, title: String(localizationKey: "Add_Source.Title")) { _, _ in
             if let tabBarController = self.window?.rootViewController as? UITabBarController,
-               let sourcesNavNV = (tabBarController.viewControllers?[2] as? SileoNavigationController) ??
-                   (tabBarController.viewControllers?[2] as? UISplitViewController)?.viewControllers[0] as? SileoNavigationController,
-               let targetVC = tabBarController.viewControllers?[2] {
-                    tabBarController.selectedViewController = targetVC
+               let sourcesNavNV = (tabBarController.sileoViewControllers?[2] as? SileoNavigationController) ??
+                   (tabBarController.sileoViewControllers?[2] as? UISplitViewController)?.viewControllers[0] as? SileoNavigationController,
+               let targetVC = tabBarController.sileoViewControllers?[2] {
+                    tabBarController.sileoSelectedViewController = targetVC
                     if let sourcesVC = sourcesNavNV.viewControllers[0] as? SourcesViewController {
                         sourcesVC.presentAddSourceEntryField(url: package.repository.uri)
                     }
@@ -641,7 +641,7 @@ extension PackageCollectionViewCell: SwipeCollectionViewCellDelegate {
             return topMostViewController(from: navigationController.visibleViewController ?? navigationController.topViewController)
         }
         if let tabBarController = current as? UITabBarController {
-            return topMostViewController(from: tabBarController.selectedViewController)
+            return topMostViewController(from: tabBarController.sileoSelectedViewController)
         }
         if let splitViewController = current as? UISplitViewController {
             return topMostViewController(from: splitViewController.viewControllers.last)

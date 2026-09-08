@@ -65,6 +65,8 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         
         delegate = self
         TabBarController.singleton = self
+        (tabBar as? TabBar)?.attachDecorations(to: view)
+        prepareSileoTabSelection(sileoSelectedViewController)
 
         downloadsController = UINavigationController(rootViewController: DownloadManager.shared.viewController)
         downloadsController?.isNavigationBarHidden = true
@@ -80,6 +82,98 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         updateSileoColors()
         updateLiquidGlassTabBarMinimizeBehavior()
     }
+
+    func configureSearchTabIfNeeded() {
+        guard #available(iOS 27.0, *),
+              UIDevice.current.userInterfaceIdiom == .phone,
+              tabs.isEmpty,
+              let controllers = super.viewControllers else {
+            return
+        }
+
+        let previousController = super.selectedViewController
+        // iOS 27 需要真正的 UISearchTab 才能指定独立入口，继续复用 storyboard 的导航栈。
+        prominentTabIdentifier = UISearchTab.identifier
+        setTabs(makeTabs(from: controllers), animated: false)
+        let initialTab = tabs.first { $0.viewController === previousController } ?? tabs.first
+        // iOS 27 首次选中后才重新计算中文标签高度，在首帧提交前完成各标签的布局。
+        UIView.performWithoutAnimation {
+            for tab in tabs where !(tab is UISearchTab) {
+                selectedTab = tab
+                view.layoutIfNeeded()
+            }
+            selectedTab = initialTab
+            view.layoutIfNeeded()
+        }
+        prepareSileoTabSelection(sileoSelectedViewController)
+        registerLiquidGlassContentScrollView()
+    }
+
+    @available(iOS 27.0, *)
+    private func makeTabs(from controllers: [UIViewController]) -> [UITab] {
+        let titleKeys = ["Featured_Page", "News_Page", "Sources_Page", "Packages_Page", "Search_Page"]
+        return controllers.enumerated().map { index, controller in
+            if let existingTab = controller.tab {
+                return existingTab
+            }
+            let previousItem = controller.tabBarItem!
+            let title = titleKeys.indices.contains(index) ? String(localizationKey: titleKeys[index]) : (previousItem.title ?? "")
+            let image = normalizedTabImage(previousItem.image)
+            let selectedImage = normalizedTabImage(previousItem.selectedImage ?? previousItem.image)
+            // UIKit 在过渡动画中也会读取控制器的旧 tabBarItem，保持两套元数据一致。
+            let item = UITabBarItem(title: title, image: image, tag: previousItem.tag)
+            item.selectedImage = selectedImage
+            item.badgeValue = previousItem.badgeValue
+            item.badgeColor = previousItem.badgeColor
+            controller.tabBarItem = item
+            let tab: UITab
+            if let navigationController = controller as? UINavigationController,
+               let packageList = navigationController.viewControllers.first as? PackageListViewController,
+               packageList.showSearchField {
+                let searchTab = UISearchTab { _ in controller }
+                // 首次进入先展示最近搜索，点搜索框或再次点搜索标签时才弹出键盘。
+                searchTab.automaticallyActivatesSearch = false
+                tab = searchTab
+            } else {
+                tab = UITab(title: title, image: image, identifier: "sileo.tab.\(index)") { _ in controller }
+            }
+            tab.title = title
+            tab.image = image ?? tab.image
+            tab.selectedImage = selectedImage ?? tab.image
+            tab.badgeValue = item.badgeValue
+            return tab
+        }
+    }
+
+    @available(iOS 27.0, *)
+    private func normalizedTabImage(_ image: UIImage?) -> UIImage? {
+        guard var image else { return nil }
+        image = image.withTintColor(.black, renderingMode: .alwaysOriginal)
+        if !image.isSymbolImage {
+            // 自定义图标使用相同画布，避免 UIKit 按不同图片高度挤压菜单标题。
+            let size = CGSize(width: 26, height: 26)
+            let bounds = CGRect(origin: CGPoint(x: (size.width - image.size.width) / 2,
+                                                y: (size.height - image.size.height) / 2),
+                                size: image.size)
+            image = UIGraphicsImageRenderer(size: size).image { _ in
+                image.draw(in: bounds)
+            }.withBaselineOffset(fromBottom: 0)
+        }
+        return image.withRenderingMode(.alwaysTemplate)
+    }
+
+    @available(iOS 18.0, *)
+    func tabBarController(_ tabBarController: UITabBarController, shouldSelectTab tab: UITab) -> Bool {
+        guard let controller = tab.viewController else { return false }
+        // 由 UIKit 完成标签与搜索栏的同一次过渡，避免手动切换后再取消选择导致旧菜单残留。
+        return self.tabBarController(tabBarController, shouldSelect: controller)
+    }
+
+    @available(iOS 18.0, *)
+    func tabBarController(_ tabBarController: UITabBarController, didSelectTab selectedTab: UITab, previousTab: UITab?) {
+        guard let controller = selectedTab.viewController else { return }
+        self.tabBarController(tabBarController, didSelect: controller)
+    }
     
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
@@ -92,7 +186,8 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     }
     
     func tabBarController(_ tabBarController: UITabBarController, shouldSelect viewController: UIViewController) -> Bool {
-        shouldSelectIndex = tabBarController.selectedIndex
+        shouldSelectIndex = tabBarController.sileoSelectedIndex
+        prepareSileoTabSelection(viewController)
         return true
     }
 
@@ -107,30 +202,30 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
                 self.restoreLiquidGlassMinimizeBehaviorIfNeeded()
             }
         }
-        if shouldSelectIndex == tabBarController.selectedIndex {
+        if shouldSelectIndex == tabBarController.sileoSelectedIndex {
             if let splitViewController = viewController as? UISplitViewController {
                 if let navController = splitViewController.viewControllers[0] as? UINavigationController {
                     navController.popToRootViewController(animated: true)
                 }
             }
         }
-        if tabBarController.selectedIndex == 4 && shouldSelectIndex == 4 {
-            if let navController = tabBarController.viewControllers?[4] as? SileoNavigationController,
+        if tabBarController.sileoSelectedIndex == 4 && shouldSelectIndex == 4 {
+            if let navController = tabBarController.sileoViewControllers?[4] as? SileoNavigationController,
                let packageList = navController.viewControllers[0] as? PackageListViewController {
                 packageList.searchController.searchBar.becomeFirstResponder()
             }
         }
-        if tabBarController.selectedIndex == 3 && shouldSelectIndex == 3 {
-            if let navController = tabBarController.viewControllers?[3] as? SileoNavigationController,
+        if tabBarController.sileoSelectedIndex == 3 && shouldSelectIndex == 3 {
+            if let navController = tabBarController.sileoViewControllers?[3] as? SileoNavigationController,
                let packageList = navController.viewControllers[0] as? PackageListViewController,
                let collectionView = packageList.collectionView {
                 let yVal = -1 * collectionView.adjustedContentInset.top
                 collectionView.setContentOffset(CGPoint(x: 0, y: yVal), animated: true)
             }
         }
-        if tabBarController.selectedIndex ==  2 && !fuckedUpSources {
-            let sourcesNaVC = (tabBarController.viewControllers?[2] as? SileoNavigationController) ??
-                (tabBarController.viewControllers?[2] as? UISplitViewController)?.viewControllers[0] as? SileoNavigationController
+        if tabBarController.sileoSelectedIndex ==  2 && !fuckedUpSources {
+            let sourcesNaVC = (tabBarController.sileoViewControllers?[2] as? SileoNavigationController) ??
+                (tabBarController.sileoViewControllers?[2] as? UISplitViewController)?.viewControllers[0] as? SileoNavigationController
             if let sourcesNaVC {
                 if sourcesNaVC.presentedViewController == nil {
                     sourcesNaVC.popToRootViewController(animated: false)
@@ -372,7 +467,14 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
         super.traitCollectionDidChange(previousTraitCollection)
-        updateSileoColors()
+        if #available(iOS 26.0, *) {
+            // 搜索收缩也会改变环境特征，此时重设外观会打断正在过渡的图标绘制。
+            if traitCollection.hasDifferentColorAppearance(comparedTo: previousTraitCollection) {
+                updateSileoColors()
+            }
+        } else {
+            updateSileoColors()
+        }
         guard popupIsPresented else {
             return
         }
@@ -397,13 +499,13 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         // 当前页面可能是导航栈里的详情页，把实际滚动视图直接交给顶部导航容器。
         if !isPackagesTabScrollView(scrollView) {
             setContentScrollView(scrollView, for: .top)
-            selectedViewController?.setContentScrollView(scrollView, for: .top)
+            sileoSelectedViewController?.setContentScrollView(scrollView, for: .top)
         }
         if isSourcesScrollView(scrollView) {
             driveSourcesQueueMinimizeIfNeeded(from: scrollView)
         } else {
             setContentScrollView(scrollView, for: .bottom)
-            selectedViewController?.setContentScrollView(scrollView, for: .bottom)
+            sileoSelectedViewController?.setContentScrollView(scrollView, for: .bottom)
         }
     }
 
@@ -433,14 +535,14 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
 
     @available(iOS 26.0, *)
     private func isPackagesTabScrollView(_ scrollView: UIScrollView) -> Bool {
-        guard selectedIndex == 3 else {
+        guard sileoSelectedIndex == 3 else {
             return false
         }
-        if let nav = selectedViewController as? UINavigationController,
+        if let nav = sileoSelectedViewController as? UINavigationController,
            let packageList = nav.topViewController as? PackageListViewController {
             return packageList.collectionView === scrollView
         }
-        if let packageList = selectedViewController as? PackageListViewController {
+        if let packageList = sileoSelectedViewController as? PackageListViewController {
             return packageList.collectionView === scrollView
         }
         return false
@@ -448,8 +550,8 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
 
     @available(iOS 26.0, *)
     private func isSourcesScrollView(_ scrollView: UIScrollView) -> Bool {
-        guard let selectedViewController,
-              let sourcesViewController = sourcesViewController(in: selectedViewController) else {
+        guard let sileoSelectedViewController,
+              let sourcesViewController = sourcesViewController(in: sileoSelectedViewController) else {
             return false
         }
         return sourcesViewController.tableView === scrollView
@@ -530,7 +632,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         sourcesQueueIsMinimized = minimized
         DispatchQueue.main.async { [weak self] in
             guard let self,
-                  let sourcesRootController = self.viewControllers?[safe: 2] else {
+                  let sourcesRootController = self.sileoViewControllers?[safe: 2] else {
                 return
             }
             self.sourcesViewController(in: sourcesRootController)?.layoutSourceRefreshIndicatorIfNeeded()
@@ -551,12 +653,12 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     @available(iOS 26.0, *)
     private func registerSourcesScrollView(_ scrollView: UIScrollView) {
         setContentScrollView(scrollView, for: .bottom)
-        selectedViewController?.setContentScrollView(scrollView, for: .bottom)
+        sileoSelectedViewController?.setContentScrollView(scrollView, for: .bottom)
     }
 
     @available(iOS 26.0, *)
     private func registerSourcesQueueTrackingScrollView() {
-        guard let selectedViewController else {
+        guard let sileoSelectedViewController else {
             return
         }
 
@@ -575,12 +677,12 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
             trackingScrollView = createdScrollView
         }
 
-        if trackingScrollView.superview !== selectedViewController.view {
+        if trackingScrollView.superview !== sileoSelectedViewController.view {
             trackingScrollView.removeFromSuperview()
-            selectedViewController.view.insertSubview(trackingScrollView, at: 0)
+            sileoSelectedViewController.view.insertSubview(trackingScrollView, at: 0)
         }
         setContentScrollView(trackingScrollView, for: .bottom)
-        selectedViewController.setContentScrollView(trackingScrollView, for: .bottom)
+        sileoSelectedViewController.setContentScrollView(trackingScrollView, for: .bottom)
     }
 
     @available(iOS 26.0, *)
@@ -607,14 +709,14 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
 
     @available(iOS 26.0, *)
     private func registerLiquidGlassContentScrollView() {
-        guard let selectedViewController,
-              let scrollView = liquidGlassContentScrollView(in: selectedViewController) else {
+        guard let sileoSelectedViewController,
+              let scrollView = liquidGlassContentScrollView(in: sileoSelectedViewController) else {
             return
         }
 
         if !isPackagesTabScrollView(scrollView) {
             setContentScrollView(scrollView, for: .top)
-            selectedViewController.setContentScrollView(scrollView, for: .top)
+            sileoSelectedViewController.setContentScrollView(scrollView, for: .top)
         }
         if isSourcesScrollView(scrollView) {
             if popupIsPresented && currentLiquidGlassMorphTarget() == 2 {
@@ -626,7 +728,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
             }
         } else {
             setContentScrollView(scrollView, for: .bottom)
-            selectedViewController.setContentScrollView(scrollView, for: .bottom)
+            sileoSelectedViewController.setContentScrollView(scrollView, for: .bottom)
         }
         restoreLiquidGlassMinimizeBehaviorIfNeeded()
     }
@@ -872,12 +974,13 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        (tabBar as? TabBar)?.attachDecorations(to: view)
         
         self.tabBar.itemPositioning = .centered
         if #available(iOS 26.0, *), usesFloatingQueueCardOnPhone {
             // accessory 的首次布局可能会重建标签栏，布局完成后再次保持当前策略。
             restoreLiquidGlassMinimizeBehaviorIfNeeded()
-            if let sourcesRootController = viewControllers?[safe: 2] {
+            if let sourcesRootController = sileoViewControllers?[safe: 2] {
                 sourcesViewController(in: sourcesRootController)?.layoutSourceRefreshIndicatorIfNeeded()
             }
         } else if usesFloatingQueueCardOnPhone {
@@ -924,7 +1027,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
 
         // 清除维持队列紧凑态的占位滚动视图，让真实列表重新接管滚动。
         if let trackingScrollView = sourcesQueueTrackingScrollView {
-            for controller in [self] + (viewControllers ?? [])
+            for controller in [self] + (sileoViewControllers ?? [])
             where controller.contentScrollView(for: .bottom) === trackingScrollView {
                 controller.setContentScrollView(nil, for: .bottom)
             }
@@ -1371,5 +1474,69 @@ private final class QueueFloatingCardController: UIViewController, UIGestureReco
                 completion?()
             }
         })
+    }
+}
+
+// 新标签 API 不维护旧的数组与选择属性，业务入口统一通过这些访问器定位页面。
+extension UITabBarController {
+    fileprivate func prepareSileoTabSelection(_ controller: UIViewController?) {
+        guard let index = sileoViewControllers?.firstIndex(where: { $0 === controller }) else { return }
+        (tabBar as? TabBar)?.prepareForTabSelection(index: index, item: controller?.tabBarItem,
+                                                  previousIndex: sileoSelectedIndex,
+                                                  previousItem: sileoSelectedViewController?.tabBarItem)
+    }
+
+    var sileoViewControllers: [UIViewController]? {
+        if #available(iOS 18.0, *), !tabs.isEmpty {
+            return tabs.compactMap { $0.viewController }
+        }
+        return viewControllers
+    }
+
+    var sileoSelectedViewController: UIViewController? {
+        get {
+            if #available(iOS 18.0, *), !tabs.isEmpty {
+                return selectedTab?.viewController
+            }
+            return selectedViewController
+        }
+        set {
+            prepareSileoTabSelection(newValue)
+            if #available(iOS 18.0, *), !tabs.isEmpty {
+                selectedTab = tabs.first { $0.viewController === newValue }
+            } else {
+                selectedViewController = newValue
+            }
+        }
+    }
+
+    var sileoSelectedIndex: Int {
+        get {
+            if #available(iOS 18.0, *), !tabs.isEmpty {
+                return tabs.firstIndex { $0 === selectedTab } ?? NSNotFound
+            }
+            return selectedIndex
+        }
+        set {
+            if #available(iOS 18.0, *), !tabs.isEmpty {
+                guard tabs.indices.contains(newValue) else { return }
+                prepareSileoTabSelection(tabs[newValue].viewController)
+                selectedTab = tabs[newValue]
+            } else {
+                if let controller = viewControllers?[safe: newValue] {
+                    prepareSileoTabSelection(controller)
+                }
+                selectedIndex = newValue
+            }
+        }
+    }
+}
+
+extension UIViewController {
+    func setSileoTabBadgeValue(_ value: String?) {
+        tabBarItem.badgeValue = value
+        if #available(iOS 18.0, *) {
+            tab?.badgeValue = value
+        }
     }
 }

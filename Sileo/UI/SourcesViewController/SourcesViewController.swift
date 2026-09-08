@@ -317,7 +317,7 @@ final class SourcesViewController: SileoViewController {
         }
     }
 
-    /// iOS 26 使用系统 badge 承接位置和形态变化，再把转圈放进系统 badge 容器。
+    /// iPhone 的刷新角标由标签栏前景层承接；iPad 和旧系统保留原有实现。
     private func showSourceRefreshIndicator() {
         guard #available(iOS 26.0, *) else {
             let item = self.splitViewController?.tabBarItem
@@ -336,14 +336,22 @@ final class SourcesViewController: SileoViewController {
 
         let item = splitViewController?.tabBarItem ?? navigationController?.tabBarItem
         sourceRefreshIndicatorIsVisible = true
+        if UIDevice.current.userInterfaceIdiom == .phone {
+            layoutSourceRefreshIndicatorIfNeeded()
+            return
+        }
         item?.badgeColor = .systemRed
-        item?.badgeValue = " "
+        (splitViewController ?? navigationController)?.setSileoTabBadgeValue(" ")
         scheduleSourceRefreshIndicatorLayout()
     }
 
     private func hideSourceRefreshIndicator() {
         sourceRefreshIndicatorIsVisible = false
         clearSourceRefreshIndicatorViews()
+        if UIDevice.current.userInterfaceIdiom == .phone {
+            (tabBarController?.tabBar as? TabBar)?.setSourceRefreshIndicatorVisible(false)
+            return
+        }
 
         // iOS 26 在完整与紧凑标签栏之间切换时会保留过渡用的 badge 容器。
         // badgeValue 清空后再覆盖数个布局周期，避免刷新结束后旧红点残留。
@@ -362,13 +370,24 @@ final class SourcesViewController: SileoViewController {
         }
 
         let item = splitViewController?.tabBarItem ?? navigationController?.tabBarItem
+        if UIDevice.current.userInterfaceIdiom == .phone {
+            // 不再创建系统空角标，避免它和前景层重复显示或参与玻璃内容的合成。
+            if item?.badgeValue != nil {
+                (splitViewController ?? navigationController)?.setSileoTabBadgeValue(nil)
+            }
+            (tabBarController.tabBar as? TabBar)?.setSourceRefreshIndicatorVisible(true)
+            return
+        }
         if item?.badgeValue == nil {
             item?.badgeColor = .systemRed
-            item?.badgeValue = " "
+            (splitViewController ?? navigationController)?.setSileoTabBadgeValue(" ")
         }
 
         tabBarController.view.layoutIfNeeded()
-        let badgeViews = sourceRefreshBadgeViews(in: tabBarController.view)
+        var badgeViews = sourceRefreshBadgeViews(in: tabBarController.tabBar)
+        if badgeViews.isEmpty {
+            badgeViews = sourceRefreshBadgeViews(in: tabBarController.view)
+        }
         guard !badgeViews.isEmpty else {
             return
         }
@@ -411,7 +430,12 @@ final class SourcesViewController: SileoViewController {
     private func sourceRefreshBadgeViews(in view: UIView) -> [UIView] {
         var badgeViews: [UIView] = []
         let className = NSStringFromClass(type(of: view))
-        if className.localizedCaseInsensitiveContains("Badge"),
+        let isBadgeClass = className.localizedCaseInsensitiveContains("Badge")
+        let isContainer = className.localizedCaseInsensitiveContains("Container")
+        let hasSubBadge = view.subviews.contains(where: { NSStringFromClass(type(of: $0)).localizedCaseInsensitiveContains("Badge") })
+        let isLeafBadge = isBadgeClass && !isContainer && !hasSubBadge && max(view.bounds.width, view.bounds.height) <= 44
+
+        if isLeafBadge,
            view.window != nil,
            badgeText(in: view).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             badgeViews.append(view)
@@ -454,13 +478,16 @@ final class SourcesViewController: SileoViewController {
             return
         }
 
-        let item = splitViewController?.tabBarItem ?? navigationController?.tabBarItem
-        item?.badgeValue = nil
+        (splitViewController ?? navigationController)?.setSileoTabBadgeValue(nil)
         clearSourceRefreshIndicatorViews()
 
         if #available(iOS 26.0, *) {
             if let tabBarController {
-                for badgeView in sourceRefreshBadgeViews(in: tabBarController.view) where
+                var badgeViews = sourceRefreshBadgeViews(in: tabBarController.tabBar)
+                if badgeViews.isEmpty {
+                    badgeViews = sourceRefreshBadgeViews(in: tabBarController.view)
+                }
+                for badgeView in badgeViews where
                     badgeText(in: badgeView).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     badgeView.isHidden = true
                 }

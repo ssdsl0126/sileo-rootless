@@ -1,3 +1,6 @@
+# 默认生成可交给外部签名工具使用的 Demo IPA。
+.DEFAULT_GOAL := demo-ipa
+
 # See if we want verbose make.
 V                  ?= 0
 # Beta build or not?
@@ -15,6 +18,13 @@ RUN_CLANG_STATIC_ANALYZER ?= NO
 SWIFT_TREAT_WARNINGS_AS_ERRORS ?= NO
 GCC_TREAT_WARNINGS_AS_ERRORS ?= NO
 CLANG_TREAT_WARNINGS_AS_ERRORS ?= NO
+
+# Demo 使用独立构建目录，避免与越狱版或模拟器产物混用。
+DEMO_CONFIGURATION ?= $(if $(filter-out 0,$(DEBUG)),Debug,Release)
+DEMO_DERIVED_DATA_PATH ?= $(CURDIR)/build/demo-ipa
+DEMO_OUTPUT_DIR     ?= $(CURDIR)/packages
+DEMO_JOBS           ?= 2
+DEMO_APP_DIR        = $(DEMO_DERIVED_DATA_PATH)/Build/Products/$(DEMO_CONFIGURATION)-iphoneos/Sileo Demo.app
 
 TARGET_CODESIGN = $(shell which ldid)
 
@@ -179,6 +189,50 @@ DPKG_TYPE ?= zstd
 else
 DPKG_TYPE ?= xz
 endif
+
+.PHONY: demo demo-ipa
+demo: demo-ipa
+
+# Demo 不依赖 giveMeRoot、ldid 或 dpkg；签名由使用 IPA 的工具完成。
+demo-ipa: SHELL := /bin/bash
+demo-ipa:
+	@echo "构建未签名 Sileo Demo（$(DEMO_CONFIGURATION)）"
+	@set -o pipefail; \
+		env -u PRODUCT_BUNDLE_IDENTIFIER -u DISPLAY_NAME \
+		xcodebuild -jobs "$(DEMO_JOBS)" -project Sileo.xcodeproj -scheme "Sileo Demo" \
+		-configuration "$(DEMO_CONFIGURATION)" -sdk iphoneos -destination 'generic/platform=iOS' \
+		-derivedDataPath "$(DEMO_DERIVED_DATA_PATH)" ARCHS=arm64 ONLY_ACTIVE_ARCH=NO \
+		CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY= DEVELOPMENT_TEAM= \
+		PROVISIONING_PROFILE= PROVISIONING_PROFILE_SPECIFIER= \
+		IPHONEOS_DEPLOYMENT_TARGET="$(IOS_DEPLOYMENT_TARGET)" \
+		RUN_CLANG_STATIC_ANALYZER="$(RUN_CLANG_STATIC_ANALYZER)" \
+		SWIFT_TREAT_WARNINGS_AS_ERRORS="$(SWIFT_TREAT_WARNINGS_AS_ERRORS)" \
+		GCC_TREAT_WARNINGS_AS_ERRORS="$(GCC_TREAT_WARNINGS_AS_ERRORS)" \
+		CLANG_TREAT_WARNINGS_AS_ERRORS="$(CLANG_TREAT_WARNINGS_AS_ERRORS)" \
+		build $(XCPRETTY)
+	@set -euo pipefail; \
+		test -f "$(DEMO_APP_DIR)/Info.plist"; \
+		mkdir -p "$(DEMO_OUTPUT_DIR)"; \
+		output_dir=$$(cd "$(DEMO_OUTPUT_DIR)" && pwd); \
+		stage_dir=$$(mktemp -d "$$output_dir/.sileo-demo.XXXXXX"); \
+		trap 'rm -rf "$$stage_dir"' EXIT; \
+		app_dir="$$stage_dir/Payload/Sileo Demo.app"; \
+		mkdir -p "$$stage_dir/Payload"; \
+		ditto "$(DEMO_APP_DIR)" "$$app_dir"; \
+		find "$$app_dir" -type d -name _CodeSignature -prune -exec rm -rf {} +; \
+		find "$$app_dir" -type f -name embedded.mobileprovision -delete; \
+		while IFS= read -r -d '' binary; do \
+			if file -b "$$binary" | grep -q 'Mach-O'; then \
+				if codesign -d "$$binary" >/dev/null 2>&1; then \
+					codesign --remove-signature "$$binary"; \
+				fi; \
+			fi; \
+		done < <(find "$$app_dir" -type f -print0); \
+		version=$$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$$app_dir/Info.plist"); \
+		ipa_name="Sileo-Demo_$$version-unsigned.ipa"; \
+		(cd "$$stage_dir" && COPYFILE_DISABLE=1 /usr/bin/zip -qry "$$ipa_name" Payload); \
+		mv -f "$$stage_dir/$$ipa_name" "$$output_dir/$$ipa_name"; \
+		echo "已生成未签名 IPA：$$output_dir/$$ipa_name"
 
 giveMeRoot/bin/giveMeRoot: giveMeRoot/giveMeRoot.c
 	$(MAKE) -C giveMeRoot \

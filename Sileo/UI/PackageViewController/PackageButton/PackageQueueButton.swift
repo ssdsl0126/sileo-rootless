@@ -289,10 +289,10 @@ class PackageQueueButton: PackageButton {
     
     private func addRepo(_ url: URL) {
         if let tabBarController = self.window?.rootViewController as? UITabBarController,
-            let sourcesNavNV = (tabBarController.viewControllers?[2] as? SileoNavigationController) ??
-                (tabBarController.viewControllers?[2] as? UISplitViewController)?.viewControllers[0] as? SileoNavigationController,
-            let targetVC = tabBarController.viewControllers?[2] {
-              tabBarController.selectedViewController = targetVC
+            let sourcesNavNV = (tabBarController.sileoViewControllers?[2] as? SileoNavigationController) ??
+                (tabBarController.sileoViewControllers?[2] as? UISplitViewController)?.viewControllers[0] as? SileoNavigationController,
+            let targetVC = tabBarController.sileoViewControllers?[2] {
+              tabBarController.sileoSelectedViewController = targetVC
               if let sourcesVC = sourcesNavNV.viewControllers[0] as? SourcesViewController {
                 sourcesVC.presentAddSourceEntryField(url: url)
               }

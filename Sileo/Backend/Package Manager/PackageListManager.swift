@@ -77,8 +77,8 @@ final class PackageListManager {
                 if UserDefaults.standard.bool(forKey: "AutoRefreshSources", fallback: true) {
                     // Start a background repo refresh here instead because it doesn't like it in the Source View Controller
                     if let tabBarController = UIApplication.shared.windows.first?.rootViewController as? UITabBarController,
-                       let sourcesNavNV = (tabBarController.viewControllers?[2] as? SileoNavigationController) ??
-                           (tabBarController.viewControllers?[2] as? UISplitViewController)?.viewControllers[0] as? SileoNavigationController,
+                       let sourcesNavNV = (tabBarController.sileoViewControllers?[2] as? SileoNavigationController) ??
+                           (tabBarController.sileoViewControllers?[2] as? UISplitViewController)?.viewControllers[0] as? SileoNavigationController,
                        let sourcesVC = sourcesNavNV.viewControllers[0] as? SourcesViewController {
                         sourcesVC.refreshSources(forceUpdate: false, forceReload: false, isBackground: true, useRefreshControl: false, useErrorScreen: false, completion: nil)
                     }
