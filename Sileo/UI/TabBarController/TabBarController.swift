@@ -844,12 +844,34 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         presentPopupController()
     }
 
+    private func queueSheetPresenter() -> UIViewController? {
+        // 设置及其插件详情位于独立的模态导航栈，队列必须从最上层页面展示。
+        var presenter: UIViewController = self
+        while let presentedController = presenter.presentedViewController {
+            guard presentedController !== downloadsController else {
+                return nil
+            }
+            presenter = presentedController
+        }
+
+        guard presenter.viewIfLoaded?.window != nil,
+              !presenter.isBeingPresented,
+              !presenter.isBeingDismissed,
+              presenter.transitionCoordinator == nil,
+              !(presenter is UIAlertController) else {
+            return nil
+        }
+        return presenter
+    }
+
     private func presentSystemQueueSheet(completion: (() -> Void)?) {
         guard usesSystemQueueSheetPresentation,
               popupIsPresented,
               !isPresentingQueueSheet,
               !isQueueSheetVisible,
-              downloadsController != nil
+              downloadsController != nil,
+              queueSheetPresenter() != nil,
+              viewIfLoaded?.window != nil
         else {
             completion?()
             return
@@ -869,8 +891,12 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     }
 
     private func presentQueueSheet(completion: (() -> Void)?) {
-        guard let downloadsController = downloadsController else {
+        // 移除旧队列条后重新确认展示层级；失败时恢复底部条，不能留下“正在展示”。
+        guard let downloadsController = downloadsController,
+              let presenter = queueSheetPresenter() else {
             isPresentingQueueSheet = false
+            updatePopup()
+            completion?()
             return
         }
 
@@ -888,11 +914,28 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
             }
         }
 
-        present(downloadsController, animated: true) {
-            downloadsController.presentationController?.delegate = self
-            self.isQueueSheetVisible = true
+        downloadsController.presentationController?.delegate = self
+        var didFinishPresentation = false
+        func finishPresentation() {
+            guard !didFinishPresentation else { return }
+            didFinishPresentation = true
+            self.isQueueSheetVisible = downloadsController.presentingViewController != nil
             self.isPresentingQueueSheet = false
+            if !self.isQueueSheetVisible {
+                self.updatePopup()
+            }
             completion?()
+        }
+
+        presenter.present(downloadsController, animated: true) {
+            downloadsController.presentationController?.delegate = self
+            finishPresentation()
+        }
+        // UIKit 拒绝展示时不会执行完成回调，下一轮主队列检查是否建立了展示关系。
+        DispatchQueue.main.async {
+            if downloadsController.presentingViewController == nil && !downloadsController.isBeingPresented {
+                finishPresentation()
+            }
         }
     }
 

@@ -34,6 +34,16 @@ class PaymentProfileViewController: BaseSettingsViewController, UICollectionView
         self.provider = provider
         super.init(style: UITableView.Style.grouped)
     }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        // 从插件详情或队列返回时重新配置单元格，避免沿用离开前的状态角标。
+        packageCollectionView?.reloadData()
+    }
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -49,6 +59,15 @@ class PaymentProfileViewController: BaseSettingsViewController, UICollectionView
         
         let nib: UINib = UINib(nibName: "PackageCollectionViewCell", bundle: nil)
         packageCollectionView?.register(nib, forCellWithReuseIdentifier: "PackageListViewCellIdentifier")
+
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(refreshPackageStates),
+                                               name: PackageListManager.stateChange,
+                                               object: nil)
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(refreshPackageStates),
+                                               name: PackageListManager.installChange,
+                                               object: nil)
         
         provider?.fetchInfo(fromCache: true) { error, info in
             DispatchQueue.main.async {
@@ -80,6 +99,15 @@ class PaymentProfileViewController: BaseSettingsViewController, UICollectionView
                 strong.profileHeaderView?.userInfo = userInfo
                 strong.packageCollectionView?.reloadData()
                 strong.tableView.reloadData()
+            }
+        }
+    }
+
+    @objc private func refreshPackageStates() {
+        Thread.mainBlock { [weak self] in
+            // 侧滑取消等操作不离开此页，也需要立即刷新可见软件包的状态。
+            self?.packageCollectionView?.visibleCells.forEach {
+                ($0 as? PackageCollectionViewCell)?.refreshState()
             }
         }
     }
@@ -224,7 +252,7 @@ extension PaymentProfileViewController { // Collection View Data Source
 
 extension PaymentProfileViewController { // Collection View Delegate
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
-        let cell: PackageCollectionViewCell? = self.collectionView(collectionView, cellForItemAt: indexPath) as? PackageCollectionViewCell
+        let cell = collectionView.cellForItem(at: indexPath) as? PackageCollectionViewCell
         cell?.backgroundColor = UIColor.lightGray.withAlphaComponent(0.5)
         collectionView.deselectItem(at: indexPath, animated: true)
         
