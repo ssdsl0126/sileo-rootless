@@ -32,4 +32,20 @@ final class DPKGParserTests: XCTestCase {
         XCTAssert(case3Maintainer.name == "Amy While" && case3Maintainer.email == nil, "Failed to parse \(case3), got: \(dump(case3Maintainer))")
     }
 
+    func testPackageIndexFormatValidatorRejectsHTMLFallback() {
+        let html = Data("<!DOCTYPE html><html></html>".utf8)
+        for fileExtension in ["zst", "xz", "lzma", "bz2", "gz", ""] {
+            XCTAssertFalse(PackageIndexFormatValidator.matches(html, fileExtension: fileExtension))
+        }
+    }
+
+    func testPackageIndexFormatValidatorRecognizesSupportedFormats() {
+        XCTAssertTrue(PackageIndexFormatValidator.matches(Data([0x28, 0xB5, 0x2F, 0xFD]), fileExtension: "zst"))
+        XCTAssertTrue(PackageIndexFormatValidator.matches(Data([0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00]), fileExtension: "xz"))
+        XCTAssertTrue(PackageIndexFormatValidator.matches(Data([0x5D, 0x00, 0x00, 0x80, 0x00] + Array(repeating: 0xFF, count: 8)), fileExtension: "lzma"))
+        XCTAssertTrue(PackageIndexFormatValidator.matches(Data([0x42, 0x5A, 0x68]), fileExtension: "bz2"))
+        XCTAssertTrue(PackageIndexFormatValidator.matches(Data([0x1F, 0x8B]), fileExtension: "gz"))
+        XCTAssertTrue(PackageIndexFormatValidator.matches(Data("Package: test\nVersion: 1.0\n".utf8), fileExtension: ""))
+    }
+
 }

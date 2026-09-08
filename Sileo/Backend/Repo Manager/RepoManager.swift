@@ -9,6 +9,67 @@
 import UIKit
 import Evander
 
+enum PackageIndexFormatValidator {
+    private static let archiveSignatures: [String: [UInt8]] = [
+        "zst": [0x28, 0xB5, 0x2F, 0xFD],
+        "xz": [0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00],
+        "bz2": [0x42, 0x5A, 0x68],
+        "gz": [0x1F, 0x8B]
+    ]
+
+    static func matches(fileAt url: URL, fileExtension: String) -> Bool {
+        guard let file = try? FileHandle(forReadingFrom: url) else {
+            return false
+        }
+        defer {
+            file.closeFile()
+        }
+        return matches(file.readData(ofLength: 32), fileExtension: fileExtension)
+    }
+
+    static func matches(_ data: Data, fileExtension: String) -> Bool {
+        let bytes = [UInt8](data)
+        if looksLikeHTML(bytes) {
+            return false
+        }
+        if fileExtension.isEmpty {
+            return true
+        }
+        if fileExtension == "lzma" {
+            return looksLikeLZMAAlone(bytes)
+        }
+        guard let signature = archiveSignatures[fileExtension] else {
+            return true
+        }
+        return bytes.starts(with: signature)
+    }
+
+    private static func looksLikeHTML(_ bytes: [UInt8]) -> Bool {
+        let prefix = String(decoding: bytes, as: UTF8.self)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        return prefix.hasPrefix("<!doctype html") || prefix.hasPrefix("<html")
+    }
+
+    private static func looksLikeLZMAAlone(_ bytes: [UInt8]) -> Bool {
+        guard bytes.count >= 13, bytes[0] < 9 * 5 * 5 else {
+            return false
+        }
+
+        let dictionarySize = UInt32(bytes[1])
+            | (UInt32(bytes[2]) << 8)
+            | (UInt32(bytes[3]) << 16)
+            | (UInt32(bytes[4]) << 24)
+        if dictionarySize == UInt32.max {
+            return true
+        }
+        return (12...30).contains { exponent in
+            let powerOfTwo = UInt32(1) << UInt32(exponent)
+            return dictionarySize == powerOfTwo || dictionarySize == powerOfTwo + powerOfTwo / 2
+        }
+    }
+}
+
 // swiftlint:disable:next type_body_length
 final class RepoManager {
 
@@ -522,8 +583,17 @@ final class RepoManager {
         queue(
             from: fullURL,
             progress: progress,
-            success: {
-                success(fullURL, $0)
+            success: { fileURL in
+                guard PackageIndexFormatValidator.matches(fileAt: fileURL, fileExtension: extensions[0]) else {
+                    try? FileManager.default.removeItem(at: fileURL)
+                    let newExtensions = Array(extensions.dropFirst())
+                    guard !newExtensions.isEmpty else {
+                        return failure(415, URLError(.cannotDecodeContentData))
+                    }
+                    self.fetch(from: url, withExtensionsUntilSuccess: newExtensions, progress: progress, success: success, failure: failure)
+                    return
+                }
+                success(fullURL, fileURL)
             },
             failure: { status, error in
                 let newExtensions = Array(extensions.dropFirst())
