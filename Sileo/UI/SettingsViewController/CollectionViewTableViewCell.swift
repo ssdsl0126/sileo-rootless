@@ -21,6 +21,13 @@ class CollectionViewTableViewCell: UITableViewCell {
         
         self.selectionStyle = UITableViewCell.SelectionStyle.none
         self.clipsToBounds = true
+
+        if #available(iOS 26.0, *) {
+            // 内嵌列表透明时，容器也要透出设置页的弹窗底色。
+            self.backgroundColor = .clear
+            self.contentView.backgroundColor = .clear
+            self.isOpaque = false
+        }
         
         self.collectionView.isScrollEnabled = false
         self.addSubview(self.collectionView)

@@ -135,7 +135,8 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
         self.navigationItem.largeTitleDisplayMode = .never
         scrollView.delegate = self
         if #available(iOS 26.0, *) {
-            setContentScrollView(scrollView, for: .bottom)
+            // 明确让顶部和底部容器跟踪详情页主滚动视图，避免系统版本间的启发式差异。
+            setContentScrollView(scrollView, for: [.top, .bottom])
         }
         
         NotificationCenter.default.addObserver(self,

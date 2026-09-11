@@ -9,7 +9,6 @@
 import UIKit
 
 class SourcesSplitViewController: UISplitViewController, UISplitViewControllerDelegate, UINavigationControllerDelegate {
-    private let minimumVisiblePackageDetailWidth: CGFloat = 760
     private var displayModeBeforePackageDetail: UISplitViewController.DisplayMode?
     private var automaticallyHidPrimaryForPackageDetail = false
 
@@ -60,7 +59,7 @@ class SourcesSplitViewController: UISplitViewController, UISplitViewControllerDe
         }
 
         coordinator.animate(alongsideTransition: { [weak self] _ in
-            self?.updatePrimaryVisibilityForCurrentDetail(availableWidth: size.width, animated: true)
+            self?.updatePrimaryVisibilityForCurrentDetail(animated: true)
         })
     }
 
@@ -118,8 +117,7 @@ class SourcesSplitViewController: UISplitViewController, UISplitViewControllerDe
     }
 
     @available(iOS 26.0, *)
-    private func updatePrimaryVisibilityForCurrentDetail(availableWidth: CGFloat? = nil,
-                                                         animated: Bool) {
+    private func updatePrimaryVisibilityForCurrentDetail(animated: Bool) {
         guard UIDevice.current.userInterfaceIdiom == .pad,
               !isCollapsed,
               let detailNavigationController,
@@ -134,24 +132,15 @@ class SourcesSplitViewController: UISplitViewController, UISplitViewControllerDe
             return
         }
 
-        let splitWidth = availableWidth ?? view.bounds.width
-        let estimatedPrimaryWidth = max(primaryColumnWidth,
-                                        min(maximumPrimaryColumnWidth,
-                                            splitWidth * preferredPrimaryColumnWidthFraction))
-        let shouldHidePrimary = splitWidth - estimatedPrimaryWidth < minimumVisiblePackageDetailWidth
-
-        if shouldHidePrimary {
-            // 用户已经手动收起侧栏时，不把它记作自动收起；离开详情后应保持现状。
-            guard displayMode != .secondaryOnly,
-                  !automaticallyHidPrimaryForPackageDetail else {
-                return
-            }
-            displayModeBeforePackageDetail = displayMode
-            automaticallyHidPrimaryForPackageDetail = true
-            setPreferredDisplayMode(.secondaryOnly, animated: animated)
-        } else {
-            restorePrimaryAfterPackageDetailIfNeeded(animated: animated)
+        // 插件详情需要完整宽度；无论 iPad 尺寸如何都收起软件源主栏。
+        // 用户已经手动收起时不记录为自动收起，返回列表后继续保持其选择。
+        guard displayMode != .secondaryOnly,
+              !automaticallyHidPrimaryForPackageDetail else {
+            return
         }
+        displayModeBeforePackageDetail = displayMode
+        automaticallyHidPrimaryForPackageDetail = true
+        setPreferredDisplayMode(.secondaryOnly, animated: animated)
     }
 
     @available(iOS 26.0, *)

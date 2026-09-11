@@ -11,10 +11,32 @@ import LNPopupController
 import ObjectiveC
 
 class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdaptivePresentationControllerDelegate {
+    private enum LegacyPopupBarState {
+        case hidden
+        case presenting
+        case presented
+        case dismissing
+    }
+
+    private enum LegacyPopupContentState {
+        case closed
+        case opening
+        case open
+        case closing
+    }
+
     static var singleton: TabBarController?
     private var downloadsController: UINavigationController?
     private(set) public var popupIsPresented = false
-    private var popupLock = DispatchSemaphore(value: 1)
+    private var legacyPopupBarState = LegacyPopupBarState.hidden
+    private var legacyPopupContentState = LegacyPopupContentState.closed
+    private var shouldPresentLegacyPopupBar = false
+    private var shouldOpenLegacyPopupContent: Bool?
+    private var legacyPopupPresentationCompletions = [() -> Void]()
+    private var legacyPopupDismissalCompletions = [() -> Void]()
+    private var legacyPopupOpenCompletions = [() -> Void]()
+    private var legacyPopupCloseCompletions = [() -> Void]()
+    private var legacyQueueSeparatorExtension: UIView?
     private var shouldSelectIndex = -1
     private var fuckedUpSources = false
     private var popupTapGesture: UITapGestureRecognizer?
@@ -74,6 +96,11 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         downloadsController?.view.isOpaque = true
         downloadsController?.popupItem.title = ""
         downloadsController?.popupItem.subtitle = ""
+        if UIDevice.current.userInterfaceIdiom == .pad,
+           #unavailable(iOS 26.0) {
+            // 仅旧版 iPadOS 使用 LNPopup 回调；新系统队列和 iPhone 不启用。
+            popupPresentationDelegate = self
+        }
         
         NotificationCenter.default.addObserver(self,
                                                selector: #selector(updateSileoColors),
@@ -243,48 +270,103 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     }
     
     func presentPopup(completion: (() -> Void)?) {
+        presentPopup(animated: true, completion: completion)
+    }
+
+    private func presentPopup(animated: Bool, completion: (() -> Void)?) {
+        if !Thread.isMainThread {
+            DispatchQueue.main.async {
+                self.presentPopup(animated: animated, completion: completion)
+            }
+            return
+        }
+
         if usesSystemQueueSheetPresentation, (isQueueSheetVisible || isPresentingQueueSheet) {
             completion?()
             return
         }
 
-        guard let downloadsController = downloadsController,
-              !popupIsPresented
-        else {
-            if #available(iOS 26.0, *), usesLiquidGlassQueueAccessory, popupIsPresented {
-                // 队列已经存在时，新增或移除软件包不会再次创建 accessory，直接刷新两行文案。
-                updateLiquidGlassQueueBar()
-            }
-            if let completion = completion {
-                completion()
-            }
-            return
-        }
-        
-        popupLock.wait()
-        defer {
-            popupLock.signal()
-        }
-        
-        popupIsPresented = true
-        updateLiquidGlassTabBarMinimizeBehavior()
-        if let queueVC = downloadsController.viewControllers.first as? DownloadsTableViewController {
-            queueVC.usesSystemQueueSheetPresentation = false
-        }
-
         if #available(iOS 26.0, *), usesLiquidGlassQueueAccessory {
+            guard let downloadsController,
+                  !popupIsPresented else {
+                if popupIsPresented {
+                    updateLiquidGlassQueueBar()
+                }
+                completion?()
+                return
+            }
+
+            popupIsPresented = true
+            updateLiquidGlassTabBarMinimizeBehavior()
+            if let queueVC = downloadsController.viewControllers.first as? DownloadsTableViewController {
+                queueVC.usesSystemQueueSheetPresentation = false
+            }
             presentLiquidGlassQueueBar()
             updateSileoColors()
             completion?()
             return
         }
 
+        presentLegacyPopup(animated: animated, completion: completion)
+    }
+
+    private func presentLegacyPopup(animated: Bool, completion: (() -> Void)?) {
+        if let completion {
+            legacyPopupPresentationCompletions.append(completion)
+        }
+        shouldPresentLegacyPopupBar = true
+
+        switch legacyPopupBarState {
+        case .hidden:
+            beginLegacyPopupPresentation(animated: animated)
+        case .presenting, .dismissing:
+            break
+        case .presented:
+            finishLegacyPopupPresentationRequests()
+        }
+    }
+
+    private func beginLegacyPopupPresentation(animated: Bool = true) {
+        guard case .hidden = legacyPopupBarState,
+              let downloadsController else {
+            return
+        }
+
+        // UIKit 的布局回调可能同步重入 updatePopup；先进入 presenting，禁止重复展示。
+        legacyPopupBarState = .presenting
+        popupIsPresented = true
+        updateLiquidGlassTabBarMinimizeBehavior()
+        if let queueVC = downloadsController.viewControllers.first as? DownloadsTableViewController {
+            queueVC.usesSystemQueueSheetPresentation = false
+        }
+
+        self.popupBar.tabBarHeight = self.tabBar.frame.height
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            self.popupBar.isInlineWithTabBar = true
+            self.popupBar.tabBarHeight = legacyInlineQueueHeight
+        }
         self.popupBar.progressViewStyle = .bottom
         self.popupInteractionStyle = queueCollapsedInteractionStyle
-        self.presentPopupBar(withContentViewController: downloadsController, animated: true, completion: completion)
+        self.presentPopupBar(withContentViewController: downloadsController, animated: animated) { [weak self] in
+            self?.completeLegacyPopupPresentation()
+        }
         self.configurePopupTapIfNeeded()
-        
         self.updateSileoColors()
+    }
+
+    private func completeLegacyPopupPresentation() {
+        guard case .presenting = legacyPopupBarState else {
+            return
+        }
+
+        legacyPopupBarState = .presented
+        legacyPopupContentState = .closed
+        updateLegacyQueueBarLayout()
+        if !shouldPresentLegacyPopupBar {
+            beginLegacyPopupDismissal()
+        }
+        finishLegacyPopupPresentationRequests()
+        processLegacyPopupContentRequest()
     }
     
     func dismissPopup() {
@@ -292,29 +374,80 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     }
     
     func dismissPopup(completion: (() -> Void)?) {
-        guard popupIsPresented else {
-            if let completion = completion {
-                completion()
+        dismissPopup(animated: true, completion: completion)
+    }
+
+    private func dismissPopup(animated: Bool, completion: (() -> Void)?) {
+        if !Thread.isMainThread {
+            DispatchQueue.main.async {
+                self.dismissPopup(animated: animated, completion: completion)
             }
             return
         }
-        
-        popupLock.wait()
-        defer {
-            popupLock.signal()
-        }
-        
-        popupIsPresented = false
-        updateLiquidGlassTabBarMinimizeBehavior()
+
         if #available(iOS 26.0, *), usesLiquidGlassQueueAccessory {
+            guard popupIsPresented else {
+                completion?()
+                return
+            }
+
+            popupIsPresented = false
+            updateLiquidGlassTabBarMinimizeBehavior()
             removeLiquidGlassQueueBar()
             completion?()
             return
         }
+
+        dismissLegacyPopup(animated: animated, completion: completion)
+    }
+
+    private func dismissLegacyPopup(animated: Bool, completion: (() -> Void)?) {
+        if let completion {
+            legacyPopupDismissalCompletions.append(completion)
+        }
+        shouldPresentLegacyPopupBar = false
+
+        switch legacyPopupBarState {
+        case .presented:
+            beginLegacyPopupDismissal(animated: animated)
+        case .presenting, .dismissing:
+            break
+        case .hidden:
+            popupIsPresented = false
+            finishLegacyPopupDismissalRequests()
+        }
+    }
+
+    private func beginLegacyPopupDismissal(animated: Bool = true) {
+        guard case .presented = legacyPopupBarState else {
+            return
+        }
+
+        legacyPopupBarState = .dismissing
+        popupIsPresented = false
+        updateLiquidGlassTabBarMinimizeBehavior()
         if #available(iOS 26.0, *) {
             removePopupTapCatcher()
         }
-        self.dismissPopupBar(animated: true, completion: completion)
+        self.dismissPopupBar(animated: animated) { [weak self] in
+            self?.completeLegacyPopupDismissal()
+        }
+    }
+
+    private func completeLegacyPopupDismissal() {
+        guard case .dismissing = legacyPopupBarState else {
+            return
+        }
+
+        legacyPopupBarState = .hidden
+        legacyPopupContentState = .closed
+        shouldOpenLegacyPopupContent = nil
+        finishLegacyPopupOpenRequests()
+        finishLegacyPopupCloseRequests()
+        if shouldPresentLegacyPopupBar {
+            beginLegacyPopupPresentation()
+        }
+        finishLegacyPopupDismissalRequests()
     }
     
     func presentPopupController() {
@@ -322,25 +455,33 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     }
     
     func presentPopupController(completion: (() -> Void)?) {
+        if !Thread.isMainThread {
+            DispatchQueue.main.async {
+                self.presentPopupController(completion: completion)
+            }
+            return
+        }
+
         if usesSystemQueueSheetPresentation {
             presentSystemQueueSheet(completion: completion)
             return
         }
 
-        guard popupIsPresented else {
-            if let completion = completion {
-                completion()
-            }
+        switch legacyPopupBarState {
+        case .presenting, .presented:
+            break
+        case .dismissing where shouldPresentLegacyPopupBar:
+            break
+        case .hidden, .dismissing:
+            completion?()
             return
         }
-        
-        popupLock.wait()
-        defer {
-            popupLock.signal()
+
+        if let completion {
+            legacyPopupOpenCompletions.append(completion)
         }
-        
-        self.popupInteractionStyle = preferredPopupInteractionStyle
-        self.openPopup(animated: true, completion: completion)
+        shouldOpenLegacyPopupContent = true
+        processLegacyPopupContentRequest()
     }
     
     func dismissPopupController() {
@@ -348,6 +489,13 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     }
     
     func dismissPopupController(completion: (() -> Void)?) {
+        if !Thread.isMainThread {
+            DispatchQueue.main.async {
+                self.dismissPopupController(completion: completion)
+            }
+            return
+        }
+
         if usesSystemQueueSheetPresentation,
            isQueueSheetVisible,
            let downloadsController = downloadsController,
@@ -370,13 +518,81 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
             completion?()
             return
         }
-        
-        popupLock.wait()
-        defer {
-            popupLock.signal()
+
+        if let completion {
+            legacyPopupCloseCompletions.append(completion)
         }
-        
-        self.closePopup(animated: true, completion: completion)
+        shouldOpenLegacyPopupContent = false
+        processLegacyPopupContentRequest()
+    }
+
+    private func processLegacyPopupContentRequest() {
+        guard case .presented = legacyPopupBarState,
+              let shouldOpenLegacyPopupContent else {
+            return
+        }
+
+        switch (shouldOpenLegacyPopupContent, legacyPopupContentState) {
+        case (true, .closed):
+            legacyPopupContentState = .opening
+            popupInteractionStyle = preferredPopupInteractionStyle
+            openPopup(animated: true) { [weak self] in
+                self?.legacyPopupContentTransitionCompleted(isOpen: true)
+            }
+        case (false, .open):
+            legacyPopupContentState = .closing
+            closePopup(animated: true) { [weak self] in
+                self?.legacyPopupContentTransitionCompleted(isOpen: false)
+            }
+        case (true, .open):
+            self.shouldOpenLegacyPopupContent = nil
+            finishLegacyPopupOpenRequests()
+        case (false, .closed):
+            self.shouldOpenLegacyPopupContent = nil
+            finishLegacyPopupCloseRequests()
+        case (true, .opening), (true, .closing), (false, .opening), (false, .closing):
+            break
+        }
+    }
+
+    private func legacyPopupContentTransitionCompleted(isOpen: Bool) {
+        legacyPopupContentState = isOpen ? .open : .closed
+        if isOpen {
+            finishLegacyPopupOpenRequests()
+            downloadsController?.view.setNeedsLayout()
+            downloadsController?.view.layoutIfNeeded()
+        } else {
+            updateLegacyQueueBarLayout()
+            finishLegacyPopupCloseRequests()
+        }
+        if shouldOpenLegacyPopupContent == isOpen {
+            shouldOpenLegacyPopupContent = nil
+        }
+        processLegacyPopupContentRequest()
+    }
+
+    private func finishLegacyPopupPresentationRequests() {
+        let completions = legacyPopupPresentationCompletions
+        legacyPopupPresentationCompletions.removeAll()
+        completions.forEach { $0() }
+    }
+
+    private func finishLegacyPopupDismissalRequests() {
+        let completions = legacyPopupDismissalCompletions
+        legacyPopupDismissalCompletions.removeAll()
+        completions.forEach { $0() }
+    }
+
+    private func finishLegacyPopupOpenRequests() {
+        let completions = legacyPopupOpenCompletions
+        legacyPopupOpenCompletions.removeAll()
+        completions.forEach { $0() }
+    }
+
+    private func finishLegacyPopupCloseRequests() {
+        let completions = legacyPopupCloseCompletions
+        legacyPopupCloseCompletions.removeAll()
+        completions.forEach { $0() }
     }
     
     func updatePopup() {
@@ -384,6 +600,13 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     }
     
     func updatePopup(completion: (() -> Void)? = nil, bypass: Bool = false) {
+        if !Thread.isMainThread {
+            DispatchQueue.main.async {
+                self.updatePopup(completion: completion, bypass: bypass)
+            }
+            return
+        }
+
         if isQueueSheetVisible || isPresentingQueueSheet {
             completion?()
             return
@@ -398,6 +621,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
             if UIDevice.current.userInterfaceIdiom == .pad && self.view.frame.width >= 768 {
                 downloadsController?.popupItem.title = String(localizationKey: "Queued_Package_Status")
                 downloadsController?.popupItem.subtitle = String(format: String(localizationKey: "Package_Queue_Count"), 0)
+                // 旧系统沿用 LNPopup 的完整过渡；状态机负责合并布局期间的重复请求。
                 self.presentPopup(completion: completion)
             } else {
                 self.dismissPopup(completion: completion)
@@ -882,9 +1106,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
             // 保留 bottomAccessory，让系统在 sheet 关闭后恢复原来的展开/紧凑位置。
             presentQueueSheet(completion: completion)
         } else {
-            popupIsPresented = false
-            updateLiquidGlassTabBarMinimizeBehavior()
-            dismissPopupBar(animated: false) { [weak self] in
+            dismissPopup(animated: false) { [weak self] in
                 self?.presentQueueSheet(completion: completion)
             }
         }
@@ -1015,6 +1237,62 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
             sourcesQueueIsMinimized = false
         }
     }
+
+    private var legacyInlineQueueHeight: CGFloat {
+        let displayScale = max(view.window?.screen.scale ?? traitCollection.displayScale, 1)
+        // 系统标签栏的顶线位于 bounds 上方一像素，旧库的顶线则位于内部 y = 0.5pt。
+        // 两段偏移都要补偿，才能让静态顶线对齐，而非依赖鼠标悬停时的放大效果。
+        let popupShadowOffset: CGFloat = 0.5
+        return tabBar.bounds.height + popupShadowOffset + 1 / displayScale
+    }
+
+    private func updateLegacyQueueBarLayout() {
+        guard #unavailable(iOS 26.0),
+              UIDevice.current.userInterfaceIdiom == .pad,
+              case .presented = legacyPopupBarState,
+              case .closed = legacyPopupContentState,
+              popupBar.isInlineWithTabBar,
+              tabBar.bounds.height > 0,
+              let popupSuperview = popupBar.superview else { return }
+
+        let panState = popupContentView.popupInteractionGestureRecognizer.state
+        guard panState != .began, panState != .changed else { return }
+
+        let height = legacyInlineQueueHeight
+        popupBar.tabBarHeight = height
+        let tabBarFrame = tabBar.convert(tabBar.bounds, to: popupSuperview)
+        // 宽窗口与菜单并排，窄窗口沿用旧库的上方停靠；每次都按实际标签栏位置重新对齐。
+        let bottom = insetsForBottomDockingView.left > 0 ? tabBarFrame.maxY : tabBarFrame.minY
+        let centerY = bottom - height / 2
+        if abs(height - popupBar.bounds.height) > 0.001 || abs(centerY - popupBar.center.y) > 0.001 {
+            // 使用 bounds 和 center，避免鼠标悬停缩放影响 frame；保留库内文字排版。
+            popupBar.bounds.size.height = height
+            popupBar.center.y = centerY
+            popupBar.setNeedsLayout()
+        }
+        popupBar.layoutIfNeeded()
+
+        guard let contentView = popupBar.toolbar.superview else { return }
+        let separator: UIView
+        if let existingSeparator = legacyQueueSeparatorExtension {
+            separator = existingSeparator
+        } else {
+            separator = UIView()
+            separator.isUserInteractionEnabled = false
+            separator.backgroundColor = UIColor(white: 169 / 255, alpha: 1)
+            legacyQueueSeparatorExtension = separator
+        }
+        if separator.superview !== contentView {
+            contentView.addSubview(separator)
+        }
+        // 旧库的分隔线只画到内部 toolbar 底部，补齐剩余高度，沿用原线的颜色和横坐标。
+        let screen = popupBar.window?.screen
+        let displayScale = max(screen?.nativeScale ?? traitCollection.displayScale, 1)
+        let separatorTop = min(popupBar.toolbar.bounds.height, contentView.bounds.height)
+        separator.frame = CGRect(x: 0.5, y: separatorTop, width: 1 / displayScale,
+                                 height: max(0, contentView.bounds.height - separatorTop))
+        separator.isHidden = insetsForBottomDockingView.left == 0
+    }
     
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
@@ -1032,6 +1310,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         }
         if UIDevice.current.userInterfaceIdiom == .pad {
             self.updatePopup()
+            updateLegacyQueueBarLayout()
         }
     }
 
@@ -1145,6 +1424,24 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         let alertController = UIAlertController(title: String(localizationKey: "Unknown", type: .error), message: string, preferredStyle: .alert)
         alertController.addAction(UIAlertAction(title: String(localizationKey: "OK"), style: .default))
         self.presentSileoAlert(alertController)
+    }
+}
+
+extension TabBarController: LNPopupPresentationDelegate {
+    func popupPresentationControllerWillOpenPopup(_ popupPresentationController: UIViewController, animated: Bool) {
+        legacyPopupContentState = .opening
+    }
+
+    func popupPresentationControllerDidOpenPopup(_ popupPresentationController: UIViewController, animated: Bool) {
+        legacyPopupContentTransitionCompleted(isOpen: true)
+    }
+
+    func popupPresentationControllerWillClosePopup(_ popupPresentationController: UIViewController, animated: Bool) {
+        legacyPopupContentState = .closing
+    }
+
+    func popupPresentationControllerDidClosePopup(_ popupPresentationController: UIViewController, animated: Bool) {
+        legacyPopupContentTransitionCompleted(isOpen: false)
     }
 }
 

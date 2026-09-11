@@ -55,7 +55,7 @@ class PaymentProfileViewController: BaseSettingsViewController, UICollectionView
         packageCollectionView = UICollectionView(frame: CGRect.zero, collectionViewLayout: UICollectionViewFlowLayout())
         packageCollectionView?.delegate = self
         packageCollectionView?.dataSource = self
-        packageCollectionView?.backgroundColor = UIColor.sileoBackgroundColor
+        updatePackageCollectionBackground()
         
         let nib: UINib = UINib(nibName: "PackageCollectionViewCell", bundle: nil)
         packageCollectionView?.register(nib, forCellWithReuseIdentifier: "PackageListViewCellIdentifier")
@@ -112,8 +112,22 @@ class PaymentProfileViewController: BaseSettingsViewController, UICollectionView
         }
     }
     
+    override func updateSileoColors() {
+        super.updateSileoColors()
+        updatePackageCollectionBackground()
+    }
+
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
-        if #available(iOS 13, *) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        updatePackageCollectionBackground()
+    }
+
+    private func updatePackageCollectionBackground() {
+        if #available(iOS 26.0, *) {
+            // 与设置页共用弹窗底色，避免购买列表形成不透明的白色横块。
+            packageCollectionView?.backgroundColor = .clear
+            packageCollectionView?.isOpaque = false
+        } else {
             packageCollectionView?.backgroundColor = .sileoBackgroundColor
         }
     }
