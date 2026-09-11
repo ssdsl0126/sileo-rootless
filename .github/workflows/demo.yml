@@ -9,17 +9,17 @@ name: Build Sileo Demo
 jobs:
   build-demo:
     name: Build and Upload Sileo Demo
-    runs-on: macos-14
+    runs-on: xcode-27
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Select Xcode (15.4 pinned)
+      - name: Select Xcode 27 beta
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: '15.4'
+          xcode-version: '27-beta'
 
       - name: Show build environment
         run: |
