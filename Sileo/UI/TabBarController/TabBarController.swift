@@ -87,7 +87,9 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         
         delegate = self
         TabBarController.singleton = self
-        (tabBar as? TabBar)?.attachDecorations(to: view)
+        if #available(iOS 26.0, *), UIDevice.current.userInterfaceIdiom == .phone {
+            (tabBar as? TabBar)?.attachDecorations(to: view, packageController: sileoViewControllers?[safe: 3])
+        }
         prepareSileoTabSelection(sileoSelectedViewController)
 
         downloadsController = UINavigationController(rootViewController: DownloadManager.shared.viewController)
@@ -718,7 +720,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
             return
         }
 
-        (tabBar as? TabBar)?.trackSourceRefreshScrollTransition()
+        (tabBar as? TabBar)?.trackBadgeScrollTransition()
         restoreLiquidGlassMinimizeBehaviorIfNeeded()
 
         // 当前页面可能是导航栈里的详情页，把实际滚动视图直接交给顶部导航容器。
@@ -1296,7 +1298,9 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        (tabBar as? TabBar)?.attachDecorations(to: view)
+        if #available(iOS 26.0, *), UIDevice.current.userInterfaceIdiom == .phone {
+            (tabBar as? TabBar)?.attachDecorations(to: view, packageController: sileoViewControllers?[safe: 3])
+        }
         
         self.tabBar.itemPositioning = .centered
         if #available(iOS 26.0, *), usesFloatingQueueCardOnPhone {
@@ -1822,9 +1826,9 @@ private final class QueueFloatingCardController: UIViewController, UIGestureReco
 extension UITabBarController {
     fileprivate func prepareSileoTabSelection(_ controller: UIViewController?) {
         guard let index = sileoViewControllers?.firstIndex(where: { $0 === controller }) else { return }
-        (tabBar as? TabBar)?.prepareForTabSelection(index: index, item: controller?.tabBarItem,
+        (tabBar as? TabBar)?.prepareForTabSelection(index: index, controller: controller,
                                                   previousIndex: sileoSelectedIndex,
-                                                  previousItem: sileoSelectedViewController?.tabBarItem)
+                                                  previousController: sileoSelectedViewController)
     }
 
     var sileoViewControllers: [UIViewController]? {
@@ -1875,6 +1879,12 @@ extension UITabBarController {
 
 extension UIViewController {
     func setSileoTabBadgeValue(_ value: String?) {
+        // 导航栈重挂载时即使暂时没有父容器，软件包数量仍交给已登记的前景角标。
+        if #available(iOS 26.0, *), UIDevice.current.userInterfaceIdiom == .phone,
+           let tabBar = (tabBarController ?? TabBarController.singleton)?.tabBar as? TabBar,
+           tabBar.setPackageBadgeValue(value, for: self) {
+            return
+        }
         tabBarItem.badgeValue = value
         if #available(iOS 18.0, *) {
             tab?.badgeValue = value

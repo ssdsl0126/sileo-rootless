@@ -27,7 +27,7 @@ class TabBar: UITabBar {
         return view
     }()
     private let refreshBadge = TabRefreshBadgeView()
-    private let compactBadgeLabel: UILabel = {
+    private let packageBadgeLabel: UILabel = {
         let label = UILabel()
         label.font = .systemFont(ofSize: 13)
         label.textColor = .white
@@ -35,9 +35,11 @@ class TabBar: UITabBar {
         label.layer.cornerRadius = 10
         label.clipsToBounds = true
         label.isHidden = true
+        label.accessibilityIdentifier = "Sileo.PackageUpdatesBadge"
         return label
     }()
-    private weak var compactItem: UITabBarItem?
+    private weak var packageBadgeController: UIViewController?
+    private var packageBadgeValue: String?
     private var compactImage: UIImage?
     private var renderedCompactImage: UIImage?
     private var renderedCompactColor: UIColor?
@@ -47,6 +49,8 @@ class TabBar: UITabBar {
     private var sourceRefreshIsVisible = false
     private var lastCompactFrame: CGRect?
     private var lastCompactTime: CFTimeInterval = 0
+    private var lastPackageBadgeFrame: CGRect?
+    private var lastPackageBadgeTime: CFTimeInterval = 0
     private var lastSourceFrame: CGRect?
     private var lastSourceTime: CFTimeInterval = 0
     private var displayLink: CADisplayLink?
@@ -58,42 +62,89 @@ class TabBar: UITabBar {
         return false
     }
 
+    private var hasPackageBadge: Bool {
+        guard packageBadgeController != nil, let value = packageBadgeValue else { return false }
+        return !value.isEmpty
+    }
+
     deinit {
         displayLink?.invalidate()
         decorationView.removeFromSuperview()
     }
 
     // 装饰与 UITabBar 是控制器根视图中的独立分支，不参与玻璃内容的遮罩、着色和淡出。
-    func attachDecorations(to host: UIView) {
+    func attachDecorations(to host: UIView, packageController: UIViewController?) {
         guard supportsDecorations else { return }
+        if let packageController {
+            // 布局时会重复挂接装饰；同一控制器的数量不能被已经清空的系统角标覆盖。
+            if packageBadgeController !== packageController {
+                packageBadgeController = packageController
+                packageBadgeValue = packageController.tabBarItem.badgeValue
+            }
+            suppressNativePackageBadge(for: packageController)
+        }
         decorationHost = host
         if decorationView.superview !== host {
             decorationView.addSubview(compactImageView)
-            decorationView.addSubview(compactBadgeLabel)
+            decorationView.addSubview(packageBadgeLabel)
             decorationView.addSubview(refreshBadge)
             host.addSubview(decorationView)
         }
         updateDecorations()
     }
 
-    func prepareForTabSelection(index: Int, item: UITabBarItem?,
-                                previousIndex: Int, previousItem: UITabBarItem?) {
+    func prepareForTabSelection(index: Int, controller: UIViewController?,
+                                previousIndex: Int, previousController: UIViewController?) {
         guard supportsDecorations else { return }
         let isSearch = index == 4
         if !isSearch || !searchTabIsActive {
             compactItemIndex = isSearch ? previousIndex : index
-            let sourceItem = isSearch ? previousItem : item
-            compactItem = sourceItem
+            let sourceController = isSearch ? previousController : controller
+            let sourceItem = sourceController?.tabBarItem
             // 系统标签的 item.image 可能为空，切换前从当前按钮读取一次并保留。
             compactImage = sourceItem?.image ?? sourceItem?.selectedImage
                 ?? tabImage(in: self, title: tabTitle(at: compactItemIndex))?.image
             lastCompactFrame = nil
+            lastPackageBadgeFrame = nil
+            lastPackageBadgeTime = 0
             compactImageIsSettled = false
             compactImageView.isHidden = true
         }
+        // 标签切换只更新图标与位置，不再恢复系统角标，避免旧紧凑按钮保留数字快照。
         searchTabIsActive = isSearch
         updateDecorations()
         trackDecorationTransition()
+    }
+
+    func setPackageBadgeValue(_ value: String?, for controller: UIViewController) -> Bool {
+        guard supportsDecorations, packageBadgeController === controller else { return false }
+        // 软件包角标始终由同一前景层绘制，更新数量与原生 badgeValue 分开保存。
+        packageBadgeValue = value
+        if !hasPackageBadge {
+            packageBadgeLabel.isHidden = true
+            lastPackageBadgeFrame = nil
+            lastPackageBadgeTime = 0
+        }
+        suppressNativePackageBadge(for: controller)
+        updateDecorations()
+        trackDecorationTransition()
+        return true
+    }
+
+    private func suppressNativePackageBadge(for controller: UIViewController) {
+        UIView.performWithoutAnimation {
+            // 新旧标签 API 都不再生成数字角标，避免完整与紧凑容器之间复用旧副本。
+            if controller.tabBarItem.badgeValue != nil {
+                controller.tabBarItem.badgeValue = nil
+            }
+            if #available(iOS 18.0, *), let tab = controller.tab, tab.badgeValue != nil {
+                tab.badgeValue = nil
+            }
+            // 前景层不参与辅助功能遍历，系统标签仍保留可读的更新数量。
+            if controller.tabBarItem.accessibilityValue != packageBadgeValue {
+                controller.tabBarItem.accessibilityValue = packageBadgeValue
+            }
+        }
     }
 
     func setSourceRefreshIndicatorVisible(_ visible: Bool) {
@@ -108,8 +159,8 @@ class TabBar: UITabBar {
         trackDecorationTransition()
     }
 
-    func trackSourceRefreshScrollTransition() {
-        guard supportsDecorations, sourceRefreshIsVisible, !searchTabIsActive else { return }
+    func trackBadgeScrollTransition() {
+        guard supportsDecorations, sourceRefreshIsVisible || hasPackageBadge, !searchTabIsActive else { return }
         // 滚动驱动的合成动画不一定触发标签栏布局，不能依赖上一次布局留下的跟踪窗口。
         updateDecorations()
         trackDecorationTransition()
@@ -135,7 +186,7 @@ class TabBar: UITabBar {
 
     private func trackDecorationTransition() {
         guard supportsDecorations, window != nil,
-              searchTabIsActive || sourceRefreshIsVisible else { return }
+              searchTabIsActive || sourceRefreshIsVisible || hasPackageBadge else { return }
         // layoutSubviews 不会随合成动画逐帧调用；仅在布局或切换后的短时间内跟踪显示位置。
         trackingDeadline = CACurrentMediaTime() + 1
         guard displayLink == nil else { return }
@@ -232,7 +283,6 @@ class TabBar: UITabBar {
         }
         let showsCompactImage = searchTabIsActive && compactFrame != nil && compactImage != nil && !compactImageIsMoving
         compactImageView.isHidden = !showsCompactImage
-        var showsCompactBadge = false
         if showsCompactImage, let frame = compactFrame, let image = compactImage {
             let color = (unselectedItemTintColor ?? .label).resolvedColor(with: traitCollection)
             if renderedCompactImage !== image || renderedCompactColor != color {
@@ -241,16 +291,34 @@ class TabBar: UITabBar {
                 compactImageView.image = image.withTintColor(color, renderingMode: .alwaysOriginal)
             }
             compactImageView.frame = frame
-            // 其它标签的更新数量也必须在补绘图标前面，避免把遮挡问题转移到软件包标签。
-            if compactItemIndex != 2, let value = compactItem?.badgeValue, !value.isEmpty {
-                compactBadgeLabel.text = value
-                compactBadgeLabel.backgroundColor = compactItem?.badgeColor ?? .systemRed
-                let width = max(20, ceil(compactBadgeLabel.intrinsicContentSize.width) + 10)
-                compactBadgeLabel.frame = CGRect(x: frame.maxX - 10, y: frame.minY - 8, width: width, height: 20)
-                showsCompactBadge = true
+        }
+        packageBadgeLabel.isHidden = true
+        if hasPackageBadge, let value = packageBadgeValue {
+            var badgeFrame: CGRect?
+            if !searchTabIsActive {
+                badgeFrame = tabIconFrame(at: 3, in: host, platters: allPlatters, morphLayers: morphLayers)
+            } else if let compactFrame {
+                if compactItemIndex == 3 { badgeFrame = compactFrame }
+            } else {
+                badgeFrame = fullPlatterIconFrame(at: 3, in: host, platters: allPlatters, morphLayers: morphLayers,
+                                                  fallback: compactItemIndex == 3 ? lastPackageBadgeFrame : nil)
+            }
+            if let badgeFrame {
+                lastPackageBadgeFrame = badgeFrame
+                lastPackageBadgeTime = now
+            } else if searchTabIsActive, compactItemIndex == 3, compactFrame == nil,
+                      !hasFullPlatter, now - lastPackageBadgeTime < 0.15 {
+                badgeFrame = lastPackageBadgeFrame
+            }
+            if let frame = badgeFrame {
+                // 与软件源角标使用相同的前景层和定位方式，完整红圈与数字一起覆盖在图标上方。
+                packageBadgeLabel.text = value
+                packageBadgeLabel.backgroundColor = packageBadgeController?.tabBarItem.badgeColor ?? .systemRed
+                let width = max(20, ceil(packageBadgeLabel.intrinsicContentSize.width) + 10)
+                packageBadgeLabel.frame = CGRect(x: frame.maxX - 10, y: frame.minY - 8, width: width, height: 20)
+                packageBadgeLabel.isHidden = false
             }
         }
-        compactBadgeLabel.isHidden = !showsCompactBadge
 
         guard sourceRefreshIsVisible else {
             refreshBadge.isHidden = true
@@ -258,27 +326,12 @@ class TabBar: UITabBar {
         }
         var sourceFrame: CGRect?
         if !searchTabIsActive {
-            sourceFrame = sourceRefreshFrame(in: host, platters: allPlatters, morphLayers: morphLayers)
+            sourceFrame = tabIconFrame(at: 2, in: host, platters: allPlatters, morphLayers: morphLayers)
         } else if let compactFrame {
             if compactItemIndex == 2 { sourceFrame = compactFrame }
         } else {
-            let title = tabTitle(at: 2)
-            // 只用完整标签栏的普通图标定位，选中透镜的放大副本不作为锚点。
-            for platter in allPlatters where !platter.isHidden {
-                let frame = displayedFrame(of: platter, in: host)
-                guard frame.width > frame.height * 1.5,
-                      let source = tabImage(in: platter, title: title) else { continue }
-                let candidate = displayedFrame(of: source, in: host)
-                if validFrame(candidate), frame.intersects(candidate) {
-                    if let morph = matchingMorph(in: morphLayers, frame: candidate, host: host) {
-                        sourceFrame = displayedMorphFrame(morph, in: host)
-                            ?? (compactItemIndex == 2 ? lastSourceFrame : nil)
-                    } else if visibleOpacity(of: platter, upTo: self) > 0.01 {
-                        sourceFrame = candidate
-                    }
-                    break
-                }
-            }
+            sourceFrame = fullPlatterIconFrame(at: 2, in: host, platters: allPlatters, morphLayers: morphLayers,
+                                               fallback: compactItemIndex == 2 ? lastSourceFrame : nil)
         }
         if let sourceFrame {
             lastSourceFrame = sourceFrame
@@ -296,7 +349,26 @@ class TabBar: UITabBar {
         refreshBadge.setRefreshing(true)
     }
 
-    private func sourceRefreshFrame(in host: UIView, platters: [UIView], morphLayers: [CALayer]) -> CGRect? {
+    private func fullPlatterIconFrame(at index: Int, in host: UIView, platters: [UIView],
+                                      morphLayers: [CALayer], fallback: CGRect?) -> CGRect? {
+        // 两类角标共用搜索切换的起点定位，选中透镜的放大副本不作为锚点。
+        let title = tabTitle(at: index)
+        for platter in platters where !platter.isHidden {
+            let frame = displayedFrame(of: platter, in: host)
+            guard frame.width > frame.height * 1.5,
+                  let source = tabImage(in: platter, title: title) else { continue }
+            let candidate = displayedFrame(of: source, in: host)
+            if validFrame(candidate), frame.intersects(candidate) {
+                if let morph = matchingMorph(in: morphLayers, frame: candidate, host: host) {
+                    return displayedMorphFrame(morph, in: host) ?? fallback
+                }
+                return visibleOpacity(of: platter, upTo: self) > 0.01 ? candidate : nil
+            }
+        }
+        return nil
+    }
+
+    private func tabIconFrame(at index: Int, in host: UIView, platters: [UIView], morphLayers: [CALayer]) -> CGRect? {
         // 与队列滚动逻辑读取同一个原生目标；accessory 的 inline 通知不能代表动画起点。
         var isMinimized = false
         if let ivar = class_getInstanceVariable(UITabBar.self, "_visualProvider"),
@@ -304,8 +376,8 @@ class TabBar: UITabBar {
            NSStringFromClass(type(of: provider)).contains("_UITabBarVisualProvider_Floating") {
             isMinimized = (provider.value(forKey: "_currentMorphTarget") as? NSNumber)?.intValue == 2
         }
-        // 其它页面收缩时软件源图标会退场，不能把它的旧角标留在队列上方。
-        guard !isMinimized || compactItemIndex == 2 else { return nil }
+        // 其它页面收缩时该标签的图标会退场，不能把它的旧角标留在队列上方。
+        guard !isMinimized || compactItemIndex == index else { return nil }
 
         let barFrame = convert(bounds, to: host)
         let isRightToLeft = effectiveUserInterfaceLayoutDirection == .rightToLeft
@@ -319,7 +391,7 @@ class TabBar: UITabBar {
                isRightToLeft ? targetPlatterFrame.midX <= barFrame.midX : targetPlatterFrame.midX >= barFrame.midX {
                 continue
             }
-            let source = tabImage(in: platter, title: tabTitle(at: 2))
+            let source = tabImage(in: platter, title: tabTitle(at: index))
             let target: CGRect
             if let source {
                 target = source.convert(source.bounds, to: host)
