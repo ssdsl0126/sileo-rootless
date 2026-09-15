@@ -440,6 +440,14 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
     }
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        if #available(iOS 27.0, *),
+           UIDevice.current.userInterfaceIdiom == .pad {
+            // iPadOS 27: 停留顶部展示头图时隐藏边缘毛玻璃避免大片遮挡，上滑后恢复毛玻璃保护
+            let shouldHideTopEdge = scrollView.contentOffset.y <= 0
+            if scrollView.topEdgeEffect.isHidden != shouldHideTopEdge {
+                scrollView.topEdgeEffect.isHidden = shouldHideTopEdge
+            }
+        }
         TabBarController.singleton?.updateLiquidGlassScroll(scrollView)
         // do header view scaling magic
         let headerBounds = depictionHeaderView.bounds

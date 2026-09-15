@@ -10,7 +10,9 @@ import UIKit
 
 class SourcesSplitViewController: UISplitViewController, UISplitViewControllerDelegate, UINavigationControllerDelegate {
     private var displayModeBeforePackageDetail: UISplitViewController.DisplayMode?
-    private var automaticallyHidPrimaryForPackageDetail = false
+    private var isTrackingPackageDetailVisibility = false
+    private var pendingAutomaticDisplayMode: UISplitViewController.DisplayMode?
+    private var isAdaptingToWindowSize = false
 
     private var detailNavigationController: UINavigationController? {
         guard viewControllers.count > 1 else {
@@ -28,6 +30,7 @@ class SourcesSplitViewController: UISplitViewController, UISplitViewControllerDe
         if #available(iOS 26.0, *),
            UIDevice.current.userInterfaceIdiom == .pad,
            style != .unspecified {
+            // 尚未选择软件源时详情栏为空，首次进入应先展示软件源列表。
             preferredDisplayMode = .oneBesideSecondary
             preferredSplitBehavior = .tile
             minimumPrimaryColumnWidth = 260
@@ -58,9 +61,37 @@ class SourcesSplitViewController: UISplitViewController, UISplitViewControllerDe
             return
         }
 
+        isAdaptingToWindowSize = true
         coordinator.animate(alongsideTransition: { [weak self] _ in
             self?.updatePrimaryVisibilityForCurrentDetail(animated: true)
+        }, completion: { [weak self] _ in
+            self?.isAdaptingToWindowSize = false
         })
+    }
+
+    func splitViewController(_ svc: UISplitViewController,
+                             willChangeTo displayMode: UISplitViewController.DisplayMode) {
+        guard #available(iOS 26.0, *),
+              UIDevice.current.userInterfaceIdiom == .pad,
+              style != .unspecified else {
+            return
+        }
+
+        // 自动收起/恢复的通知可能晚于赋值返回，用目标模式识别该次变更。
+        if pendingAutomaticDisplayMode == displayMode {
+            pendingAutomaticDisplayMode = nil
+            return
+        }
+
+        guard isTrackingPackageDetailVisibility,
+              !isAdaptingToWindowSize,
+              !isCollapsed,
+              detailNavigationController?.visibleViewController is PackageActions else {
+            return
+        }
+
+        // 详情内手动开关侧栏后，返回列表应沿用最新选择，而不是进入详情前的状态。
+        displayModeBeforePackageDetail = displayMode
     }
 
     override func showDetailViewController(_ vc: UIViewController, sender: Any?) {
@@ -132,25 +163,32 @@ class SourcesSplitViewController: UISplitViewController, UISplitViewControllerDe
             return
         }
 
-        // 插件详情需要完整宽度；无论 iPad 尺寸如何都收起软件源主栏。
-        // 用户已经手动收起时不记录为自动收起，返回列表后继续保持其选择。
-        guard displayMode != .secondaryOnly,
-              !automaticallyHidPrimaryForPackageDetail else {
+        // 每次进入详情只自动收起一次；后续布局、切换标签不得覆盖手动操作。
+        guard !isTrackingPackageDetailVisibility else {
             return
         }
         displayModeBeforePackageDetail = displayMode
-        automaticallyHidPrimaryForPackageDetail = true
+        isTrackingPackageDetailVisibility = true
+        guard displayMode != .secondaryOnly else {
+            return
+        }
         setPreferredDisplayMode(.secondaryOnly, animated: animated)
+
+        if #available(iOS 27.0, *) {
+            // iPadOS 27: 解决主栏展开后切回 secondaryOnly 导致 secondary 顶部边缘毛玻璃常驻锁定的系统 Bug
+            // 重新刷新 secondary 导航控制器的容器关联，重置边缘效果状态机
+            setViewController(detailNavigationController, for: .secondary)
+        }
     }
 
     @available(iOS 26.0, *)
     private func restorePrimaryAfterPackageDetailIfNeeded(animated: Bool) {
-        guard automaticallyHidPrimaryForPackageDetail else {
+        guard isTrackingPackageDetailVisibility else {
             return
         }
 
         let previousDisplayMode = displayModeBeforePackageDetail ?? .oneBesideSecondary
-        automaticallyHidPrimaryForPackageDetail = false
+        isTrackingPackageDetailVisibility = false
         displayModeBeforePackageDetail = nil
         setPreferredDisplayMode(previousDisplayMode, animated: animated)
     }
@@ -159,6 +197,7 @@ class SourcesSplitViewController: UISplitViewController, UISplitViewControllerDe
     private func setPreferredDisplayMode(_ displayMode: UISplitViewController.DisplayMode,
                                          animated: Bool) {
         let changes = {
+            self.pendingAutomaticDisplayMode = self.displayMode == displayMode ? nil : displayMode
             self.preferredDisplayMode = displayMode
             self.view.layoutIfNeeded()
         }
