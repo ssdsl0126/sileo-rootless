@@ -725,14 +725,12 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
 
         // 当前页面可能是导航栈里的详情页，把实际滚动视图直接交给顶部导航容器。
         if !isPackagesTabScrollView(scrollView) {
-            setContentScrollView(scrollView, for: .top)
-            sileoSelectedViewController?.setContentScrollView(scrollView, for: .top)
+            registerLiquidGlassScrollView(scrollView, for: .top, force: false)
         }
         if isSourcesScrollView(scrollView) {
             driveSourcesQueueMinimizeIfNeeded(from: scrollView)
         } else {
-            setContentScrollView(scrollView, for: .bottom)
-            sileoSelectedViewController?.setContentScrollView(scrollView, for: .bottom)
+            registerLiquidGlassScrollView(scrollView, for: .bottom, force: false)
         }
     }
 
@@ -812,26 +810,30 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         let topOffset = -scrollView.adjustedContentInset.top
         if scrollView.contentOffset.y <= topOffset + 0.5 {
             // 离开顶部后的反向滚动不能展开队列，只有内容真正回到顶部才恢复完整标签栏。
-            if currentLiquidGlassMorphTarget() == 2 {
+            let wasMinimized = currentLiquidGlassMorphTarget() == 2
+            let needsRegistration = wasMinimized || sourcesQueueIsMinimized
+            if wasMinimized {
                 sourcesQueueIsMinimized = true
                 setLiquidGlassQueueMinimized(false)
             } else {
                 sourcesQueueIsMinimized = false
             }
-            registerSourcesScrollView(scrollView)
+            registerSourcesScrollView(scrollView, force: needsRegistration)
             return
         }
 
         if currentLiquidGlassMorphTarget() == 2 {
+            let didMinimize = !sourcesQueueIsMinimized
             sourcesQueueIsMinimized = true
-            registerSourcesQueueTrackingScrollView()
+            registerSourcesQueueTrackingScrollView(force: didMinimize)
             return
         }
 
         // 第一次向内容下方滚动时让 UIKit 自己完成完整的 accessory/tab morph；
         // 这样系统会正确生成“当前标签 + 队列 + 搜索”的三段紧凑布局。
+        let wasMinimized = sourcesQueueIsMinimized
         sourcesQueueIsMinimized = false
-        registerSourcesScrollView(scrollView)
+        registerSourcesScrollView(scrollView, force: wasMinimized)
     }
 
     @available(iOS 26.0, *)
@@ -878,13 +880,30 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     }
 
     @available(iOS 26.0, *)
-    private func registerSourcesScrollView(_ scrollView: UIScrollView) {
-        setContentScrollView(scrollView, for: .bottom)
-        sileoSelectedViewController?.setContentScrollView(scrollView, for: .bottom)
+    private func registerLiquidGlassScrollView(_ scrollView: UIScrollView,
+                                              for edge: NSDirectionalRectEdge,
+                                              force: Bool) {
+        let selectedController = sileoSelectedViewController
+        // 读取当前实际绑定，避免本地缓存遗漏 UIKit 重建后的观察关系。
+        // 先判断两个容器，再执行设置，防止父容器的设置影响子容器的判断。
+        let needsContainerRegistration = force || contentScrollView(for: edge) !== scrollView
+        let needsSelectedRegistration = force || selectedController?.contentScrollView(for: edge) !== scrollView
+        if needsContainerRegistration {
+            setContentScrollView(scrollView, for: edge)
+        }
+        if needsSelectedRegistration {
+            selectedController?.setContentScrollView(scrollView, for: edge)
+        }
     }
 
     @available(iOS 26.0, *)
-    private func registerSourcesQueueTrackingScrollView() {
+    private func registerSourcesScrollView(_ scrollView: UIScrollView, force: Bool = true) {
+        // 生命周期和拖动起点保留强制注册，仅连续滚动时按当前绑定去重。
+        registerLiquidGlassScrollView(scrollView, for: .bottom, force: force)
+    }
+
+    @available(iOS 26.0, *)
+    private func registerSourcesQueueTrackingScrollView(force: Bool = true) {
         guard let sileoSelectedViewController else {
             return
         }
@@ -904,12 +923,12 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
             trackingScrollView = createdScrollView
         }
 
-        if trackingScrollView.superview !== sileoSelectedViewController.view {
+        let needsReparenting = trackingScrollView.superview !== sileoSelectedViewController.view
+        if needsReparenting {
             trackingScrollView.removeFromSuperview()
             sileoSelectedViewController.view.insertSubview(trackingScrollView, at: 0)
         }
-        setContentScrollView(trackingScrollView, for: .bottom)
-        sileoSelectedViewController.setContentScrollView(trackingScrollView, for: .bottom)
+        registerLiquidGlassScrollView(trackingScrollView, for: .bottom, force: force || needsReparenting)
     }
 
     @available(iOS 26.0, *)
@@ -1335,7 +1354,13 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         queueBar.isHidden = false
         setBottomAccessory(UITabAccessory(contentView: queueBar), animated: false)
         if usesFloatingQueueCardOnPhone {
-            restoreLiquidGlassMinimizeBehaviorIfNeeded()
+            // accessory 加入后可能重建观察关系，不能依赖后续滚动中的重复设置来恢复。
+            registerLiquidGlassContentScrollView()
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.popupIsPresented,
+                      !self.isQueueSheetVisible, !self.isPresentingQueueSheet else { return }
+                self.registerLiquidGlassContentScrollView()
+            }
         }
     }
 
@@ -1453,6 +1478,7 @@ private final class LiquidGlassQueueBar: UIControl {
     private let glassView: UIVisualEffectView
     private let titleLabel = UILabel()
     private let subtitleLabel = UILabel()
+    private var usesCompactFonts = false
 
     override init(frame: CGRect) {
         glassView = UIVisualEffectView(effect: SileoGlass.effect(interactive: true,
@@ -1462,8 +1488,12 @@ private final class LiquidGlassQueueBar: UIControl {
         backgroundColor = .clear
         clipsToBounds = true
         layer.masksToBounds = true
+        layer.cornerCurve = .continuous
+        layer.borderWidth = 0.5
+        layer.borderColor = UIColor.white.withAlphaComponent(0.28).cgColor
         glassView.isUserInteractionEnabled = false
         glassView.clipsToBounds = true
+        glassView.layer.cornerCurve = .continuous
         addSubview(glassView)
 
         titleLabel.font = UIFont.systemFont(ofSize: 13, weight: .regular)
@@ -1485,6 +1515,7 @@ private final class LiquidGlassQueueBar: UIControl {
         subtitleLabel.isUserInteractionEnabled = false
         subtitleLabel.layer.zPosition = 1
         addSubview(subtitleLabel)
+        // 文字按顺序添加在玻璃上方，并固定 zPosition，布局时无需重复重排。
 
         accessibilityTraits = .button
     }
@@ -1567,13 +1598,16 @@ private final class LiquidGlassQueueBar: UIControl {
         if UIDevice.current.userInterfaceIdiom == .pad {
             updatePadWidthConstraintIfNeeded()
         }
-        glassView.frame = bounds
+        if glassView.frame != bounds {
+            glassView.frame = bounds
+        }
         let cornerRadius = min(bounds.width, bounds.height) / 2
-        layer.cornerRadius = cornerRadius
-        layer.cornerCurve = .continuous
-        glassView.layer.cornerRadius = cornerRadius
-        glassView.layer.cornerCurve = .continuous
-        glassView.layer.masksToBounds = true
+        if layer.cornerRadius != cornerRadius {
+            layer.cornerRadius = cornerRadius
+        }
+        if glassView.layer.cornerRadius != cornerRadius {
+            glassView.layer.cornerRadius = cornerRadius
+        }
         let isInlineEnvironment: Bool
         if #available(iOS 26.0, *) {
             isInlineEnvironment = traitCollection.tabAccessoryEnvironment == .inline
@@ -1581,10 +1615,13 @@ private final class LiquidGlassQueueBar: UIControl {
             isInlineEnvironment = false
         }
         let isCompactHeight = isInlineEnvironment || bounds.height < 56
-        titleLabel.font = UIFont.systemFont(ofSize: isCompactHeight ? 12 : 13,
-                                             weight: .regular)
-        subtitleLabel.font = UIFont.systemFont(ofSize: isCompactHeight ? 16 : 17,
-                                                weight: .semibold)
+        if usesCompactFonts != isCompactHeight {
+            usesCompactFonts = isCompactHeight
+            titleLabel.font = UIFont.systemFont(ofSize: isCompactHeight ? 12 : 13,
+                                                 weight: .regular)
+            subtitleLabel.font = UIFont.systemFont(ofSize: isCompactHeight ? 16 : 17,
+                                                    weight: .semibold)
+        }
         let horizontalInset = min(22, max(14, bounds.width * 0.06))
         let titleHeight = ceil(titleLabel.font.lineHeight)
         let subtitleHeight = ceil(subtitleLabel.font.lineHeight)
@@ -1599,10 +1636,6 @@ private final class LiquidGlassQueueBar: UIControl {
                                      y: titleLabel.frame.maxY + verticalGap,
                                      width: max(0, bounds.width - (horizontalInset * 2)),
                                      height: subtitleHeight)
-        bringSubviewToFront(titleLabel)
-        bringSubviewToFront(subtitleLabel)
-        layer.borderWidth = 0.5
-        layer.borderColor = UIColor.white.withAlphaComponent(0.28).cgColor
     }
 }
 
