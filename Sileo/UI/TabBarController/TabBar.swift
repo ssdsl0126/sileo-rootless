@@ -370,12 +370,13 @@ class TabBar: UITabBar {
 
     private func tabIconFrame(at index: Int, in host: UIView, platters: [UIView], morphLayers: [CALayer]) -> CGRect? {
         // 与队列滚动逻辑读取同一个原生目标；accessory 的 inline 通知不能代表动画起点。
-        var isMinimized = false
+        var morphTarget: Int?
         if let ivar = class_getInstanceVariable(UITabBar.self, "_visualProvider"),
            let provider = object_getIvar(self, ivar) as? NSObject,
            NSStringFromClass(type(of: provider)).contains("_UITabBarVisualProvider_Floating") {
-            isMinimized = (provider.value(forKey: "_currentMorphTarget") as? NSNumber)?.intValue == 2
+            morphTarget = (provider.value(forKey: "_currentMorphTarget") as? NSNumber)?.intValue
         }
+        let isMinimized = morphTarget == 2
         // 其它页面收缩时该标签的图标会退场，不能把它的旧角标留在队列上方。
         guard !isMinimized || compactItemIndex == index else { return nil }
 
@@ -412,11 +413,44 @@ class TabBar: UITabBar {
                 let platterFrame = displayedFrame(of: platter, in: host)
                 let displayed = source.map { displayedFrame(of: $0, in: host) }
                     ?? CGRect(x: platterFrame.midX - 13, y: platterFrame.midY - 13, width: 26, height: 26)
-                if validFrame(displayed) { return displayed }
+                guard validFrame(displayed) else { continue }
+                if morphTarget == 0, morphLayers.isEmpty {
+                    return correctedFullPlatterIconFrame(displayed, target: target, in: host,
+                                                         platter: platter, displayedPlatterFrame: platterFrame,
+                                                         targetPlatterFrame: targetPlatterFrame)
+                }
+                return displayed
             }
         }
         // 交接时找不到有效图标就暂时隐藏，不回用完整菜单的旧位置。
         return nil
+    }
+
+    private func correctedFullPlatterIconFrame(_ displayed: CGRect, target: CGRect, in host: UIView,
+                                               platter: UIView, displayedPlatterFrame: CGRect,
+                                               targetPlatterFrame: CGRect) -> CGRect {
+        let tolerance: CGFloat = 0.6
+        let offset = displayed.minX - target.minX
+        // 完整菜单选中态更新时，托盘显示层偶尔短暂丢失水平内边距，连带两个角标一起偏移。
+        guard abs(offset) >= 8, abs(displayed.minY - target.minY) < tolerance,
+              abs(offset - (displayedPlatterFrame.minX - targetPlatterFrame.minX)) < tolerance,
+              abs(displayedPlatterFrame.minY - targetPlatterFrame.minY) < tolerance,
+              abs(displayedPlatterFrame.width - targetPlatterFrame.width) < tolerance,
+              abs(displayedPlatterFrame.height - targetPlatterFrame.height) < tolerance,
+              platter.layer.animationKeys()?.isEmpty ?? true,
+              let parent = platter.superview else { return displayed }
+
+        // 只有托盘贴到静止父容器的起始边缘时才恢复水平内边距。
+        let parentTarget = parent.convert(parent.bounds, to: host)
+        let parentDisplayed = displayedFrame(of: parent, in: host)
+        let isRightToLeft = effectiveUserInterfaceLayoutDirection == .rightToLeft
+        let platterEdge = isRightToLeft ? displayedPlatterFrame.maxX : displayedPlatterFrame.minX
+        let parentEdge = isRightToLeft ? parentDisplayed.maxX : parentDisplayed.minX
+        let parentTargetEdge = isRightToLeft ? parentTarget.maxX : parentTarget.minX
+        guard abs(platterEdge - parentEdge) < tolerance,
+              abs(parentEdge - parentTargetEdge) < tolerance else { return displayed }
+
+        return displayed.offsetBy(dx: -offset, dy: 0)
     }
 
     private func tabTitle(at index: Int) -> String {
