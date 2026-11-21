@@ -37,6 +37,23 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     private var legacyPopupOpenCompletions = [() -> Void]()
     private var legacyPopupCloseCompletions = [() -> Void]()
     private var legacyQueueSeparatorExtension: UIView?
+    private enum SileoTabIdentifier {
+        static let featured = "sileo.tab.featured"
+        static let news = "sileo.tab.news"
+        static let sources = "sileo.tab.sources"
+        static let packages = "sileo.tab.packages"
+
+        static func identifier(for index: Int) -> String {
+            switch index {
+            case 0: return featured
+            case 1: return news
+            case 2: return sources
+            case 3: return packages
+            default: return "sileo.tab.\(index)"
+            }
+        }
+    }
+
     private var shouldSelectIndex = -1
     private var fuckedUpSources = false
     private var popupTapGesture: UITapGestureRecognizer?
@@ -47,6 +64,24 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     private var isQueueSheetVisible = false
     private var sourcesQueueIsMinimized = false
     private var sourcesQueueTrackingScrollView: UIScrollView?
+    private let nativeRefreshBadge = NativeRefreshBadge()
+    private var nativeBadgePortalLift: NativeBadgePortalLift?
+    private var anchoredBadges: AnchoredBadgeRenderer?
+    private var badgeTickTarget: ModernBadgeDisplayTick?
+    private var badgeDisplayLink: CADisplayLink?
+    private var badgeDisplayLinkUsesHighRate = false
+    private var isModernTabBarVisible = false
+    private var isSourcesRefreshing = false
+    private var packageBadgeValue: String?
+    private var packageBadgeColor: UIColor?
+    private var lastNonSearchTabIdentifier: String?
+    private struct CompactBadgeSyncAttempt: Equatable {
+        let buttonID: ObjectIdentifier
+        let title: String
+        let expected: String?
+        let observed: String?
+    }
+    private var lastCompactBadgeSyncAttempt: CompactBadgeSyncAttempt?
 
     var isQueuePresentationVisible: Bool {
         popupIsPresented ||
@@ -61,6 +96,13 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
 
     private var usesFloatingQueueCardOnPhone: Bool {
         UIDevice.current.userInterfaceIdiom == .phone
+    }
+
+    private var usesModernPhoneTabMenu: Bool {
+        if #available(iOS 26.0, *), UIDevice.current.userInterfaceIdiom == .phone {
+            return true
+        }
+        return false
     }
 
     private var usesLiquidGlassQueueAccessory: Bool {
@@ -81,16 +123,53 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     private var queueCollapsedInteractionStyle: LNPopupInteractionStyle {
         usesFloatingQueueCardOnPhone ? .none : preferredPopupInteractionStyle
     }
+
+    deinit {
+        badgeDisplayLink?.invalidate()
+        NotificationCenter.default.removeObserver(self)
+    }
     
     override func viewDidLoad() {
         super.viewDidLoad()
         
         delegate = self
         TabBarController.singleton = self
-        if #available(iOS 26.0, *), UIDevice.current.userInterfaceIdiom == .phone {
-            (tabBar as? TabBar)?.attachDecorations(to: view, packageController: sileoViewControllers?[safe: 3])
+        if usesModernPhoneTabMenu, let sileoTabBar = tabBar as? TabBar {
+            if #available(iOS 27.0, *) {
+                nativeBadgePortalLift = NativeBadgePortalLift()
+            }
+            sileoTabBar.onLayoutSubviews = { [weak self] in
+                guard let self else { return }
+                self.anchoredBadges?.invalidateLayout()
+                self.updateModernTabBadges()
+            }
+            sileoTabBar.onDidMoveToWindow = { [weak self] in
+                guard let self else { return }
+                if self.tabBar.window == nil {
+                    self.stopModernTabBadgeDisplayLink()
+                    self.anchoredBadges?.detach()
+                    self.nativeBadgePortalLift?.deactivate()
+                } else {
+                    self.anchoredBadges?.invalidateLayout()
+                    self.updateModernTabBadges()
+                    self.updateModernTabBadgeDisplayLink()
+                }
+            }
+            sileoTabBar.onDidAddSubview = { [weak self] subview in
+                guard let self, let lift = self.nativeBadgePortalLift else { return }
+                lift.update(in: self.tabBar)
+                if !lift.isActive, NSStringFromClass(type(of: subview)) == "_UIPortalView" {
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self else { return }
+                        self.nativeBadgePortalLift?.update(in: self.tabBar)
+                    }
+                }
+            }
+            sileoTabBar.onWillRemoveSubview = { [weak self] subview in
+                guard let self else { return }
+                self.nativeBadgePortalLift?.update(in: self.tabBar, excluding: subview)
+            }
         }
-        prepareSileoTabSelection(sileoSelectedViewController)
 
         downloadsController = UINavigationController(rootViewController: DownloadManager.shared.viewController)
         downloadsController?.isNavigationBarHidden = true
@@ -108,12 +187,26 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
                                                selector: #selector(updateSileoColors),
                                                name: SileoThemeManager.sileoChangedThemeNotification,
                                                object: nil)
+        if usesModernPhoneTabMenu {
+            NotificationCenter.default.addObserver(self,
+                                                   selector: #selector(handleModernBadgeDidEnterBackground),
+                                                   name: UIApplication.didEnterBackgroundNotification,
+                                                   object: nil)
+            NotificationCenter.default.addObserver(self,
+                                                   selector: #selector(handleModernBadgeWillEnterForeground),
+                                                   name: UIApplication.willEnterForegroundNotification,
+                                                   object: nil)
+            NotificationCenter.default.addObserver(self,
+                                                   selector: #selector(handleModernBadgeWillEnterForeground),
+                                                   name: UIApplication.didBecomeActiveNotification,
+                                                   object: nil)
+        }
         updateSileoColors()
         updateLiquidGlassTabBarMinimizeBehavior()
     }
 
     func configureSearchTabIfNeeded() {
-        guard #available(iOS 27.0, *),
+        guard #available(iOS 26.0, *),
               UIDevice.current.userInterfaceIdiom == .phone,
               tabs.isEmpty,
               let controllers = super.viewControllers else {
@@ -121,24 +214,59 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         }
 
         let previousController = super.selectedViewController
-        // iOS 27 需要真正的 UISearchTab 才能指定独立入口，继续复用 storyboard 的导航栈。
-        prominentTabIdentifier = UISearchTab.identifier
-        setTabs(makeTabs(from: controllers), animated: false)
+        let configuredTabs = makeTabs(from: controllers)
+        if #available(iOS 27.0, *),
+           let searchTab = configuredTabs.first(where: { $0 is UISearchTab }) {
+            // iOS 27 需要通过 prominentTabIdentifier 指定独立的底部搜索入口。
+            prominentTabIdentifier = searchTab.identifier
+        }
+        setTabs(configuredTabs, animated: false)
+        // 按 Demo v34 顺序：iOS 26 在 setTabs 后、selectedTab 前初始化 AnchoredBadgeRenderer。
+        if #unavailable(iOS 27.0) {
+            if anchoredBadges == nil {
+                anchoredBadges = AnchoredBadgeRenderer(
+                    tabBar: tabBar,
+                    hostView: view,
+                    isRefreshing: isSourcesRefreshing,
+                    countValue: packageBadgeValue,
+                    countBadgeColor: packageBadgeColor
+                )
+            } else {
+                anchoredBadges?.setRefreshing(isSourcesRefreshing, in: tabBar)
+                anchoredBadges?.setCount(packageBadgeValue, badgeColor: packageBadgeColor, in: tabBar)
+            }
+        }
+        // 预先触发视图控制器提供闭包，确保各子控制器在首次切换前也能关联到对应 UITab。
+        _ = tabs.map(\.viewController)
         let initialTab = tabs.first { $0.viewController === previousController } ?? tabs.first
-        // iOS 27 首次选中后才重新计算中文标签高度，在首帧提交前完成各标签的布局。
-        UIView.performWithoutAnimation {
-            for tab in tabs where !(tab is UISearchTab) {
-                selectedTab = tab
+        if #available(iOS 27.0, *) {
+            // iOS 27 首次选中后才重新计算中文标签高度，在首帧提交前完成各标签的布局。
+            UIView.performWithoutAnimation {
+                for tab in tabs where !(tab is UISearchTab) {
+                    selectedTab = tab
+                    view.layoutIfNeeded()
+                }
+                selectedTab = initialTab
                 view.layoutIfNeeded()
             }
+        } else {
             selectedTab = initialTab
-            view.layoutIfNeeded()
         }
-        prepareSileoTabSelection(sileoSelectedViewController)
+        if let initialTab, !(initialTab is UISearchTab) {
+            lastNonSearchTabIdentifier = initialTab.identifier
+        }
+        if isSourcesRefreshing {
+            syncVisualProviderItem(tabBar.items?[safe: 2] ?? sileoViewControllers?[safe: 2]?.tabBarItem)
+        }
+        if packageBadgeValue != nil {
+            syncVisualProviderItem(tabBar.items?[safe: 3] ?? sileoViewControllers?[safe: 3]?.tabBarItem)
+        }
+        updateModernTabBadges()
+        updateModernTabBadgeDisplayLink()
         registerLiquidGlassContentScrollView()
     }
 
-    @available(iOS 27.0, *)
+    @available(iOS 26.0, *)
     private func makeTabs(from controllers: [UIViewController]) -> [UITab] {
         let titleKeys = ["Featured_Page", "News_Page", "Sources_Page", "Packages_Page", "Search_Page"]
         return controllers.enumerated().map { index, controller in
@@ -147,52 +275,435 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
             }
             let previousItem = controller.tabBarItem!
             let title = titleKeys.indices.contains(index) ? String(localizationKey: titleKeys[index]) : (previousItem.title ?? "")
-            let image = normalizedTabImage(previousItem.image)
-            let selectedImage = normalizedTabImage(previousItem.selectedImage ?? previousItem.image)
-            // UIKit 在过渡动画中也会读取控制器的旧 tabBarItem，保持两套元数据一致。
-            let item = UITabBarItem(title: title, image: image, tag: previousItem.tag)
-            item.selectedImage = selectedImage
-            item.badgeValue = previousItem.badgeValue
-            item.badgeColor = previousItem.badgeColor
-            controller.tabBarItem = item
-            let tab: UITab
-            if let navigationController = controller as? UINavigationController,
-               let packageList = navigationController.viewControllers.first as? PackageListViewController,
-               packageList.showSearchField {
+
+            let isSearchController = (controller as? UINavigationController)
+                .flatMap { $0.viewControllers.first as? PackageListViewController }?
+                .showSearchField == true
+
+            if isSearchController {
                 let searchTab = UISearchTab { _ in controller }
+                searchTab.title = title
                 // 首次进入先展示最近搜索，点搜索框或再次点搜索标签时才弹出键盘。
                 searchTab.automaticallyActivatesSearch = false
-                tab = searchTab
-            } else {
-                tab = UITab(title: title, image: image, identifier: "sileo.tab.\(index)") { _ in controller }
+                return searchTab
             }
-            tab.title = title
-            tab.image = image ?? tab.image
-            tab.selectedImage = selectedImage ?? tab.image
-            tab.badgeValue = item.badgeValue
+
+            let rawImage = previousItem.image ?? (index == 0 ? UIImage(systemName: "star.fill") : nil)
+            let image = normalizedTabImage(rawImage)
+
+            let badgeValue: String?
+            switch index {
+            case 2:
+                badgeValue = isSourcesRefreshing ? NativeRefreshBadge.value : nil
+            case 3:
+                let resolved = packageBadgeValue ?? Self.normalizedBadgeValue(previousItem.badgeValue)
+                packageBadgeValue = resolved
+                if packageBadgeColor == nil {
+                    packageBadgeColor = previousItem.badgeColor
+                }
+                badgeValue = resolved
+            default:
+                badgeValue = Self.normalizedBadgeValue(previousItem.badgeValue)
+            }
+
+            // 按 Demo v34 方式只配置 title / image / badgeValue，不设置 UITab.selectedImage；
+            // 不单独写入 badgeColor，以免覆盖 iOS 26 透明外观设置。
+            let item = UITabBarItem(title: title, image: image, tag: previousItem.tag)
+            item.badgeValue = badgeValue
+            item.badgeColor = nil
+            controller.tabBarItem = item
+
+            let identifier = SileoTabIdentifier.identifier(for: index)
+            let tab = UITab(title: title, image: image, identifier: identifier) { _ in controller }
+            tab.badgeValue = badgeValue
             return tab
         }
     }
 
-    @available(iOS 27.0, *)
+    @available(iOS 26.0, *)
     private func normalizedTabImage(_ image: UIImage?) -> UIImage? {
         guard var image else { return nil }
-        image = image.withTintColor(.black, renderingMode: .alwaysOriginal)
         if !image.isSymbolImage {
+            let tinted = image.withTintColor(.black, renderingMode: .alwaysOriginal)
             // 自定义图标使用相同画布，避免 UIKit 按不同图片高度挤压菜单标题。
             let size = CGSize(width: 26, height: 26)
-            let bounds = CGRect(origin: CGPoint(x: (size.width - image.size.width) / 2,
-                                                y: (size.height - image.size.height) / 2),
-                                size: image.size)
+            let bounds = CGRect(origin: CGPoint(x: (size.width - tinted.size.width) / 2,
+                                                y: (size.height - tinted.size.height) / 2),
+                                size: tinted.size)
             image = UIGraphicsImageRenderer(size: size).image { _ in
-                image.draw(in: bounds)
+                tinted.draw(in: bounds)
             }.withBaselineOffset(fromBottom: 0)
         }
         return image.withRenderingMode(.alwaysTemplate)
     }
 
+    private static func normalizedBadgeValue(_ value: String?) -> String? {
+        guard let value, !value.isEmpty else { return nil }
+        return value
+    }
+
+    @available(iOS 26.0, *)
+    private func tab(withIdentifier identifier: String) -> UITab? {
+        tabs.first { $0.identifier == identifier }
+    }
+
+    @available(iOS 26.0, *)
+    private func syncVisualProviderItem(_ item: UITabBarItem?) {
+        guard let item,
+              let visualProviderIvar = class_getInstanceVariable(UITabBar.self, "_visualProvider"),
+              let visualProvider = object_getIvar(tabBar, visualProviderIvar) as? NSObject,
+              NSStringFromClass(type(of: visualProvider)).contains("_UITabBarVisualProvider_Floating") else {
+            return
+        }
+        // iOS 26 在 setTabs 之后动态更新 UITab.badgeValue 不会自动通知浮动视觉提供者刷新按钮角标，
+        // 显式触发 updateItem: 才能在不重建整条标签栏的前提下立即生成或移除 _UIBarBadgeView。
+        let selector = NSSelectorFromString("updateItem:")
+        guard visualProvider.responds(to: selector) else {
+            return
+        }
+        typealias UpdateItemImplementation = @convention(c) (AnyObject, Selector, UITabBarItem) -> Void
+        let implementation = visualProvider.method(for: selector)
+        let updateItem = unsafeBitCast(implementation, to: UpdateItemImplementation.self)
+        updateItem(visualProvider, selector, item)
+        syncCompactPlatterBadgesIfNeeded(allowDuringMorph: true)
+        tabBar.setNeedsLayout()
+    }
+
+    @available(iOS 26.0, *)
+    private func syncCompactPlatterBadgesIfNeeded(allowDuringMorph: Bool = false) {
+        guard usesModernPhoneTabMenu, !tabs.isEmpty else { return }
+        if !allowDuringMorph {
+            let isMorphing = tabBar.subviews.contains { subview in
+                let cls = NSStringFromClass(type(of: subview))
+                return cls.contains("Reparenting") || cls.contains("MagicMorph")
+            }
+            if isMorphing { return }
+        }
+
+        let setBadgeSelector = NSSelectorFromString("_setBadgeValue:")
+        typealias SetBadgeValueIMP = @convention(c) (AnyObject, Selector, NSString?) -> Void
+
+        var didUpdateCompactBadge = false
+        for subview in tabBar.subviews {
+            let className = NSStringFromClass(type(of: subview))
+            // UIKit 的 _UITabBarVisualProvider_Floating.updateItem: 不会同步紧凑托盘内的复用按钮
+            // （collapseButton）。注意 iOS 26 上展开托盘与紧凑托盘同名（均为 _UITabBarPlatterView），
+            // 因此必须按内部 `_UITabButton` 数量严格等于 1 来识别紧凑托盘，避免误判展开托盘导致布局循环。
+            guard className.contains("PlatterView"),
+                  !className.contains("ItemPlatterView") else {
+                continue
+            }
+            let buttons = allDescendants(in: subview, matching: { NSStringFromClass(type(of: $0)) == "_UITabButton" })
+            guard buttons.count == 1,
+                  let button = buttons.first,
+                  button.responds(to: setBadgeSelector),
+                  let title = tabButtonTitle(in: button),
+                  !title.isEmpty else {
+                continue
+            }
+
+            let matchedTab = tabs.first { !($0 is UISearchTab) && $0.title == title }
+            let matchedItem = tabBar.items?.first { $0.title == title }
+            guard matchedTab != nil || matchedItem != nil else { continue }
+
+            let expectedBadge = Self.normalizedBadgeValue(matchedTab?.badgeValue ?? matchedItem?.badgeValue)
+            let currentBadge = currentCompactBadgeValue(in: subview)
+            let buttonID = ObjectIdentifier(button)
+            guard currentBadge != expectedBadge else {
+                if lastCompactBadgeSyncAttempt?.buttonID == buttonID {
+                    lastCompactBadgeSyncAttempt = nil
+                }
+                continue
+            }
+
+            let attempt = CompactBadgeSyncAttempt(
+                buttonID: buttonID,
+                title: title,
+                expected: expectedBadge,
+                observed: currentBadge
+            )
+            if !allowDuringMorph, lastCompactBadgeSyncAttempt == attempt {
+                continue
+            }
+            lastCompactBadgeSyncAttempt = attempt
+
+            let imp = button.method(for: setBadgeSelector)
+            let setBadgeValue = unsafeBitCast(imp, to: SetBadgeValueIMP.self)
+            setBadgeValue(button, setBadgeSelector, expectedBadge as NSString?)
+            didUpdateCompactBadge = true
+        }
+
+        if didUpdateCompactBadge {
+            tabBar.setNeedsLayout()
+        }
+    }
+
+    private func allDescendants(in root: UIView, matching predicate: (UIView) -> Bool) -> [UIView] {
+        var matches: [UIView] = []
+        var stack = root.subviews
+        while let view = stack.popLast() {
+            if predicate(view) {
+                matches.append(view)
+            }
+            stack.append(contentsOf: view.subviews)
+        }
+        return matches
+    }
+
+    private func firstDescendant(in root: UIView, matching predicate: (UIView) -> Bool) -> UIView? {
+        for subview in root.subviews {
+            if predicate(subview) {
+                return subview
+            }
+            if let match = firstDescendant(in: subview, matching: predicate) {
+                return match
+            }
+        }
+        return nil
+    }
+
+    private func tabButtonTitle(in button: UIView) -> String? {
+        var stack = button.subviews
+        while let view = stack.popLast() {
+            if NSStringFromClass(type(of: view)) == "_UIBarBadgeView" {
+                continue
+            }
+            if let label = view as? UILabel, let text = label.text, !text.isEmpty {
+                return text
+            }
+            stack.append(contentsOf: view.subviews)
+        }
+        return nil
+    }
+
+    private func currentCompactBadgeValue(in platter: UIView) -> String? {
+        guard let badgeView = firstDescendant(in: platter, matching: {
+            NSStringFromClass(type(of: $0)) == "_UIBarBadgeView" && !$0.isHidden
+        }) else {
+            return nil
+        }
+        if let label = firstDescendant(in: badgeView, matching: { $0 is UILabel }) as? UILabel {
+            return label.text ?? ""
+        }
+        return ""
+    }
+
+    func setSourcesRefreshing(_ refreshing: Bool) {
+        if !Thread.isMainThread {
+            DispatchQueue.main.async {
+                self.setSourcesRefreshing(refreshing)
+            }
+            return
+        }
+        guard usesModernPhoneTabMenu else { return }
+        let badgeValue = refreshing ? NativeRefreshBadge.value : nil
+        let stateChanged = isSourcesRefreshing != refreshing
+        isSourcesRefreshing = refreshing
+
+        if #available(iOS 26.0, *) {
+            let sourcesTab = tab(withIdentifier: SileoTabIdentifier.sources)
+            var didMutateBadge = stateChanged
+            if sourcesTab?.badgeValue != badgeValue {
+                sourcesTab?.badgeValue = badgeValue
+                didMutateBadge = true
+            }
+            let sourcesController = sourcesTab?.viewController ?? sileoViewControllers?[safe: 2]
+            if sourcesController?.tabBarItem.badgeColor != nil {
+                sourcesController?.tabBarItem.badgeColor = nil
+                didMutateBadge = true
+            }
+            if sourcesController?.tabBarItem.badgeValue != badgeValue {
+                sourcesController?.tabBarItem.badgeValue = badgeValue
+                didMutateBadge = true
+            }
+            if didMutateBadge {
+                lastCompactBadgeSyncAttempt = nil
+                syncVisualProviderItem(tabBar.items?[safe: 2] ?? sourcesController?.tabBarItem)
+            }
+            if let anchoredBadges {
+                anchoredBadges.setRefreshing(refreshing, in: tabBar)
+            } else if !refreshing {
+                nativeRefreshBadge.update(in: tabBar, isRefreshing: false)
+            }
+            if didMutateBadge {
+                updateModernTabBadges()
+                updateModernTabBadgeDisplayLink()
+            } else if refreshing && badgeDisplayLink == nil {
+                updateModernTabBadgeDisplayLink()
+            }
+        }
+    }
+
+    func setTabBadgeValue(_ value: String?, for controller: UIViewController) -> Bool {
+        if !Thread.isMainThread {
+            DispatchQueue.main.async {
+                _ = self.setTabBadgeValue(value, for: controller)
+            }
+            return true
+        }
+        guard usesModernPhoneTabMenu else { return false }
+        guard #available(iOS 26.0, *) else { return false }
+
+        let sourcesTab = tab(withIdentifier: SileoTabIdentifier.sources)
+        let packagesTab = tab(withIdentifier: SileoTabIdentifier.packages)
+        let isSources = controller.tab?.identifier == SileoTabIdentifier.sources
+            || sourcesTab?.viewController === controller
+            || sileoViewControllers?[safe: 2] === controller
+        let isPackages = controller.tab?.identifier == SileoTabIdentifier.packages
+            || packagesTab?.viewController === controller
+            || sileoViewControllers?[safe: 3] === controller
+
+        if isSources {
+            let refreshing = (value != nil && !value!.isEmpty)
+            setSourcesRefreshing(refreshing)
+            return true
+        }
+
+        if isPackages {
+            let normalized = Self.normalizedBadgeValue(value)
+            let customColor = controller.tabBarItem.badgeColor
+            let stateChanged = packageBadgeValue != normalized
+            packageBadgeValue = normalized
+            if customColor != nil {
+                packageBadgeColor = customColor
+            }
+            var didMutateBadge = stateChanged
+            let targetTab = controller.tab ?? packagesTab
+            if targetTab?.badgeValue != normalized {
+                targetTab?.badgeValue = normalized
+                didMutateBadge = true
+            }
+            if controller.tabBarItem.badgeColor != nil {
+                controller.tabBarItem.badgeColor = nil
+                didMutateBadge = true
+            }
+            if controller.tabBarItem.badgeValue != normalized {
+                controller.tabBarItem.badgeValue = normalized
+                didMutateBadge = true
+            }
+            if didMutateBadge {
+                lastCompactBadgeSyncAttempt = nil
+                syncVisualProviderItem(tabBar.items?[safe: 3] ?? controller.tabBarItem)
+            }
+            anchoredBadges?.setCount(normalized, badgeColor: packageBadgeColor, in: tabBar)
+            updateModernTabBadges()
+            updateModernTabBadgeDisplayLink()
+            return true
+        }
+
+        return false
+    }
+
+    @available(iOS 26.0, *)
+    private var needsModernTabBadgeDisplayLink: Bool {
+        guard usesModernPhoneTabMenu,
+              isViewLoaded,
+              isModernTabBarVisible,
+              view.window != nil,
+              UIApplication.shared.applicationState != .background else {
+            return false
+        }
+        if let anchoredBadges {
+            return anchoredBadges.needsDisplayUpdates
+        }
+        return isSourcesRefreshing
+    }
+
+    private func updateModernTabBadgeDisplayLink() {
+        guard #available(iOS 26.0, *), usesModernPhoneTabMenu else { return }
+        guard needsModernTabBadgeDisplayLink else {
+            stopModernTabBadgeDisplayLink()
+            return
+        }
+        let wantsHighRate = anchoredBadges?.needsHighFrameRate ?? false
+        let range = wantsHighRate
+            ? CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120)
+            : CAFrameRateRange(minimum: 10, maximum: 15, preferred: 15)
+        if let link = badgeDisplayLink {
+            if badgeDisplayLinkUsesHighRate != wantsHighRate {
+                link.preferredFrameRateRange = range
+                badgeDisplayLinkUsesHighRate = wantsHighRate
+            }
+            return
+        }
+        let target = ModernBadgeDisplayTick(owner: self)
+        badgeTickTarget = target
+        let link = CADisplayLink(target: target, selector: #selector(ModernBadgeDisplayTick.tick(_:)))
+        link.preferredFrameRateRange = range
+        link.add(to: .main, forMode: .common)
+        badgeDisplayLink = link
+        badgeDisplayLinkUsesHighRate = wantsHighRate
+    }
+
+    private func stopModernTabBadgeDisplayLink() {
+        badgeDisplayLink?.invalidate()
+        badgeDisplayLink = nil
+        badgeTickTarget = nil
+        badgeDisplayLinkUsesHighRate = false
+    }
+
+    fileprivate func updateModernTabBadges() {
+        guard #available(iOS 26.0, *), usesModernPhoneTabMenu, isViewLoaded else { return }
+        guard view.window != nil else {
+            anchoredBadges?.detach()
+            nativeBadgePortalLift?.deactivate()
+            return
+        }
+        syncCompactPlatterBadgesIfNeeded()
+        if let anchoredBadges {
+            let wasFallback = anchoredBadges.isUsingNativeFallback
+            let isSearchSelected = selectedTab is UISearchTab
+            let primaryID: String?
+            if let current = selectedTab, !(current is UISearchTab) {
+                primaryID = current.identifier
+            } else {
+                primaryID = lastNonSearchTabIdentifier
+            }
+            anchoredBadges.update(
+                in: tabBar,
+                isSearchTabSelected: isSearchSelected,
+                selectedPrimaryIsSources: primaryID == SileoTabIdentifier.sources,
+                selectedPrimaryIsPackages: primaryID == SileoTabIdentifier.packages
+            )
+            if wasFallback != anchoredBadges.isUsingNativeFallback {
+                updateModernTabBadgeDisplayLink()
+            }
+        } else {
+            nativeRefreshBadge.update(in: tabBar, isRefreshing: isSourcesRefreshing)
+            nativeBadgePortalLift?.update(in: tabBar)
+        }
+    }
+
+    @objc private func handleModernBadgeDidEnterBackground() {
+        stopModernTabBadgeDisplayLink()
+        nativeBadgePortalLift?.deactivate()
+    }
+
+    @objc private func handleModernBadgeWillEnterForeground() {
+        guard usesModernPhoneTabMenu else { return }
+        anchoredBadges?.invalidateLayout()
+        updateModernTabBadges()
+        updateModernTabBadgeDisplayLink()
+    }
+
+    fileprivate func handleProgrammaticTabSelection() {
+        guard #available(iOS 26.0, *), usesModernPhoneTabMenu else { return }
+        if let current = selectedTab, !(current is UISearchTab) {
+            lastNonSearchTabIdentifier = current.identifier
+        }
+        anchoredBadges?.invalidateLayout()
+        updateModernTabBadges()
+        registerLiquidGlassContentScrollView()
+    }
+
     @available(iOS 18.0, *)
     func tabBarController(_ tabBarController: UITabBarController, shouldSelectTab tab: UITab) -> Bool {
+        if tab is UISearchTab {
+            nativeBadgePortalLift?.deactivate()
+        }
+        if #available(iOS 26.0, *) {
+            syncCompactPlatterBadgesIfNeeded(allowDuringMorph: true)
+        }
         guard let controller = tab.viewController else { return false }
         // 由 UIKit 完成标签与搜索栏的同一次过渡，避免手动切换后再取消选择导致旧菜单残留。
         return self.tabBarController(tabBarController, shouldSelect: controller)
@@ -200,28 +711,72 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
 
     @available(iOS 18.0, *)
     func tabBarController(_ tabBarController: UITabBarController, didSelectTab selectedTab: UITab, previousTab: UITab?) {
+        if !(selectedTab is UISearchTab) {
+            lastNonSearchTabIdentifier = selectedTab.identifier
+        } else if let previousTab, !(previousTab is UISearchTab) {
+            lastNonSearchTabIdentifier = previousTab.identifier
+        }
         guard let controller = selectedTab.viewController else { return }
         self.tabBarController(tabBarController, didSelect: controller)
+    }
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        if usesModernPhoneTabMenu {
+            anchoredBadges?.invalidateLayout()
+            updateModernTabBadges()
+        }
     }
     
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
 
         if #available(iOS 26.0, *), usesFloatingQueueCardOnPhone {
+            isModernTabBarVisible = true
             registerLiquidGlassContentScrollView()
+            updateModernTabBadges()
+            updateModernTabBadgeDisplayLink()
         }
         
         self.updatePopup()
     }
+
+    override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        if usesModernPhoneTabMenu {
+            isModernTabBarVisible = false
+            stopModernTabBadgeDisplayLink()
+            if view.window == nil {
+                anchoredBadges?.detach()
+                nativeBadgePortalLift?.deactivate()
+            }
+        }
+    }
+
+    override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
+        super.viewWillTransition(to: size, with: coordinator)
+        guard usesModernPhoneTabMenu else { return }
+        anchoredBadges?.invalidateLayout()
+        nativeBadgePortalLift?.deactivate()
+        coordinator.animate(alongsideTransition: { [weak self] _ in
+            self?.anchoredBadges?.invalidateLayout()
+            self?.updateModernTabBadges()
+        }, completion: { [weak self] _ in
+            self?.anchoredBadges?.invalidateLayout()
+            self?.updateModernTabBadges()
+            self?.updateModernTabBadgeDisplayLink()
+        })
+    }
     
     func tabBarController(_ tabBarController: UITabBarController, shouldSelect viewController: UIViewController) -> Bool {
         shouldSelectIndex = tabBarController.sileoSelectedIndex
-        prepareSileoTabSelection(viewController)
         return true
     }
 
     func tabBarController(_ tabBarController: UITabBarController, didSelect viewController: UIViewController) {
         if #available(iOS 26.0, *), usesFloatingQueueCardOnPhone {
+            anchoredBadges?.invalidateLayout()
+            updateModernTabBadges()
             registerLiquidGlassContentScrollView()
             // iOS 26 在切换顶层标签时会重建滚动观察关系，并可能把收缩策略临时重置为 .never。
             // 等本轮容器布局结束后重新注册当前列表并恢复策略，避免“软件源”页丢失队列收缩能力。
@@ -229,6 +784,8 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
                 guard let self else { return }
                 self.registerLiquidGlassContentScrollView()
                 self.restoreLiquidGlassMinimizeBehaviorIfNeeded()
+                self.anchoredBadges?.invalidateLayout()
+                self.updateModernTabBadges()
             }
         }
         if shouldSelectIndex == tabBarController.sileoSelectedIndex {
@@ -698,6 +1255,10 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
             if traitCollection.hasDifferentColorAppearance(comparedTo: previousTraitCollection) {
                 updateSileoColors()
             }
+            if usesModernPhoneTabMenu {
+                anchoredBadges?.invalidateLayout()
+                updateModernTabBadges()
+            }
         } else {
             updateSileoColors()
         }
@@ -720,7 +1281,6 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
             return
         }
 
-        (tabBar as? TabBar)?.trackBadgeScrollTransition()
         restoreLiquidGlassMinimizeBehaviorIfNeeded()
 
         // 当前页面可能是导航栈里的详情页，把实际滚动视图直接交给顶部导航容器。
@@ -1218,7 +1778,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         }
 
         func appearanceByUpdatingSelectedColor(_ source: UITabBarAppearance) -> UITabBarAppearance {
-            let appearance = source.copy() as! UITabBarAppearance
+            let appearance = source.copy()
             let itemAppearances = [
                 appearance.stackedLayoutAppearance,
                 appearance.inlineLayoutAppearance,
@@ -1233,11 +1793,16 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
             return appearance
         }
 
-        let standardAppearance = appearanceByUpdatingSelectedColor(tabBar.standardAppearance)
-        tabBar.standardAppearance = standardAppearance
-        if #available(iOS 15.0, *) {
-            let source = tabBar.scrollEdgeAppearance ?? standardAppearance
-            tabBar.scrollEdgeAppearance = appearanceByUpdatingSelectedColor(source)
+        if let anchoredBadges {
+            // 分别维护 standardAppearance 与 scrollEdgeAppearance 原样式，主题变化后继续保持 iOS 26 透明角标外观。
+            anchoredBadges.updateBaseAppearances(in: tabBar, transform: appearanceByUpdatingSelectedColor)
+        } else {
+            let standardAppearance = appearanceByUpdatingSelectedColor(tabBar.standardAppearance)
+            tabBar.standardAppearance = standardAppearance
+            if #available(iOS 15.0, *) {
+                let source = tabBar.scrollEdgeAppearance ?? standardAppearance
+                tabBar.scrollEdgeAppearance = appearanceByUpdatingSelectedColor(source)
+            }
         }
 
         for item in tabBar.items ?? [] {
@@ -1317,11 +1882,14 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        if #available(iOS 26.0, *), UIDevice.current.userInterfaceIdiom == .phone {
-            (tabBar as? TabBar)?.attachDecorations(to: view, packageController: sileoViewControllers?[safe: 3])
+        if usesModernPhoneTabMenu {
+            anchoredBadges?.invalidateLayout()
+            updateModernTabBadges()
         }
         
-        self.tabBar.itemPositioning = .centered
+        if self.tabBar.itemPositioning != .centered {
+            self.tabBar.itemPositioning = .centered
+        }
         if #available(iOS 26.0, *), usesFloatingQueueCardOnPhone {
             // accessory 的首次布局可能会重建标签栏，布局完成后再次保持当前策略。
             restoreLiquidGlassMinimizeBehaviorIfNeeded()
@@ -1855,15 +2423,24 @@ private final class QueueFloatingCardController: UIViewController, UIGestureReco
     }
 }
 
-// 新标签 API 不维护旧的数组与选择属性，业务入口统一通过这些访问器定位页面。
-extension UITabBarController {
-    fileprivate func prepareSileoTabSelection(_ controller: UIViewController?) {
-        guard let index = sileoViewControllers?.firstIndex(where: { $0 === controller }) else { return }
-        (tabBar as? TabBar)?.prepareForTabSelection(index: index, controller: controller,
-                                                  previousIndex: sileoSelectedIndex,
-                                                  previousController: sileoSelectedViewController)
+private final class ModernBadgeDisplayTick: NSObject {
+    private weak var owner: TabBarController?
+
+    init(owner: TabBarController) {
+        self.owner = owner
     }
 
+    @objc func tick(_ link: CADisplayLink) {
+        guard let owner else {
+            link.invalidate()
+            return
+        }
+        owner.updateModernTabBadges()
+    }
+}
+
+// 新标签 API 不维护旧的数组与选择属性，业务入口统一通过这些访问器定位页面。
+extension UITabBarController {
     var sileoViewControllers: [UIViewController]? {
         if #available(iOS 18.0, *), !tabs.isEmpty {
             return tabs.compactMap { $0.viewController }
@@ -1879,12 +2456,12 @@ extension UITabBarController {
             return selectedViewController
         }
         set {
-            prepareSileoTabSelection(newValue)
             if #available(iOS 18.0, *), !tabs.isEmpty {
                 selectedTab = tabs.first { $0.viewController === newValue }
             } else {
                 selectedViewController = newValue
             }
+            (self as? TabBarController)?.handleProgrammaticTabSelection()
         }
     }
 
@@ -1898,24 +2475,21 @@ extension UITabBarController {
         set {
             if #available(iOS 18.0, *), !tabs.isEmpty {
                 guard tabs.indices.contains(newValue) else { return }
-                prepareSileoTabSelection(tabs[newValue].viewController)
                 selectedTab = tabs[newValue]
             } else {
-                if let controller = viewControllers?[safe: newValue] {
-                    prepareSileoTabSelection(controller)
-                }
                 selectedIndex = newValue
             }
+            (self as? TabBarController)?.handleProgrammaticTabSelection()
         }
     }
 }
 
 extension UIViewController {
     func setSileoTabBadgeValue(_ value: String?) {
-        // 导航栈重挂载时即使暂时没有父容器，软件包数量仍交给已登记的前景角标。
+        // iPhone iOS 26 / 27 统一由 TabBarController 按稳定 Tab 标识同步原生 badgeValue 与角标渲染器。
         if #available(iOS 26.0, *), UIDevice.current.userInterfaceIdiom == .phone,
-           let tabBar = (tabBarController ?? TabBarController.singleton)?.tabBar as? TabBar,
-           tabBar.setPackageBadgeValue(value, for: self) {
+           let controller = (tabBarController as? TabBarController) ?? TabBarController.singleton,
+           controller.setTabBadgeValue(value, for: self) {
             return
         }
         tabBarItem.badgeValue = value

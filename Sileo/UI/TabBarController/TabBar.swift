@@ -9,555 +9,29 @@
 import UIKit
 
 class TabBar: UITabBar {
-    private weak var decorationHost: UIView?
-    private let decorationView: UIView = {
-        let view = UIView()
-        view.isOpaque = false
-        view.isUserInteractionEnabled = false
-        view.clipsToBounds = true
-        view.accessibilityElementsHidden = true
-        view.accessibilityIdentifier = "Sileo.TabDecorations"
-        return view
-    }()
-    private let compactImageView: UIImageView = {
-        let view = UIImageView()
-        view.contentMode = .scaleAspectFit
-        view.accessibilityIdentifier = "Sileo.CompactTabImage"
-        view.isHidden = true
-        return view
-    }()
-    private let refreshBadge = TabRefreshBadgeView()
-    private let packageBadgeLabel: UILabel = {
-        let label = UILabel()
-        label.font = .systemFont(ofSize: 13)
-        label.textColor = .white
-        label.textAlignment = .center
-        label.layer.cornerRadius = 10
-        label.clipsToBounds = true
-        label.isHidden = true
-        label.accessibilityIdentifier = "Sileo.PackageUpdatesBadge"
-        return label
-    }()
-    private weak var packageBadgeController: UIViewController?
-    private var packageBadgeValue: String?
-    private var compactImage: UIImage?
-    private var renderedCompactImage: UIImage?
-    private var renderedCompactColor: UIColor?
-    private var compactItemIndex = 0
-    private var searchTabIsActive = false
-    private var compactImageIsSettled = false
-    private var sourceRefreshIsVisible = false
-    private var lastCompactFrame: CGRect?
-    private var lastCompactTime: CFTimeInterval = 0
-    private var lastPackageBadgeFrame: CGRect?
-    private var lastPackageBadgeTime: CFTimeInterval = 0
-    private var lastSourceFrame: CGRect?
-    private var lastSourceTime: CFTimeInterval = 0
-    private var displayLink: CADisplayLink?
-    private var trackingDeadline: CFTimeInterval = 0
-    private lazy var displayLinkTarget = TabDecorationDisplayLinkTarget(tabBar: self)
-
-    private var supportsDecorations: Bool {
-        if #available(iOS 26.0, *), UIDevice.current.userInterfaceIdiom == .phone { return true }
-        return false
-    }
-
-    private var hasPackageBadge: Bool {
-        guard packageBadgeController != nil, let value = packageBadgeValue else { return false }
-        return !value.isEmpty
-    }
-
-    deinit {
-        displayLink?.invalidate()
-        decorationView.removeFromSuperview()
-    }
-
-    // 装饰与 UITabBar 是控制器根视图中的独立分支，不参与玻璃内容的遮罩、着色和淡出。
-    func attachDecorations(to host: UIView, packageController: UIViewController?) {
-        guard supportsDecorations else { return }
-        if let packageController {
-            // 布局时会重复挂接装饰；同一控制器的数量不能被已经清空的系统角标覆盖。
-            if packageBadgeController !== packageController {
-                packageBadgeController = packageController
-                packageBadgeValue = packageController.tabBarItem.badgeValue
-            }
-            suppressNativePackageBadge(for: packageController)
-        }
-        decorationHost = host
-        if decorationView.superview !== host {
-            decorationView.addSubview(compactImageView)
-            decorationView.addSubview(packageBadgeLabel)
-            decorationView.addSubview(refreshBadge)
-            host.addSubview(decorationView)
-        }
-        updateDecorations()
-    }
-
-    func prepareForTabSelection(index: Int, controller: UIViewController?,
-                                previousIndex: Int, previousController: UIViewController?) {
-        guard supportsDecorations else { return }
-        let isSearch = index == 4
-        if !isSearch || !searchTabIsActive {
-            compactItemIndex = isSearch ? previousIndex : index
-            let sourceController = isSearch ? previousController : controller
-            let sourceItem = sourceController?.tabBarItem
-            // 系统标签的 item.image 可能为空，切换前从当前按钮读取一次并保留。
-            compactImage = sourceItem?.image ?? sourceItem?.selectedImage
-                ?? tabImage(in: self, title: tabTitle(at: compactItemIndex))?.image
-            lastCompactFrame = nil
-            lastPackageBadgeFrame = nil
-            lastPackageBadgeTime = 0
-            compactImageIsSettled = false
-            compactImageView.isHidden = true
-        }
-        // 标签切换只更新图标与位置，不再恢复系统角标，避免旧紧凑按钮保留数字快照。
-        searchTabIsActive = isSearch
-        updateDecorations()
-        trackDecorationTransition()
-    }
-
-    func setPackageBadgeValue(_ value: String?, for controller: UIViewController) -> Bool {
-        guard supportsDecorations, packageBadgeController === controller else { return false }
-        // 软件包角标始终由同一前景层绘制，更新数量与原生 badgeValue 分开保存。
-        packageBadgeValue = value
-        if !hasPackageBadge {
-            packageBadgeLabel.isHidden = true
-            lastPackageBadgeFrame = nil
-            lastPackageBadgeTime = 0
-        }
-        suppressNativePackageBadge(for: controller)
-        updateDecorations()
-        trackDecorationTransition()
-        return true
-    }
-
-    private func suppressNativePackageBadge(for controller: UIViewController) {
-        UIView.performWithoutAnimation {
-            // 新旧标签 API 都不再生成数字角标，避免完整与紧凑容器之间复用旧副本。
-            if controller.tabBarItem.badgeValue != nil {
-                controller.tabBarItem.badgeValue = nil
-            }
-            if #available(iOS 18.0, *), let tab = controller.tab, tab.badgeValue != nil {
-                tab.badgeValue = nil
-            }
-            // 前景层不参与辅助功能遍历，系统标签仍保留可读的更新数量。
-            if controller.tabBarItem.accessibilityValue != packageBadgeValue {
-                controller.tabBarItem.accessibilityValue = packageBadgeValue
-            }
-        }
-    }
-
-    func setSourceRefreshIndicatorVisible(_ visible: Bool) {
-        guard supportsDecorations, sourceRefreshIsVisible != visible else { return }
-        sourceRefreshIsVisible = visible
-        refreshBadge.setRefreshing(visible)
-        if !visible {
-            lastSourceFrame = nil
-            refreshBadge.isHidden = true
-        }
-        updateDecorations()
-        trackDecorationTransition()
-    }
-
-    func trackBadgeScrollTransition() {
-        guard supportsDecorations, sourceRefreshIsVisible || hasPackageBadge, !searchTabIsActive else { return }
-        // 滚动驱动的合成动画不一定触发标签栏布局，不能依赖上一次布局留下的跟踪窗口。
-        updateDecorations()
-        trackDecorationTransition()
-    }
+    var onLayoutSubviews: (() -> Void)?
+    var onDidMoveToWindow: (() -> Void)?
+    var onDidAddSubview: ((UIView) -> Void)?
+    var onWillRemoveSubview: ((UIView) -> Void)?
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        guard supportsDecorations else { return }
-        updateDecorations()
-        trackDecorationTransition()
+        onLayoutSubviews?()
     }
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
-        if window == nil {
-            stopDecorationTracking()
-            decorationView.isHidden = true
-        } else if supportsDecorations {
-            updateDecorations()
-            trackDecorationTransition()
-        }
+        onDidMoveToWindow?()
     }
 
-    private func trackDecorationTransition() {
-        guard supportsDecorations, window != nil,
-              searchTabIsActive || sourceRefreshIsVisible || hasPackageBadge else { return }
-        // layoutSubviews 不会随合成动画逐帧调用；仅在布局或切换后的短时间内跟踪显示位置。
-        trackingDeadline = CACurrentMediaTime() + 1
-        guard displayLink == nil else { return }
-        let link = CADisplayLink(target: displayLinkTarget, selector: #selector(TabDecorationDisplayLinkTarget.tick(_:)))
-        link.preferredFramesPerSecond = 60
-        link.add(to: .main, forMode: .common)
-        displayLink = link
+    override func didAddSubview(_ subview: UIView) {
+        super.didAddSubview(subview)
+        onDidAddSubview?(subview)
     }
 
-    fileprivate func updateDecorationAnimation() {
-        updateDecorations()
-        if CACurrentMediaTime() >= trackingDeadline {
-            stopDecorationTracking()
-        }
-    }
-
-    private func stopDecorationTracking() {
-        displayLink?.invalidate()
-        displayLink = nil
-    }
-
-    func updateDecorations() {
-        guard supportsDecorations, let host = decorationHost,
-              window != nil, window === host.window else {
-            decorationView.isHidden = true
-            return
-        }
-        let opacity = visibleOpacity(of: self, upTo: host)
-        decorationView.isHidden = opacity <= 0.01
-        guard opacity > 0.01 else { return }
-        if decorationView.frame != host.bounds {
-            decorationView.frame = host.bounds
-            decorationView.bounds = host.bounds
-        }
-        if host.subviews.last !== decorationView {
-            host.bringSubviewToFront(decorationView)
-        }
-        // 只操作自有视图，不重排系统子视图，也不向系统按钮添加约束。
-        UIView.performWithoutAnimation {
-            decorationView.alpha = opacity
-            updateDecorationFrames(in: host)
-        }
-    }
-
-    private func updateDecorationFrames(in host: UIView) {
-        let now = CACurrentMediaTime()
-        let barFrame = displayedFrame(of: self, in: host)
-        let allPlatters = tabPlatters(in: self)
-        let platters = allPlatters.filter { visibleOpacity(of: $0, upTo: self) > 0.01 }
-        let morphLayers = window.map { tabMorphLayers(in: $0) } ?? []
-        let isRightToLeft = effectiveUserInterfaceLayoutDirection == .rightToLeft
-        let compactPlatter = platters.first {
-            let frame = displayedFrame(of: $0, in: host)
-            return validFrame(frame) && frame.width <= frame.height * 1.5 &&
-                (isRightToLeft ? frame.midX > barFrame.midX : frame.midX < barFrame.midX)
-        }
-        let hasFullPlatter = platters.contains {
-            let frame = displayedFrame(of: $0, in: host)
-            return validFrame(frame) && frame.width > frame.height * 1.5
-        }
-
-        var compactFrame: CGRect?
-        if let platter = compactPlatter {
-            let platterFrame = displayedFrame(of: platter, in: host)
-            let source = tabImage(in: platter, title: tabTitle(at: compactItemIndex))
-            let sourceFrame = source.map { displayedFrame(of: $0, in: host) }
-            if let sourceFrame, validFrame(sourceFrame),
-               sourceFrame.width <= platterFrame.width, sourceFrame.height <= platterFrame.height,
-               platterFrame.contains(CGPoint(x: sourceFrame.midX, y: sourceFrame.midY)) {
-                compactFrame = sourceFrame
-            } else {
-                // 内容重挂载时仍有玻璃按钮的显示位置，缓存图标可在这里连续绘制。
-                compactFrame = CGRect(x: platterFrame.midX - 13, y: platterFrame.midY - 13, width: 26, height: 26)
-            }
-            if compactImage == nil { compactImage = source?.image }
-            lastCompactFrame = compactFrame
-            lastCompactTime = now
-        } else if !hasFullPlatter, now - lastCompactTime < 0.15 {
-            compactFrame = lastCompactFrame
-        }
-
-        // 原图标已在终点，屏幕上移动的是窗口中的 morph 副本；补绘与角标必须跟随同一份副本。
-        var compactImageIsMoving = false
-        if let frame = compactFrame, let morph = matchingMorph(in: morphLayers, frame: frame, host: host) {
-            compactFrame = displayedMorphFrame(morph, in: host)
-            if let displayed = compactFrame {
-                // 移动时保留系统图标，避免采样与合成相差一帧造成重影；到位后再补足交接期间的空帧。
-                let isAtDestination = abs(displayed.midX - frame.midX) <= 1 && abs(displayed.midY - frame.midY) <= 1
-                compactImageIsSettled = compactImageIsSettled || isAtDestination
-                // AnimationKit 会把两端原图标一起淡出，这种合成路径需要沿移动位置持续补绘。
-                let usesLayerMorph = NSStringFromClass(type(of: morph)) == "AnimationKit.MagicMorphLayer"
-                compactImageIsMoving = !compactImageIsSettled && !usesLayerMorph
-            }
-        }
-        let showsCompactImage = searchTabIsActive && compactFrame != nil && compactImage != nil && !compactImageIsMoving
-        compactImageView.isHidden = !showsCompactImage
-        if showsCompactImage, let frame = compactFrame, let image = compactImage {
-            let color = (unselectedItemTintColor ?? .label).resolvedColor(with: traitCollection)
-            if renderedCompactImage !== image || renderedCompactColor != color {
-                renderedCompactImage = image
-                renderedCompactColor = color
-                compactImageView.image = image.withTintColor(color, renderingMode: .alwaysOriginal)
-            }
-            compactImageView.frame = frame
-        }
-        packageBadgeLabel.isHidden = true
-        if hasPackageBadge, let value = packageBadgeValue {
-            var badgeFrame: CGRect?
-            if !searchTabIsActive {
-                badgeFrame = tabIconFrame(at: 3, in: host, platters: allPlatters, morphLayers: morphLayers)
-            } else if let compactFrame {
-                if compactItemIndex == 3 { badgeFrame = compactFrame }
-            } else {
-                badgeFrame = fullPlatterIconFrame(at: 3, in: host, platters: allPlatters, morphLayers: morphLayers,
-                                                  fallback: compactItemIndex == 3 ? lastPackageBadgeFrame : nil)
-            }
-            if let badgeFrame {
-                lastPackageBadgeFrame = badgeFrame
-                lastPackageBadgeTime = now
-            } else if searchTabIsActive, compactItemIndex == 3, compactFrame == nil,
-                      !hasFullPlatter, now - lastPackageBadgeTime < 0.15 {
-                badgeFrame = lastPackageBadgeFrame
-            }
-            if let frame = badgeFrame {
-                // 与软件源角标使用相同的前景层和定位方式，完整红圈与数字一起覆盖在图标上方。
-                packageBadgeLabel.text = value
-                packageBadgeLabel.backgroundColor = packageBadgeController?.tabBarItem.badgeColor ?? .systemRed
-                let width = max(20, ceil(packageBadgeLabel.intrinsicContentSize.width) + 10)
-                packageBadgeLabel.frame = CGRect(x: frame.maxX - 10, y: frame.minY - 8, width: width, height: 20)
-                packageBadgeLabel.isHidden = false
-            }
-        }
-
-        guard sourceRefreshIsVisible else {
-            refreshBadge.isHidden = true
-            return
-        }
-        var sourceFrame: CGRect?
-        if !searchTabIsActive {
-            sourceFrame = tabIconFrame(at: 2, in: host, platters: allPlatters, morphLayers: morphLayers)
-        } else if let compactFrame {
-            if compactItemIndex == 2 { sourceFrame = compactFrame }
-        } else {
-            sourceFrame = fullPlatterIconFrame(at: 2, in: host, platters: allPlatters, morphLayers: morphLayers,
-                                               fallback: compactItemIndex == 2 ? lastSourceFrame : nil)
-        }
-        if let sourceFrame {
-            lastSourceFrame = sourceFrame
-            lastSourceTime = now
-        } else if searchTabIsActive, compactFrame == nil, !hasFullPlatter, now - lastSourceTime < 0.15 {
-            sourceFrame = lastSourceFrame
-        }
-        guard let sourceFrame else {
-            refreshBadge.isHidden = true
-            return
-        }
-        refreshBadge.frame = CGRect(x: sourceFrame.maxX - 10, y: sourceFrame.minY - 8, width: 20, height: 20)
-        refreshBadge.isHidden = false
-        // 角标始终是自有前景层中图标之后的子视图，整个红圈和白色转圈一起置前。
-        refreshBadge.setRefreshing(true)
-    }
-
-    private func fullPlatterIconFrame(at index: Int, in host: UIView, platters: [UIView],
-                                      morphLayers: [CALayer], fallback: CGRect?) -> CGRect? {
-        // 两类角标共用搜索切换的起点定位，选中透镜的放大副本不作为锚点。
-        let title = tabTitle(at: index)
-        for platter in platters where !platter.isHidden {
-            let frame = displayedFrame(of: platter, in: host)
-            guard frame.width > frame.height * 1.5,
-                  let source = tabImage(in: platter, title: title) else { continue }
-            let candidate = displayedFrame(of: source, in: host)
-            if validFrame(candidate), frame.intersects(candidate) {
-                if let morph = matchingMorph(in: morphLayers, frame: candidate, host: host) {
-                    return displayedMorphFrame(morph, in: host) ?? fallback
-                }
-                return visibleOpacity(of: platter, upTo: self) > 0.01 ? candidate : nil
-            }
-        }
-        return nil
-    }
-
-    private func tabIconFrame(at index: Int, in host: UIView, platters: [UIView], morphLayers: [CALayer]) -> CGRect? {
-        // 与队列滚动逻辑读取同一个原生目标；accessory 的 inline 通知不能代表动画起点。
-        var morphTarget: Int?
-        if let ivar = class_getInstanceVariable(UITabBar.self, "_visualProvider"),
-           let provider = object_getIvar(self, ivar) as? NSObject,
-           NSStringFromClass(type(of: provider)).contains("_UITabBarVisualProvider_Floating") {
-            morphTarget = (provider.value(forKey: "_currentMorphTarget") as? NSNumber)?.intValue
-        }
-        let isMinimized = morphTarget == 2
-        // 其它页面收缩时该标签的图标会退场，不能把它的旧角标留在队列上方。
-        guard !isMinimized || compactItemIndex == index else { return nil }
-
-        let barFrame = convert(bounds, to: host)
-        let isRightToLeft = effectiveUserInterfaceLayoutDirection == .rightToLeft
-        for platter in platters where !platter.isHidden {
-            // 用布局终点选择完整或紧凑容器；显示层宽度在动画中仍可能接近完整菜单。
-            let targetPlatterFrame = platter.convert(platter.bounds, to: host)
-            guard validFrame(targetPlatterFrame) else { continue }
-            let isCompact = targetPlatterFrame.width <= targetPlatterFrame.height * 1.5
-            guard isCompact == isMinimized else { continue }
-            if isCompact,
-               isRightToLeft ? targetPlatterFrame.midX <= barFrame.midX : targetPlatterFrame.midX >= barFrame.midX {
-                continue
-            }
-            let source = tabImage(in: platter, title: tabTitle(at: index))
-            let target: CGRect
-            if let source {
-                target = source.convert(source.bounds, to: host)
-            } else if isCompact {
-                // 紧凑按钮重挂载期间可能没有标题或原图标，使用与现有紧凑图标相同的中心位置。
-                target = CGRect(x: targetPlatterFrame.midX - 13, y: targetPlatterFrame.midY - 13, width: 26, height: 26)
-            } else {
-                continue
-            }
-            guard validFrame(target), targetPlatterFrame.contains(CGPoint(x: target.midX, y: target.midY)) else { continue }
-
-            // morph 按目标矩形匹配，再取移动中的显示矩形，不能拿旧图标的显示矩形匹配终点。
-            if let morph = matchingMorph(in: morphLayers, frame: target, host: host),
-               let displayed = displayedMorphFrame(morph, in: host), validFrame(displayed) {
-                return displayed
-            }
-            if visibleOpacity(of: platter, upTo: self) > 0.01 {
-                let platterFrame = displayedFrame(of: platter, in: host)
-                let displayed = source.map { displayedFrame(of: $0, in: host) }
-                    ?? CGRect(x: platterFrame.midX - 13, y: platterFrame.midY - 13, width: 26, height: 26)
-                guard validFrame(displayed) else { continue }
-                if morphTarget == 0, morphLayers.isEmpty {
-                    return correctedFullPlatterIconFrame(displayed, target: target, in: host,
-                                                         platter: platter, displayedPlatterFrame: platterFrame,
-                                                         targetPlatterFrame: targetPlatterFrame)
-                }
-                return displayed
-            }
-        }
-        // 交接时找不到有效图标就暂时隐藏，不回用完整菜单的旧位置。
-        return nil
-    }
-
-    private func correctedFullPlatterIconFrame(_ displayed: CGRect, target: CGRect, in host: UIView,
-                                               platter: UIView, displayedPlatterFrame: CGRect,
-                                               targetPlatterFrame: CGRect) -> CGRect {
-        let tolerance: CGFloat = 0.6
-        let offset = displayed.minX - target.minX
-        // 完整菜单选中态更新时，托盘显示层偶尔短暂丢失水平内边距，连带两个角标一起偏移。
-        guard abs(offset) >= 8, abs(displayed.minY - target.minY) < tolerance,
-              abs(offset - (displayedPlatterFrame.minX - targetPlatterFrame.minX)) < tolerance,
-              abs(displayedPlatterFrame.minY - targetPlatterFrame.minY) < tolerance,
-              abs(displayedPlatterFrame.width - targetPlatterFrame.width) < tolerance,
-              abs(displayedPlatterFrame.height - targetPlatterFrame.height) < tolerance,
-              platter.layer.animationKeys()?.isEmpty ?? true,
-              let parent = platter.superview else { return displayed }
-
-        // 只有托盘贴到静止父容器的起始边缘时才恢复水平内边距。
-        let parentTarget = parent.convert(parent.bounds, to: host)
-        let parentDisplayed = displayedFrame(of: parent, in: host)
-        let isRightToLeft = effectiveUserInterfaceLayoutDirection == .rightToLeft
-        let platterEdge = isRightToLeft ? displayedPlatterFrame.maxX : displayedPlatterFrame.minX
-        let parentEdge = isRightToLeft ? parentDisplayed.maxX : parentDisplayed.minX
-        let parentTargetEdge = isRightToLeft ? parentTarget.maxX : parentTarget.minX
-        guard abs(platterEdge - parentEdge) < tolerance,
-              abs(parentEdge - parentTargetEdge) < tolerance else { return displayed }
-
-        return displayed.offsetBy(dx: -offset, dy: 0)
-    }
-
-    private func tabTitle(at index: Int) -> String {
-        let keys = ["Featured_Page", "News_Page", "Sources_Page", "Packages_Page", "Search_Page"]
-        guard keys.indices.contains(index) else { return "" }
-        return String(localizationKey: keys[index])
-    }
-
-    private func tabPlatters(in view: UIView) -> [UIView] {
-        if NSStringFromClass(type(of: view)).contains("TabBarPlatterView") { return [view] }
-        return view.subviews.flatMap { tabPlatters(in: $0) }
-    }
-
-    private func tabImage(in view: UIView, title: String) -> UIImageView? {
-        let className = NSStringFromClass(type(of: view))
-        guard !className.contains("SelectedContentView"), !className.contains("Badge") else { return nil }
-        if view is UIControl, containsTitle(title, in: view), let image = firstImage(in: view) {
-            return image
-        }
-        return view.subviews.lazy.compactMap { self.tabImage(in: $0, title: title) }.first
-    }
-
-    private func firstImage(in view: UIView) -> UIImageView? {
-        let className = NSStringFromClass(type(of: view))
-        guard !className.contains("Badge"), !className.contains("SelectedContentView") else { return nil }
-        if let image = view as? UIImageView, image.image != nil { return image }
-        // 外层 UIControl 可能包含整组标签，不能把另一个按钮的图片误认成本按钮图片。
-        return view.subviews.lazy.filter { !($0 is UIControl) }.compactMap { self.firstImage(in: $0) }.first
-    }
-
-    private func containsTitle(_ title: String, in view: UIView) -> Bool {
-        if let label = view as? UILabel, label.text == title { return true }
-        return view.subviews.contains { containsTitle(title, in: $0) }
-    }
-
-    private func displayedFrame(of view: UIView, in host: UIView) -> CGRect {
-        // UIKit 重挂载时 presentation() 可能仍存在，但已经脱离窗口；跨树换算会丢掉标签栏偏移。
-        if let layer = connectedPresentationLayer(of: view),
-           let hostLayer = connectedPresentationLayer(of: host) {
-            return layer.convert(layer.bounds, to: hostLayer)
-        }
-        return view.convert(view.bounds, to: host)
-    }
-
-    private func visibleOpacity(of view: UIView, upTo host: UIView) -> CGFloat {
-        var opacity: CGFloat = 1
-        var current: UIView? = view
-        while let currentView = current, currentView !== host {
-            let layer = connectedPresentationLayer(of: currentView) ?? currentView.layer
-            if layer.isHidden { return 0 }
-            opacity *= CGFloat(layer.opacity)
-            current = currentView.superview
-        }
-        return opacity
-    }
-
-    private func connectedPresentationLayer(of view: UIView) -> CALayer? {
-        guard let layer = view.layer.presentation(), let windowLayer = view.window?.layer else { return nil }
-        var ancestor: CALayer? = layer
-        while let current = ancestor {
-            if current.model() === windowLayer { return layer }
-            ancestor = current.superlayer
-        }
-        return nil
-    }
-
-    private func tabMorphLayers(in view: UIView) -> [CALayer] {
-        var result: [CALayer] = []
-        let name = NSStringFromClass(type(of: view))
-        if (name == "_UIMagicMorphView" || name == "UIKit.MagicMorphView"), !view.isHidden {
-            // 新运行时把内部图标从 UIView 移到了 AnimationKit 图层，统一读取实际参与 morph 的层。
-            result.append(view.layer)
-            appendMorphLayers(in: view.layer, to: &result)
-        }
-        for child in view.subviews { result += tabMorphLayers(in: child) }
-        return result
-    }
-
-    private func appendMorphLayers(in layer: CALayer, to result: inout [CALayer]) {
-        for child in layer.sublayers ?? [] {
-            if NSStringFromClass(type(of: child)) == "AnimationKit.MagicMorphLayer" { result.append(child) }
-            appendMorphLayers(in: child, to: &result)
-        }
-    }
-
-    private func matchingMorph(in layers: [CALayer], frame: CGRect, host: UIView) -> CALayer? {
-        // 用目标图标的完整矩形匹配，避免把搜索图标或整块玻璃容器当成软件源图标。
-        layers.first {
-            let target = $0.convert($0.bounds, to: host.layer)
-            return abs(target.minX - frame.minX) < 1 && abs(target.minY - frame.minY) < 1 &&
-                abs(target.width - frame.width) < 1 && abs(target.height - frame.height) < 1
-        }
-    }
-
-    private func displayedMorphFrame(_ layer: CALayer, in host: UIView) -> CGRect? {
-        guard let presentation = layer.presentation(), let windowLayer = window?.layer,
-              let hostLayer = connectedPresentationLayer(of: host) else { return nil }
-        var ancestor: CALayer? = presentation
-        while let current = ancestor {
-            if current.model() === windowLayer { return presentation.convert(presentation.bounds, to: hostLayer) }
-            ancestor = current.superlayer
-        }
-        return nil
-    }
-
-    private func validFrame(_ frame: CGRect) -> Bool {
-        !frame.isNull && !frame.isInfinite && frame.width > 0 && frame.height > 0
+    override func willRemoveSubview(_ subview: UIView) {
+        onWillRemoveSubview?(subview)
+        super.willRemoveSubview(subview)
     }
 
     override var traitCollection: UITraitCollection {
@@ -571,32 +45,25 @@ class TabBar: UITabBar {
     }
 }
 
-private final class TabDecorationDisplayLinkTarget: NSObject {
-    weak var tabBar: TabBar?
+/// 承载软件源刷新转圈的角标视图。iOS 27 与原生回退模式下挂在系统 `_UIBarBadgeView` 内部。
+final class RefreshBadge: UIView {
+    private let spinner = UIActivityIndicatorView(style: .medium)
 
-    init(tabBar: TabBar) {
-        self.tabBar = tabBar
-    }
-
-    @objc func tick(_ sender: CADisplayLink) {
-        tabBar?.updateDecorationAnimation()
-    }
-}
-
-private final class TabRefreshBadgeView: UIView {
-    private let indicator = UIActivityIndicatorView(style: .medium)
-
-    init() {
+    init(usesNativeBackground: Bool = false) {
         super.init(frame: CGRect(x: 0, y: 0, width: 20, height: 20))
-        backgroundColor = .systemRed
-        layer.cornerRadius = 10
+        if !usesNativeBackground {
+            backgroundColor = .systemRed
+            layer.cornerRadius = 10
+        }
         isUserInteractionEnabled = false
-        isHidden = true
+        isAccessibilityElement = false
+        accessibilityElementsHidden = true
         accessibilityIdentifier = "Sileo.SourceRefreshBadge"
-        indicator.color = .white
-        indicator.transform = CGAffineTransform(scaleX: 0.56, y: 0.56)
-        indicator.accessibilityIdentifier = "Sileo.SourceRefreshIndicator"
-        addSubview(indicator)
+        spinner.color = .white
+        spinner.transform = CGAffineTransform(scaleX: 0.55, y: 0.55)
+        spinner.isUserInteractionEnabled = false
+        spinner.accessibilityIdentifier = "Sileo.SourceRefreshIndicator"
+        addSubview(spinner)
     }
 
     required init?(coder: NSCoder) {
@@ -605,11 +72,1113 @@ private final class TabRefreshBadgeView: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        indicator.center = CGPoint(x: bounds.midX, y: bounds.midY)
+        spinner.center = CGPoint(x: bounds.midX, y: bounds.midY)
     }
 
-    func setRefreshing(_ refreshing: Bool) {
-        if refreshing && !indicator.isAnimating { indicator.startAnimating() }
-        if !refreshing && indicator.isAnimating { indicator.stopAnimating() }
+    func start() {
+        if !spinner.isAnimating {
+            spinner.startAnimating()
+        }
     }
+
+    func stop() {
+        if spinner.isAnimating {
+            spinner.stopAnimating()
+        }
+    }
+}
+
+/// iOS 27 与原生回退路径下，把白色转圈挂到系统生成的 `_UIBarBadgeView` 内。
+@MainActor
+final class NativeRefreshBadge {
+    // 数字等宽空格保留原生单数字红圈的尺寸，留出中间位置绘制转圈。
+    static let value = "\u{2007}"
+
+    func update(in view: UIView, isRefreshing: Bool) {
+        if isNativeBadgeView(view) {
+            updateSpinner(in: view, isRefreshing: isRefreshing)
+            return
+        }
+        for subview in view.subviews {
+            update(in: subview, isRefreshing: isRefreshing)
+        }
+    }
+
+    private func isNativeBadgeView(_ view: UIView) -> Bool {
+        let className = NSStringFromClass(type(of: view))
+        if className == "_UIBarBadgeView" {
+            return true
+        }
+        // 回退匹配：若未来小版本调整了内部角标类名，仅对不含子角标的叶子角标视图匹配占位符。
+        guard className.localizedCaseInsensitiveContains("Badge"),
+              !className.localizedCaseInsensitiveContains("Container"),
+              max(view.bounds.width, view.bounds.height) <= 44,
+              !view.subviews.contains(where: { NSStringFromClass(type(of: $0)).localizedCaseInsensitiveContains("Badge") }) else {
+            return false
+        }
+        return view.subviews.contains { ($0 as? UILabel)?.text == Self.value }
+            || view.subviews.contains { $0 is RefreshBadge }
+    }
+
+    private func updateSpinner(in badge: UIView, isRefreshing: Bool) {
+        let existing = badge.subviews.compactMap { $0 as? RefreshBadge }
+        let isSource = isRefreshing && badge.subviews.contains { ($0 as? UILabel)?.text == Self.value }
+        guard isSource else {
+            for spinner in existing {
+                spinner.stop()
+                spinner.removeFromSuperview()
+            }
+            return
+        }
+        if let spinner = existing.first {
+            // 清理意外重复挂载的实例，并在切回前台或复用后确保转圈持续动画。
+            for duplicate in existing.dropFirst() {
+                duplicate.stop()
+                duplicate.removeFromSuperview()
+            }
+            if spinner.frame != badge.bounds {
+                spinner.frame = badge.bounds
+            }
+            if badge.subviews.last !== spinner {
+                badge.bringSubviewToFront(spinner)
+            }
+            spinner.start()
+            return
+        }
+
+        // 标签栏过渡会创建新的原生角标视图。转圈随角标自身的层级移动。
+        let refresh = RefreshBadge(usesNativeBackground: true)
+        refresh.frame = badge.bounds
+        refresh.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        badge.addSubview(refresh)
+        refresh.start()
+    }
+}
+
+/// iOS 27 标签切换期间，UIKit 会把液态玻璃透镜临时提升为 `UITabBar` 的顶层 `_UIPortalView` 兄弟视图，
+/// 使位于 `_UITabBarItemPlatterView` 内部的原生 `BadgeContainerView` 在切换与落位瞬间被透镜盖住。
+/// 此辅助器仅在透镜 `_UIPortalView` 活跃且未进入收展/搜索形变时，用系统同款 `CAPortalLayer`
+/// （通过 `matchesPosition`/`matchesTransform`/`matchesOpacity` 自动镜像，不使用任何手动坐标或偏移）
+/// 将原生角标容器提升到透镜之上；透镜移除或进入其他过渡时立刻同步卸载并恢复原生绘制。
+@MainActor
+final class NativeBadgePortalLift {
+    private typealias SetLayerIMP = @convention(c) (AnyObject, Selector, CALayer?) -> Void
+    private typealias SetBoolIMP = @convention(c) (AnyObject, Selector, ObjCBool) -> Void
+
+    private static let portalViewClassName = "_UIPortalView"
+    private static let sourceViewSelector = NSSelectorFromString("sourceView")
+    private static let setSourceLayerSelector = NSSelectorFromString("setSourceLayer:")
+    private static let setHidesSourceLayerSelector = NSSelectorFromString("setHidesSourceLayer:")
+    private static let setMatchesPositionSelector = NSSelectorFromString("setMatchesPosition:")
+    private static let setMatchesTransformSelector = NSSelectorFromString("setMatchesTransform:")
+    private static let setMatchesOpacitySelector = NSSelectorFromString("setMatchesOpacity:")
+
+    private var portalLayer: CALayer?
+    private weak var currentSourceLayer: CALayer?
+    private(set) var isActive = false
+
+    func update(in tabBar: UITabBar, excluding removingSubview: UIView? = nil) {
+        guard tabBar.window != nil, !tabBar.isHidden else {
+            deactivate()
+            return
+        }
+
+        let activeSubviews = tabBar.subviews.filter { $0 !== removingSubview }
+
+        // 正在进行收起/展开/搜索形变过渡时，绝不接管原生角标绘制。
+        let hasMorphTransition = activeSubviews.contains { subview in
+            let cls = NSStringFromClass(type(of: subview))
+            return cls.contains("Reparenting") || cls.contains("MagicMorph")
+        }
+        guard !hasMorphTransition else {
+            deactivate()
+            return
+        }
+
+        // 仅在系统为液态玻璃透镜插入顶层 `_UIPortalView` 时激活镜像提升。
+        guard let lensPortal = activeSubviews.first(where: isLiquidLensPortal) else {
+            deactivate()
+            return
+        }
+
+        // 紧凑托盘与展开托盘同时可见时处于收展/搜索切换中，立即退出提升。
+        let hasVisibleCompactPlatter = activeSubviews.contains { subview in
+            let cls = NSStringFromClass(type(of: subview))
+            return cls.contains("PlatterView")
+                && !cls.contains("ItemPlatterView")
+                && !subview.isHidden
+                && subview.alpha > 0.01
+        }
+        guard !hasVisibleCompactPlatter else {
+            deactivate()
+            return
+        }
+
+        guard let expandedPlatter = activeSubviews.first(where: { subview in
+            NSStringFromClass(type(of: subview)).contains("_UITabBarItemPlatterView")
+                && !subview.isHidden
+                && subview.alpha > 0.01
+        }) else {
+            deactivate()
+            return
+        }
+
+        guard let badgeContainer = expandedPlatter.subviews.first(where: { subview in
+            NSStringFromClass(type(of: subview)).contains("BadgeContainerView")
+                && !subview.isHidden
+                && subview.alpha > 0.01
+        }) else {
+            deactivate()
+            return
+        }
+
+        let hasVisibleBadge = badgeContainer.subviews.contains { !$0.isHidden && $0.alpha > 0.01 }
+        guard hasVisibleBadge else {
+            deactivate()
+            return
+        }
+
+        activate(sourceLayer: badgeContainer.layer, above: lensPortal.layer, in: tabBar.layer)
+    }
+
+    func deactivate() {
+        guard let portal = portalLayer else {
+            currentSourceLayer = nil
+            isActive = false
+            return
+        }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        setBool(portal, selector: Self.setHidesSourceLayerSelector, value: false)
+        setLayer(portal, selector: Self.setSourceLayerSelector, value: nil)
+        portal.isHidden = true
+        portal.removeFromSuperlayer()
+        CATransaction.commit()
+        currentSourceLayer = nil
+        isActive = false
+    }
+
+    private func activate(sourceLayer: CALayer, above lensLayer: CALayer, in hostLayer: CALayer) {
+        guard let portal = ensurePortalLayer() else { return }
+        let targetZ = max(lensLayer.zPosition, 0) + 1
+
+        if isActive,
+           currentSourceLayer === sourceLayer,
+           portal.superlayer === hostLayer,
+           portal.zPosition == targetZ,
+           !portal.isHidden {
+            return
+        }
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        if currentSourceLayer !== sourceLayer {
+            setBool(portal, selector: Self.setHidesSourceLayerSelector, value: false)
+            setLayer(portal, selector: Self.setSourceLayerSelector, value: sourceLayer)
+            currentSourceLayer = sourceLayer
+        }
+        setBool(portal, selector: Self.setMatchesPositionSelector, value: true)
+        setBool(portal, selector: Self.setMatchesTransformSelector, value: true)
+        setBool(portal, selector: Self.setMatchesOpacitySelector, value: true)
+        setBool(portal, selector: Self.setHidesSourceLayerSelector, value: true)
+        portal.zPosition = targetZ
+        portal.isHidden = false
+        if portal.superlayer !== hostLayer {
+            hostLayer.addSublayer(portal)
+        }
+        CATransaction.commit()
+        isActive = true
+    }
+
+    private func ensurePortalLayer() -> CALayer? {
+        if let portalLayer {
+            return portalLayer
+        }
+        guard let portalClass = NSClassFromString("CAPortalLayer") as? CALayer.Type else {
+            return nil
+        }
+        let layer = portalClass.init()
+        guard layer.responds(to: Self.setSourceLayerSelector),
+              layer.responds(to: Self.setHidesSourceLayerSelector),
+              layer.responds(to: Self.setMatchesPositionSelector),
+              layer.responds(to: Self.setMatchesTransformSelector),
+              layer.responds(to: Self.setMatchesOpacitySelector) else {
+            return nil
+        }
+        layer.name = "Sileo.NativeBadgePortalLift"
+        layer.allowsEdgeAntialiasing = true
+        portalLayer = layer
+        return layer
+    }
+
+    private func isLiquidLensPortal(_ view: UIView) -> Bool {
+        guard NSStringFromClass(type(of: view)) == Self.portalViewClassName,
+              !view.isHidden,
+              view.responds(to: Self.sourceViewSelector),
+              let sourceView = view.perform(Self.sourceViewSelector)?.takeUnretainedValue() as? UIView,
+              let sourceSuperview = sourceView.superview else {
+            return false
+        }
+        return NSStringFromClass(type(of: sourceSuperview)).contains("LiquidLens")
+    }
+
+    private func setLayer(_ target: CALayer, selector: Selector, value: CALayer?) {
+        guard target.responds(to: selector) else { return }
+        let imp = target.method(for: selector)
+        let fn = unsafeBitCast(imp, to: SetLayerIMP.self)
+        fn(target, selector, value)
+    }
+
+    private func setBool(_ target: CALayer, selector: Selector, value: Bool) {
+        guard target.responds(to: selector) else { return }
+        let imp = target.method(for: selector)
+        let fn = unsafeBitCast(imp, to: SetBoolIMP.self)
+        fn(target, selector, ObjCBool(value))
+    }
+}
+
+/// iOS 26 专用锚点角标渲染器（基于独立 Demo 第 34 号验收基线）。
+/// 保留原生 `UITab.badgeValue` 供 UIKit 生成定位视图，通过透明外观隐藏原生绘制，
+/// 在应用窗口宿主层以单图层栅格化绘制红圈、数字胶囊和转圈动画；若内部层级不匹配则回退原生角标。
+@MainActor
+final class AnchoredBadgeRenderer {
+    private enum Kind: Hashable { case refresh, count }
+
+    private final class Marker: UIView {
+        var kind: Kind
+
+        init(kind: Kind, frame: CGRect) {
+            self.kind = kind
+            super.init(frame: frame)
+            isOpaque = false
+            isUserInteractionEnabled = false
+            accessibilityElementsHidden = true
+            accessibilityIdentifier = "Sileo.BadgeAnchor"
+        }
+
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
+        }
+    }
+
+    private struct Track {
+        let kind: Kind
+        let marker: Marker
+        let source: UIView
+        let portal: UIView?
+        let motionView: UIView?
+        let viewport: UIView?
+        let visibilityRoot: UIView
+        var referencePlatter: UIView? = nil
+    }
+
+    private struct Placement {
+        let frame: CGRect
+        let alpha: CGFloat
+    }
+
+    private struct MotionKey: Hashable {
+        let kind: Kind
+        let view: ObjectIdentifier
+    }
+
+    private struct MotionPlacement {
+        var strongest: Placement
+        var combinedAlpha: CGFloat
+        let groupAlpha: CGFloat
+    }
+
+    private struct RefreshArtworkKey: Equatable {
+        let color: CGColor
+        let scale: CGFloat
+        let interfaceStyle: UIUserInterfaceStyle
+        let contrast: UIAccessibilityContrast
+    }
+
+    private struct CountArtworkKey: Equatable {
+        let text: String
+        let color: CGColor
+        let scale: CGFloat
+        let interfaceStyle: UIUserInterfaceStyle
+        let contrast: UIAccessibilityContrast
+    }
+
+    private static let portalClass = "_UIPortalView"
+    private static let sourceSelector = NSSelectorFromString("sourceView")
+    private static let diameter: CGFloat = 18 + 1 / 3
+    private static let fallbackGraceDuration: CFTimeInterval = 0.75
+    private static let countTextAttributes: [NSAttributedString.Key: Any] = [
+        .font: UIFont.systemFont(ofSize: 13),
+        .foregroundColor: UIColor.white
+    ]
+
+    private let host = UIView()
+    private weak var hostView: UIView?
+    private weak var attachedWindow: UIWindow?
+    private var lastWindowBounds: CGRect = .zero
+    private let refresh = CALayer()
+    private let count = CALayer()
+    private let fallbackRefreshBadge = NativeRefreshBadge()
+
+    private var isRefreshing: Bool
+    private var countValue: String?
+    private var countBadgeColor: UIColor?
+
+    private var originalStandardAppearance: UITabBarAppearance
+    private var originalScrollEdgeAppearance: UITabBarAppearance?
+    private(set) var isUsingNativeFallback = false
+    private var mismatchStartTime: CFTimeInterval?
+
+    private var refreshArtworkKey: RefreshArtworkKey?
+    private var refreshFrames: [CGImage] = []
+    private var countArtworkKey: CountArtworkKey?
+
+    private var topology: [ObjectIdentifier] = []
+    private var directTracks: [Track] = []
+    private var transitionTracks: [Track] = []
+    private var transitionRootIDs: Set<ObjectIdentifier> = []
+    private var outgoingTracks: [Kind: Track] = [:]
+    private var needsDiscovery = true
+
+    var hasActiveBadges: Bool {
+        isRefreshing || countValue != nil
+    }
+
+    var needsDisplayUpdates: Bool {
+        if isUsingNativeFallback {
+            return isRefreshing
+        }
+        return hasActiveBadges
+    }
+
+    var needsHighFrameRate: Bool {
+        !isUsingNativeFallback && hasActiveBadges
+    }
+
+    init(tabBar: UITabBar,
+         hostView: UIView,
+         isRefreshing: Bool,
+         countValue: String?,
+         countBadgeColor: UIColor? = nil) {
+        self.hostView = hostView
+        self.isRefreshing = isRefreshing
+        self.countValue = countValue.flatMap { $0.isEmpty ? nil : $0 }
+        self.countBadgeColor = countBadgeColor
+        self.originalStandardAppearance = tabBar.standardAppearance.copy()
+        self.originalScrollEdgeAppearance = tabBar.scrollEdgeAppearance?.copy()
+
+        host.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        host.isUserInteractionEnabled = false
+        host.accessibilityElementsHidden = true
+        host.accessibilityIdentifier = "Sileo.AnchoredBadgeHost"
+        refresh.name = "Sileo.RasterRefreshBadge"
+        count.name = "Sileo.RasterPackageBadge"
+        for layer in [refresh, count] {
+            layer.isHidden = true
+            host.layer.addSublayer(layer)
+        }
+
+        applyCurrentAppearances(to: tabBar)
+    }
+
+    func setRefreshing(_ refreshing: Bool, in tabBar: UITabBar) {
+        guard isRefreshing != refreshing else { return }
+        isRefreshing = refreshing
+        mismatchStartTime = nil
+        if !refreshing {
+            outgoingTracks[.refresh] = nil
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            refresh.isHidden = true
+            refresh.removeAnimation(forKey: "refreshRotation")
+            CATransaction.commit()
+            if isUsingNativeFallback {
+                fallbackRefreshBadge.update(in: tabBar, isRefreshing: false)
+            }
+        }
+        invalidateLayout()
+    }
+
+    func setCount(_ value: String?, badgeColor: UIColor?, in tabBar: UITabBar) {
+        let normalized = value.flatMap { $0.isEmpty ? nil : $0 }
+        guard countValue != normalized || countBadgeColor != badgeColor else { return }
+        countValue = normalized
+        countBadgeColor = badgeColor
+        mismatchStartTime = nil
+        if normalized == nil {
+            outgoingTracks[.count] = nil
+            countArtworkKey = nil
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            count.isHidden = true
+            count.contents = nil
+            CATransaction.commit()
+        }
+        invalidateLayout()
+    }
+
+    func updateBaseAppearances(in tabBar: UITabBar, transform: (UITabBarAppearance) -> UITabBarAppearance) {
+        originalStandardAppearance = transform(originalStandardAppearance)
+        if let scrollEdge = originalScrollEdgeAppearance {
+            originalScrollEdgeAppearance = transform(scrollEdge)
+        }
+        applyCurrentAppearances(to: tabBar)
+    }
+
+    func invalidateLayout() {
+        needsDiscovery = true
+    }
+
+    func detach() {
+        attachedWindow = nil
+        lastWindowBounds = .zero
+        mismatchStartTime = nil
+        resetTracks()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        refresh.isHidden = true
+        count.isHidden = true
+        CATransaction.commit()
+        host.removeFromSuperview()
+    }
+
+    func teardown(restoring tabBar: UITabBar?) {
+        detach()
+        refresh.removeAnimation(forKey: "refreshRotation")
+        if let tabBar {
+            removeAllMarkers(in: tabBar)
+            restoreOriginalAppearances(to: tabBar)
+        }
+    }
+
+    func update(in tabBar: UITabBar,
+                isSearchTabSelected: Bool,
+                selectedPrimaryIsSources: Bool,
+                selectedPrimaryIsPackages: Bool) {
+        guard let window = hostView?.window, tabBar.window === window else {
+            detach()
+            return
+        }
+
+        if isUsingNativeFallback {
+            if attachedWindow !== window {
+                // 窗口迁移后允许在新窗口环境重新评估。
+                attachedWindow = window
+                lastWindowBounds = window.bounds
+                isUsingNativeFallback = false
+                mismatchStartTime = nil
+                resetTracks()
+                applyCurrentAppearances(to: tabBar)
+            } else {
+                fallbackRefreshBadge.update(in: tabBar, isRefreshing: isRefreshing)
+                return
+            }
+        }
+
+        if attachedWindow !== window || lastWindowBounds != window.bounds {
+            attachedWindow = window
+            lastWindowBounds = window.bounds
+            mismatchStartTime = nil
+            resetTracks()
+            host.frame = window.bounds
+            if host.superview !== window {
+                window.addSubview(host)
+            }
+        } else if host.superview !== window {
+            // 角标在窗口的展示层绘制，避开标签控制器临时提升过渡视图的层级。
+            host.frame = window.bounds
+            window.addSubview(host)
+        }
+
+        guard hasActiveBadges else {
+            mismatchStartTime = nil
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            if !refresh.isHidden { refresh.isHidden = true }
+            if !count.isHidden { count.isHidden = true }
+            if refresh.animation(forKey: "refreshRotation") != nil {
+                refresh.removeAnimation(forKey: "refreshRotation")
+            }
+            CATransaction.commit()
+            outgoingTracks.removeAll(keepingCapacity: true)
+            return
+        }
+
+        let branches = tabBar.subviews
+        let branchChildren = branches.flatMap(\.subviews)
+        let candidates = branchChildren.compactMap { portal -> (portal: UIView, root: UIView)? in
+            guard let source = portalSource(portal) else { return nil }
+            return (portal, source)
+        }
+        var distinctRoots: Set<ObjectIdentifier> = []
+        let candidateRoots = candidates.map(\.root).filter { distinctRoots.insert(ObjectIdentifier($0)).inserted }
+        let current = (branches + branchChildren + candidateRoots + candidateRoots.flatMap(\.subviews))
+            .map(ObjectIdentifier.init)
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+
+        let layoutChanged = needsDiscovery || topology != current
+        let missingDirectActive =
+            (isRefreshing && !directTracks.contains(where: { $0.kind == .refresh })) ||
+            (countValue != nil && !directTracks.contains(where: { $0.kind == .count }))
+        let needsDirectDiscovery = layoutChanged || missingDirectActive
+        // 系统可能先插入 Portal，再填入动画树；或动画中新增角标。过渡未覆盖当前活跃角标时重新检查候选视图。
+        let missingTransitionActive = !candidates.isEmpty && (
+            transitionRootIDs.isEmpty ||
+            (isRefreshing && !transitionTracks.contains(where: { $0.kind == .refresh })) ||
+            (countValue != nil && !transitionTracks.contains(where: { $0.kind == .count }))
+        )
+        let needsTransitionDiscovery = layoutChanged || missingTransitionActive
+
+        let platters = branches.filter(isPlatter)
+        if needsDirectDiscovery {
+            topology = current
+            needsDiscovery = false
+            directTracks = platters.flatMap { platter in
+                markers(in: platter).compactMap { marker in
+                    guard let icon = marker.superview else { return nil }
+                    return Track(kind: marker.kind, marker: marker, source: icon, portal: nil, motionView: nil,
+                                 viewport: nil, visibilityRoot: tabBar, referencePlatter: platter)
+                }
+            }
+        }
+        if needsTransitionDiscovery {
+            transitionRootIDs.removeAll(keepingCapacity: true)
+            transitionTracks.removeAll(keepingCapacity: true)
+            for root in candidateRoots {
+                guard let tracks = tracks(in: root) else { continue }
+                transitionRootIDs.insert(ObjectIdentifier(root))
+                transitionTracks.append(contentsOf: tracks)
+            }
+        }
+        let presenters = candidates.filter { transitionRootIDs.contains(ObjectIdentifier($0.root)) }
+        let hasCoveringModal = positionHost(in: window)
+        if host.isHidden != tabBar.isHidden { host.isHidden = tabBar.isHidden }
+
+        // 每帧只读取缓存的图标、过渡层和它们的坐标。显示树改变时才重新查找。
+        var placements: [Kind: Placement] = [:]
+        var waitingForPresentation: Set<Kind> = []
+        var ready: Set<Kind> = []
+        if presenters.isEmpty {
+            outgoingTracks.removeAll(keepingCapacity: true)
+            for track in directTracks where isActive(track.kind) && placements[track.kind] == nil {
+                if let position = placement(for: track, window: window) {
+                    placements[track.kind] = position
+                    outgoingTracks[track.kind] = track
+                }
+            }
+        } else {
+            var motionPlacements: [MotionKey: MotionPlacement] = [:]
+            for track in transitionTracks where isActive(track.kind) {
+                guard let portal = track.portal, portal.window === window else { continue }
+                if let visible = portal.layer.presentation() {
+                    ready.insert(track.kind)
+                    guard let position = placement(for: track, window: window, view: portal, layer: visible) else { continue }
+                    if let motion = track.motionView {
+                        let key = MotionKey(kind: track.kind, view: ObjectIdentifier(motion))
+                        if var group = motionPlacements[key] {
+                            if position.alpha > group.strongest.alpha { group.strongest = position }
+                            group.combinedAlpha += position.alpha
+                            motionPlacements[key] = group
+                        } else {
+                            motionPlacements[key] = MotionPlacement(
+                                strongest: position,
+                                combinedAlpha: position.alpha,
+                                groupAlpha: opacity(of: motion, through: track.visibilityRoot)
+                            )
+                        }
+                    } else if position.alpha > (placements[track.kind]?.alpha ?? -1) {
+                        placements[track.kind] = position
+                    }
+                } else if let motion = track.motionView, let layer = motion.layer.presentation(),
+                          let position = placement(for: track, window: window, view: motion, layer: layer) {
+                    if position.alpha > (placements[track.kind]?.alpha ?? -1) { placements[track.kind] = position }
+                } else {
+                    waitingForPresentation.insert(track.kind)
+                }
+            }
+            // 同一个动画视图交叉淡化图标副本。角标使用整组图标的可见度。
+            for (key, group) in motionPlacements {
+                let alpha = min(group.groupAlpha, group.combinedAlpha)
+                if alpha > (placements[key.kind]?.alpha ?? -1) {
+                    placements[key.kind] = Placement(frame: group.strongest.frame, alpha: alpha)
+                }
+            }
+
+            // 新过渡尚未提交时，读仍在显示的旧图标。旧图标消失后不沿用旧位置。
+            let pendingRoot = presenters.allSatisfy { $0.portal.layer.presentation() == nil }
+            for (kind, track) in outgoingTracks where isActive(kind) && placements[kind] == nil && !ready.contains(kind) {
+                guard pendingRoot || waitingForPresentation.contains(kind),
+                      track.marker.isDescendant(of: tabBar),
+                      let position = placement(for: track, window: window) else { continue }
+                placements[kind] = position
+            }
+        }
+
+        if checkHierarchyMismatchFallback(
+            in: tabBar,
+            window: window,
+            platters: platters,
+            placements: placements,
+            isTransitioning: !presenters.isEmpty || !candidates.isEmpty,
+            hasCoveringModal: hasCoveringModal,
+            isSearchTabSelected: isSearchTabSelected,
+            selectedPrimaryIsSources: selectedPrimaryIsSources,
+            selectedPrimaryIsPackages: selectedPrimaryIsPackages
+        ) {
+            return
+        }
+
+        prepareArtwork(in: window)
+        draw(refresh, at: isRefreshing ? placements[.refresh] : nil)
+        draw(count, at: countValue != nil ? placements[.count] : nil)
+    }
+
+    private func isActive(_ kind: Kind) -> Bool {
+        switch kind {
+        case .refresh: return isRefreshing
+        case .count: return countValue != nil
+        }
+    }
+
+    private func resetTracks() {
+        topology.removeAll(keepingCapacity: true)
+        directTracks.removeAll(keepingCapacity: true)
+        transitionTracks.removeAll(keepingCapacity: true)
+        transitionRootIDs.removeAll(keepingCapacity: true)
+        outgoingTracks.removeAll(keepingCapacity: true)
+        needsDiscovery = true
+    }
+
+    /// 当存在队列弹层、设置页或系统弹窗时，将角标宿主紧贴在根视图分支上方、模态过渡层下方，
+    /// 避免红圈浮在模态页面之上；常态置顶于窗口最前，与验收基线一致。
+    private func positionHost(in window: UIWindow) -> Bool {
+        if let rootBranch = windowRootBranch(in: window),
+           let rootIndex = window.subviews.firstIndex(where: { $0 === rootBranch }),
+           window.subviews.enumerated().contains(where: { index, subview in
+               index > rootIndex && subview !== host && isModalTransitionContainer(subview)
+           }) {
+            let desiredIndex = rootIndex + 1
+            if window.subviews[safe: desiredIndex] !== host {
+                window.insertSubview(host, aboveSubview: rootBranch)
+            }
+            return true
+        }
+        if window.subviews.last !== host {
+            window.bringSubviewToFront(host)
+        }
+        return false
+    }
+
+    private func windowRootBranch(in window: UIWindow) -> UIView? {
+        var current = hostView
+        while let view = current {
+            if view.superview === window {
+                return view
+            }
+            current = view.superview
+        }
+        return nil
+    }
+
+    private func isModalTransitionContainer(_ view: UIView) -> Bool {
+        let className = name(view)
+        return className == "UITransitionView" || className == "UIDropShadowView"
+    }
+
+    /// 稳定可见状态下若长期找不到预期内部视图，自动恢复原 appearance 并回退到系统原生角标。
+    private func checkHierarchyMismatchFallback(
+        in tabBar: UITabBar,
+        window: UIWindow,
+        platters: [UIView],
+        placements: [Kind: Placement],
+        isTransitioning: Bool,
+        hasCoveringModal: Bool,
+        isSearchTabSelected: Bool,
+        selectedPrimaryIsSources: Bool,
+        selectedPrimaryIsPackages: Bool
+    ) -> Bool {
+        guard !isTransitioning,
+              !hasCoveringModal,
+              !isSearchTabSelected,
+              !tabBar.isHidden,
+              !tabBar.bounds.isEmpty,
+              opacity(of: tabBar, through: window) > 0.01,
+              tabBar.convert(tabBar.bounds, to: window).intersects(window.bounds) else {
+            mismatchStartTime = nil
+            return false
+        }
+
+        var expectedKinds: Set<Kind> = []
+        if platters.isEmpty {
+            if isRefreshing { expectedKinds.insert(.refresh) }
+            if countValue != nil { expectedKinds.insert(.count) }
+        } else {
+            let hasVisibleExpandedPlatter = platters.contains { platter in
+                !platter.isHidden &&
+                opacity(of: platter, through: tabBar) > 0.01 &&
+                platter.bounds.width > platter.bounds.height * 1.5
+            }
+            if hasVisibleExpandedPlatter {
+                if isRefreshing { expectedKinds.insert(.refresh) }
+                if countValue != nil { expectedKinds.insert(.count) }
+            } else {
+                if isRefreshing && selectedPrimaryIsSources { expectedKinds.insert(.refresh) }
+                if countValue != nil && selectedPrimaryIsPackages { expectedKinds.insert(.count) }
+            }
+        }
+
+        guard !expectedKinds.isEmpty else {
+            mismatchStartTime = nil
+            return false
+        }
+
+        let allExpectedResolved = expectedKinds.allSatisfy { placements[$0] != nil }
+        if allExpectedResolved {
+            mismatchStartTime = nil
+            return false
+        }
+
+        needsDiscovery = true
+        let now = CACurrentMediaTime()
+        if let start = mismatchStartTime {
+            if now - start >= Self.fallbackGraceDuration {
+                activateNativeFallback(in: tabBar)
+                return true
+            }
+        } else {
+            mismatchStartTime = now
+        }
+        return false
+    }
+
+    private func activateNativeFallback(in tabBar: UITabBar) {
+        isUsingNativeFallback = true
+        mismatchStartTime = nil
+        resetTracks()
+        refresh.isHidden = true
+        count.isHidden = true
+        refresh.removeAnimation(forKey: "refreshRotation")
+        host.removeFromSuperview()
+        removeAllMarkers(in: tabBar)
+        restoreOriginalAppearances(to: tabBar)
+        fallbackRefreshBadge.update(in: tabBar, isRefreshing: isRefreshing)
+    }
+
+    private func applyCurrentAppearances(to tabBar: UITabBar) {
+        if isUsingNativeFallback {
+            restoreOriginalAppearances(to: tabBar)
+        } else {
+            tabBar.standardAppearance = Self.makingBadgesTransparent(from: originalStandardAppearance)
+            tabBar.scrollEdgeAppearance = originalScrollEdgeAppearance.map { Self.makingBadgesTransparent(from: $0) }
+        }
+    }
+
+    private func restoreOriginalAppearances(to tabBar: UITabBar) {
+        tabBar.standardAppearance = originalStandardAppearance.copy()
+        tabBar.scrollEdgeAppearance = originalScrollEdgeAppearance?.copy()
+    }
+
+    private static func makingBadgesTransparent(from source: UITabBarAppearance) -> UITabBarAppearance {
+        let appearance = source.copy()
+        for layout in [appearance.stackedLayoutAppearance, appearance.inlineLayoutAppearance, appearance.compactInlineLayoutAppearance] {
+            for state in [layout.normal, layout.selected, layout.focused, layout.disabled] {
+                state.badgeBackgroundColor = .clear
+                var attributes = state.badgeTextAttributes
+                attributes[.foregroundColor] = UIColor.clear
+                state.badgeTextAttributes = attributes
+            }
+        }
+        return appearance
+    }
+
+    private func badgeSize(for kind: Kind) -> CGSize {
+        switch kind {
+        case .refresh:
+            return CGSize(width: Self.diameter, height: Self.diameter)
+        case .count:
+            guard let text = countValue, !text.isEmpty else {
+                return CGSize(width: Self.diameter, height: Self.diameter)
+            }
+            return countBadgeSize(for: text)
+        }
+    }
+
+    private func countBadgeSize(for text: String) -> CGSize {
+        let title = NSAttributedString(string: text, attributes: Self.countTextAttributes)
+        let textWidth = ceil(title.size().width)
+        let height = Self.diameter
+        // 单数字保持与 Demo v34 一致的 18⅓ pt 正圆，多位数平滑横向扩展为胶囊。
+        let width = textWidth <= height - 8 ? height : max(height, textWidth + 10)
+        return CGSize(width: width, height: height)
+    }
+
+    private func markers(in platter: UIView) -> [Marker] {
+        platter.subviews.flatMap(\.subviews)
+            .filter { name($0) == "_UITabButton" }
+            .compactMap { button in
+                button.subviews.compactMap { $0 as? UIImageView }.first(where: { $0.image != nil })
+            }
+            .compactMap(marker(for:))
+    }
+
+    private func marker(for icon: UIImageView) -> Marker? {
+        guard let button = icon.superview, name(button) == "_UITabButton",
+              let badge = button.subviews.first(where: { name($0) == "_UIBarBadgeView" }),
+              !badge.isHidden,
+              let label = badge.subviews.compactMap({ $0 as? UILabel }).first?.text,
+              !label.isEmpty else {
+            removeMarkers(from: icon)
+            return nil
+        }
+        let kind: Kind = label == NativeRefreshBadge.value ? .refresh : .count
+        guard isActive(kind) else {
+            removeMarkers(from: icon)
+            return nil
+        }
+
+        // 根据图标尾缘和原生角标的纵向布局确定锚点，不使用屏幕坐标。
+        let native = badge.convert(badge.bounds, to: icon)
+        guard !native.isEmpty, abs(native.midY - icon.bounds.midY) < icon.bounds.height else { return nil }
+        let size = badgeSize(for: kind)
+        let inset: CGFloat = 5
+        let x = icon.effectiveUserInterfaceLayoutDirection == .rightToLeft
+            ? icon.bounds.minX + inset - size.width : icon.bounds.maxX - inset
+        let frame = CGRect(x: x, y: native.minY, width: size.width, height: size.height)
+        if let marker = icon.subviews.compactMap({ $0 as? Marker }).first {
+            marker.kind = kind
+            if marker.frame != frame { marker.frame = frame }
+            return marker
+        }
+        let marker = Marker(kind: kind, frame: frame)
+        icon.addSubview(marker)
+        return marker
+    }
+
+    private func removeMarkers(from icon: UIView) {
+        for subview in icon.subviews where subview is Marker {
+            subview.removeFromSuperview()
+        }
+    }
+
+    private func removeAllMarkers(in root: UIView) {
+        for subview in root.subviews {
+            if subview is Marker {
+                subview.removeFromSuperview()
+            } else {
+                removeAllMarkers(in: subview)
+            }
+        }
+    }
+
+    private func tracks(in root: UIView) -> [Track]? {
+        var hasMorphingPortal = false
+        var dedicated: [Track] = []
+        var platter: [Track] = []
+        let visibilityRoot = root.superview ?? root
+        var stack: [(view: UIView, motion: UIView?, viewport: UIView?)] = [(root, nil, nil)]
+        while let (view, enclosingMotion, enclosingViewport) = stack.popLast() {
+            let startsMotion = name(view) == "_UIMagicMorphView"
+            let motion = startsMotion ? view : enclosingMotion
+            let viewport = startsMotion || motion == nil ? nil : (enclosingViewport ?? view)
+            if let motion, let source = portalSource(view) {
+                // 旧版和新版 UIKit 的裁剪视图接口不同，Portal 的实际父子关系都能观察到。
+                hasMorphingPortal = true
+                if let image = source as? UIImageView, let marker = marker(for: image) {
+                    dedicated.append(Track(kind: marker.kind, marker: marker, source: image, portal: view,
+                                           motionView: motion, viewport: nil, visibilityRoot: visibilityRoot))
+                } else if isPlatter(source), let viewport {
+                    platter.append(contentsOf: markers(in: source).map { marker in
+                        Track(kind: marker.kind, marker: marker, source: source, portal: view,
+                              motionView: nil, viewport: viewport, visibilityRoot: visibilityRoot)
+                    })
+                }
+                continue
+            }
+            stack.append(contentsOf: view.subviews.map { ($0, motion, viewport) })
+        }
+        guard hasMorphingPortal else { return nil }
+        let dedicatedKinds = Set(dedicated.map(\.kind))
+        return dedicated + platter.filter { !dedicatedKinds.contains($0.kind) }
+    }
+
+    private func placement(for track: Track, window: UIWindow, view presentedView: UIView? = nil, layer: CALayer? = nil) -> Placement? {
+        // 透明锚点由图标持有。读取图标的显示层，锚点本身无需提交独立动画。
+        let view = presentedView ?? track.portal ?? track.source
+        guard view.window === window,
+              let from = layer ?? view.layer.presentation(), let to = host.layer.presentation() else { return nil }
+        var alpha = opacity(of: view, through: track.visibilityRoot)
+        guard alpha > 0.001 else { return nil }
+
+        let rect: CGRect
+        if track.portal != nil {
+            let original = track.source.bounds
+            guard !original.isEmpty, !from.bounds.isEmpty else { return nil }
+            let local = track.marker.convert(track.marker.bounds, to: track.source)
+            let sx = from.bounds.width / original.width
+            let sy = from.bounds.height / original.height
+            rect = CGRect(x: from.bounds.minX + (local.minX - original.minX) * sx,
+                          y: from.bounds.minY + (local.minY - original.minY) * sy,
+                          width: local.width * sx, height: local.height * sy)
+            if let viewport = track.viewport, let clip = viewport.layer.presentation(),
+               let icon = track.marker.superview {
+                let iconRect = icon.convert(icon.bounds, to: track.source)
+                let projectedIcon = CGRect(x: from.bounds.minX + (iconRect.minX - original.minX) * sx,
+                                           y: from.bounds.minY + (iconRect.minY - original.minY) * sy,
+                                           width: iconRect.width * sx, height: iconRect.height * sy)
+                let visible = clip.convert(clip.bounds, to: from).intersection(projectedIcon)
+                guard !visible.isEmpty, projectedIcon.width > 0 else { return nil }
+                alpha *= min(1, visible.width / projectedIcon.width)
+            }
+        } else {
+            let local = track.marker.frame
+            let original = track.source.bounds
+            guard !original.isEmpty, !from.bounds.isEmpty else { return nil }
+            let sx = from.bounds.width / original.width
+            let sy = from.bounds.height / original.height
+            rect = CGRect(x: from.bounds.minX + (local.minX - original.minX) * sx,
+                          y: from.bounds.minY + (local.minY - original.minY) * sy,
+                          width: local.width * sx, height: local.height * sy)
+        }
+
+        let frame: CGRect
+        if let platter = track.referencePlatter, platter.window === window,
+           let platterLayer = platter.layer.presentation() {
+            // 保留图标在托盘内的动画，使用托盘实际布局换算到宿主。
+            // 标签切换期间，UIKit 可能短暂偏移整条旧的显示树。
+            let localFrame = from.convert(rect, to: platterLayer)
+            frame = platter.convert(localFrame, to: host)
+        } else {
+            frame = from.convert(rect, to: to)
+        }
+        guard !frame.isEmpty, !frame.isInfinite, frame.intersects(host.bounds), alpha.isFinite else { return nil }
+        return Placement(frame: frame, alpha: alpha)
+    }
+
+    private func opacity(of view: UIView, through root: UIView) -> CGFloat {
+        var alpha: CGFloat = 1
+        var node: UIView? = view
+        while let current = node {
+            let layer = current.layer.presentation() ?? current.layer
+            if layer.isHidden || current.isHidden { return 0 }
+            alpha *= CGFloat(layer.opacity)
+            if current === root { break }
+            node = current.superview
+        }
+        return alpha
+    }
+
+    private func prepareArtwork(in window: UIWindow) {
+        let traits = window.traitCollection
+        let scale = max(traits.displayScale, 1)
+        let interfaceStyle = traits.userInterfaceStyle
+        let contrast = traits.accessibilityContrast
+
+        if let text = countValue, !text.isEmpty {
+            let fill = (countBadgeColor ?? .systemRed).resolvedColor(with: traits).cgColor
+            let key = CountArtworkKey(text: text, color: fill, scale: scale, interfaceStyle: interfaceStyle, contrast: contrast)
+            if countArtworkKey != key {
+                countArtworkKey = key
+                let size = countBadgeSize(for: text)
+                let rect = CGRect(origin: .zero, size: size)
+                let format = UIGraphicsImageRendererFormat()
+                format.scale = scale
+                format.opaque = false
+                let renderer = UIGraphicsImageRenderer(size: size, format: format)
+                let title = NSAttributedString(string: text, attributes: Self.countTextAttributes)
+                let titleSize = title.size()
+                count.contentsScale = scale
+                count.contents = renderer.image { context in
+                    let graphics = context.cgContext
+                    let pill = CGPath(roundedRect: rect,
+                                      cornerWidth: rect.height / 2,
+                                      cornerHeight: rect.height / 2,
+                                      transform: nil)
+                    graphics.setFillColor(fill)
+                    graphics.addPath(pill)
+                    graphics.fillPath()
+                    title.draw(at: CGPoint(x: rect.midX - titleSize.width / 2, y: rect.midY - titleSize.height / 2))
+                }.cgImage
+            }
+        } else if countArtworkKey != nil || count.contents != nil {
+            countArtworkKey = nil
+            count.contents = nil
+        }
+
+        if isRefreshing {
+            let red = UIColor.systemRed.resolvedColor(with: traits).cgColor
+            let key = RefreshArtworkKey(color: red, scale: scale, interfaceStyle: interfaceStyle, contrast: contrast)
+            if refreshArtworkKey != key || refreshFrames.isEmpty {
+                refreshArtworkKey = key
+                let format = UIGraphicsImageRendererFormat()
+                format.scale = scale
+                format.opaque = false
+                let diameter = Self.diameter
+                let rect = CGRect(x: 0, y: 0, width: diameter, height: diameter)
+                let renderer = UIGraphicsImageRenderer(size: rect.size, format: format)
+
+                // 红圈和转圈一起栅格化，播放时只提交完整角标帧。
+                let spokes = 8
+                let frames = (0..<spokes).compactMap { phase in
+                    renderer.image { context in
+                        let graphics = context.cgContext
+                        graphics.setFillColor(red)
+                        graphics.fillEllipse(in: rect)
+                        graphics.setLineWidth(1.25)
+                        graphics.setLineCap(.round)
+                        for index in 0..<spokes {
+                            let angle = CGFloat(index) * 2 * .pi / CGFloat(spokes)
+                            let age = (phase - index + spokes) % spokes
+                            graphics.setStrokeColor(UIColor.white.withAlphaComponent(1 - 0.105 * CGFloat(age)).cgColor)
+                            graphics.move(to: CGPoint(x: rect.midX + cos(angle) * 2.6, y: rect.midY + sin(angle) * 2.6))
+                            graphics.addLine(to: CGPoint(x: rect.midX + cos(angle) * 4.7, y: rect.midY + sin(angle) * 4.7))
+                            graphics.strokePath()
+                        }
+                    }.cgImage
+                }
+                refreshFrames = frames
+                refresh.contentsScale = scale
+                refresh.contents = frames.first
+                applyRefreshSpinAnimation()
+            } else if refresh.animation(forKey: "refreshRotation") == nil {
+                applyRefreshSpinAnimation()
+            }
+        } else if refresh.animation(forKey: "refreshRotation") != nil {
+            refresh.removeAnimation(forKey: "refreshRotation")
+        }
+    }
+
+    private func applyRefreshSpinAnimation() {
+        guard !refreshFrames.isEmpty else { return }
+        let spin = CAKeyframeAnimation(keyPath: "contents")
+        spin.values = refreshFrames
+        spin.calculationMode = .discrete
+        spin.duration = 0.78
+        spin.repeatCount = .infinity
+        spin.isRemovedOnCompletion = false
+        refresh.add(spin, forKey: "refreshRotation")
+    }
+
+    private func draw(_ badge: CALayer, at placement: Placement?) {
+        guard let placement, placement.alpha > 0.001 else {
+            if !badge.isHidden { badge.isHidden = true }
+            return
+        }
+        let position = CGPoint(x: placement.frame.midX, y: placement.frame.midY)
+        let bounds = CGRect(origin: .zero, size: placement.frame.size)
+        if badge.position != position { badge.position = position }
+        if badge.bounds != bounds { badge.bounds = bounds }
+        if badge.opacity != Float(placement.alpha) { badge.opacity = Float(placement.alpha) }
+        if badge.isHidden { badge.isHidden = false }
+    }
+
+    private func portalSource(_ view: UIView) -> UIView? {
+        guard name(view) == Self.portalClass, view.responds(to: Self.sourceSelector) else { return nil }
+        return view.perform(Self.sourceSelector)?.takeUnretainedValue() as? UIView
+    }
+
+    private func name(_ view: UIView) -> String { NSStringFromClass(type(of: view)) }
+    private func isPlatter(_ view: UIView) -> Bool { name(view).contains("PlatterView") }
 }

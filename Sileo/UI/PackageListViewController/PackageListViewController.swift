@@ -233,8 +233,8 @@ class PackageListViewController: SileoViewController, UIGestureRecognizerDelegat
         if #available(iOS 26.0, *) {
             searchController.searchBar.backgroundImage = UIImage()
             searchController.searchBar.searchBarStyle = .minimal
-            if #available(iOS 27.0, *), showSearchField, UIDevice.current.userInterfaceIdiom == .phone {
-                // 允许独立搜索标签接管搜索框，恢复底部搜索栏和左侧的标签返回按钮。
+            if showSearchField, UIDevice.current.userInterfaceIdiom == .phone {
+                // iOS 26 / 27 均启用 UISearchTab，允许独立搜索标签接管底部搜索栏与左侧返回按钮。
                 navigationItem.preferredSearchBarPlacement = .automatic
                 navigationItem.searchBarPlacementAllowsToolbarIntegration = true
             } else {

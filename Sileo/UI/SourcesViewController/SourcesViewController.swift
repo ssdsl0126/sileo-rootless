@@ -317,7 +317,7 @@ final class SourcesViewController: SileoViewController {
         }
     }
 
-    /// iPhone 的刷新角标由标签栏前景层承接；iPad 和旧系统保留原有实现。
+    /// iPhone iOS 26 / 27 的刷新角标交给 TabBarController 按系统分流处理；iPad 和旧系统保留原有实现。
     private func showSourceRefreshIndicator() {
         guard #available(iOS 26.0, *) else {
             let item = self.splitViewController?.tabBarItem
@@ -337,7 +337,7 @@ final class SourcesViewController: SileoViewController {
         let item = splitViewController?.tabBarItem ?? navigationController?.tabBarItem
         sourceRefreshIndicatorIsVisible = true
         if UIDevice.current.userInterfaceIdiom == .phone {
-            layoutSourceRefreshIndicatorIfNeeded()
+            ((tabBarController as? TabBarController) ?? TabBarController.singleton)?.setSourcesRefreshing(true)
             return
         }
         item?.badgeColor = .systemRed
@@ -349,7 +349,7 @@ final class SourcesViewController: SileoViewController {
         sourceRefreshIndicatorIsVisible = false
         clearSourceRefreshIndicatorViews()
         if UIDevice.current.userInterfaceIdiom == .phone {
-            (tabBarController?.tabBar as? TabBar)?.setSourceRefreshIndicatorVisible(false)
+            ((tabBarController as? TabBarController) ?? TabBarController.singleton)?.setSourcesRefreshing(false)
             return
         }
 
@@ -364,20 +364,19 @@ final class SourcesViewController: SileoViewController {
 
     @available(iOS 26.0, *)
     func layoutSourceRefreshIndicatorIfNeeded() {
-        guard sourceRefreshIndicatorIsVisible,
-              let tabBarController else {
+        guard sourceRefreshIndicatorIsVisible else {
             return
         }
 
-        let item = splitViewController?.tabBarItem ?? navigationController?.tabBarItem
         if UIDevice.current.userInterfaceIdiom == .phone {
-            // 不再创建系统空角标，避免它和前景层重复显示或参与玻璃内容的合成。
-            if item?.badgeValue != nil {
-                (splitViewController ?? navigationController)?.setSileoTabBadgeValue(nil)
-            }
-            (tabBarController.tabBar as? TabBar)?.setSourceRefreshIndicatorVisible(true)
+            ((tabBarController as? TabBarController) ?? TabBarController.singleton)?.setSourcesRefreshing(true)
             return
         }
+
+        guard let tabBarController else {
+            return
+        }
+        let item = splitViewController?.tabBarItem ?? navigationController?.tabBarItem
         if item?.badgeValue == nil {
             item?.badgeColor = .systemRed
             (splitViewController ?? navigationController)?.setSileoTabBadgeValue(" ")
