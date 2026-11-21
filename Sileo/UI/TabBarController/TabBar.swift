@@ -63,6 +63,7 @@ final class RefreshBadge: UIView {
         spinner.transform = CGAffineTransform(scaleX: 0.55, y: 0.55)
         spinner.isUserInteractionEnabled = false
         spinner.accessibilityIdentifier = "Sileo.SourceRefreshIndicator"
+        spinner.center = CGPoint(x: bounds.midX, y: bounds.midY)
         addSubview(spinner)
     }
 
@@ -138,6 +139,8 @@ final class NativeRefreshBadge {
             }
             if spinner.frame != badge.bounds {
                 spinner.frame = badge.bounds
+                spinner.setNeedsLayout()
+                spinner.layoutIfNeeded()
             }
             if badge.subviews.last !== spinner {
                 badge.bringSubviewToFront(spinner)
@@ -151,6 +154,8 @@ final class NativeRefreshBadge {
         refresh.frame = badge.bounds
         refresh.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         badge.addSubview(refresh)
+        refresh.setNeedsLayout()
+        refresh.layoutIfNeeded()
         refresh.start()
     }
 }

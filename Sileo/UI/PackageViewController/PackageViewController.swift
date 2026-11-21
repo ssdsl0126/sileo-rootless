@@ -150,7 +150,7 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
         self.edgesForExtendedLayout = [.top, .bottom]
 
         scrollView.contentInsetAdjustmentBehavior = .never
-        scrollView.contentInset = UIEdgeInsets(top: 0, left: 0, bottom: self.tabBarController?.tabBar.bounds.height ?? 0, right: 0)
+        updateScrollViewBottomInset()
 
         allowNavbarUpdates = true
         depictionHeaderImageViewHeight.constant = 200
@@ -573,17 +573,43 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
         self.viewDidLayoutSubviews()
     }
 
+    private func updateScrollViewBottomInset() {
+        let bottomInset: CGFloat
+        if let tabBar = self.tabBarController?.tabBar,
+           !tabBar.isHidden,
+           tabBar.bounds.width > tabBar.bounds.height {
+            bottomInset = tabBar.bounds.height
+        } else {
+            bottomInset = self.view.safeAreaInsets.bottom
+        }
+        if abs(scrollView.contentInset.bottom - bottomInset) > 0.5 {
+            scrollView.contentInset = UIEdgeInsets(top: 0, left: 0, bottom: bottomInset, right: 0)
+        }
+    }
+
+    override func viewSafeAreaInsetsDidChange() {
+        super.viewSafeAreaInsetsDidChange()
+        updateScrollViewBottomInset()
+        self.view.setNeedsLayout()
+    }
+
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
 
-        depictionHeight = depictionView?.depictionHeight(width: self.view.bounds.width) ?? 0
+        updateScrollViewBottomInset()
+
+        let horizontalSafeLeft = self.view.safeAreaInsets.left
+        let horizontalSafeRight = self.view.safeAreaInsets.right
+        let depictionWidth = max(0, self.view.bounds.width - horizontalSafeLeft - horizontalSafeRight)
+
+        depictionHeight = depictionView?.depictionHeight(width: depictionWidth) ?? 0
 
         let headerHeight = packageInfoView.frame.maxY
 
-        depictionView?.frame = CGRect(x: 0, y: headerHeight, width: self.view.bounds.width, height: depictionHeight)
+        depictionView?.frame = CGRect(x: horizontalSafeLeft, y: headerHeight, width: depictionWidth, height: depictionHeight)
 
-        let footerHeight = depictionFooterView?.depictionHeight(width: self.view.bounds.width) ?? 0
-        depictionFooterView?.frame = CGRect(x: 0, y: headerHeight + depictionHeight, width: self.view.bounds.width, height: footerHeight)
+        let footerHeight = depictionFooterView?.depictionHeight(width: depictionWidth) ?? 0
+        depictionFooterView?.frame = CGRect(x: horizontalSafeLeft, y: headerHeight + depictionHeight, width: depictionWidth, height: footerHeight)
 
         contentView.frame = CGRect(origin: .zero, size: CGSize(width: self.view.bounds.width, height: headerHeight + depictionHeight + footerHeight))
         scrollView.contentSize = CGSize(width: self.view.bounds.width, height: headerHeight + depictionHeight + footerHeight)

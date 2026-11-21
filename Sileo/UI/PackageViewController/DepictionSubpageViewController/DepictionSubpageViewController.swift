@@ -93,6 +93,11 @@ class DepictionSubpageViewController: UIViewController {
         self.viewDidLayoutSubviews()
     }
 
+    override func viewSafeAreaInsetsDidChange() {
+        super.viewSafeAreaInsetsDidChange()
+        self.view.setNeedsLayout()
+    }
+
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
 
@@ -101,9 +106,11 @@ class DepictionSubpageViewController: UIViewController {
             return
         }
 
-        let depictionHeight = depictionView.depictionHeight(width: scrollView.bounds.width)
-        depictionView.frame = CGRect(origin: .zero, size: CGSize(width: scrollView.bounds.width, height: depictionHeight))
+        let horizontalInsets = scrollView.adjustedContentInset.left + scrollView.adjustedContentInset.right
+        let contentWidth = max(0, scrollView.bounds.width - horizontalInsets)
+        let depictionHeight = depictionView.depictionHeight(width: contentWidth)
+        depictionView.frame = CGRect(origin: .zero, size: CGSize(width: contentWidth, height: depictionHeight))
 
-        scrollView.contentSize = CGSize(width: scrollView.bounds.width, height: depictionHeight)
+        scrollView.contentSize = CGSize(width: contentWidth, height: depictionHeight)
     }
 }

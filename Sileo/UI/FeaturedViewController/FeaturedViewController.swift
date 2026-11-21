@@ -23,6 +23,10 @@ final class FeaturedViewController: SileoViewController, UIScrollViewDelegate, F
         self.navigationController?.tabBarItem._setInternalTitle(String(localizationKey: "Featured_Page"))
         
         self.setupProfileButton()
+        scrollView?.contentInsetAdjustmentBehavior = .always
+        scrollView?.alwaysBounceVertical = true
+        scrollView?.alwaysBounceHorizontal = false
+        scrollView?.showsHorizontalScrollIndicator = false
         if #available(iOS 26.0, *), let scrollView = scrollView {
             SileoGlass.configureScrollSurface(scrollView, in: self)
         }
@@ -335,9 +339,9 @@ final class FeaturedViewController: SileoViewController, UIScrollViewDelegate, F
         if let navigationBar = self.navigationController?.navigationBar {
             navigationBar.addSubview(profileButton)
             if LanguageHelper.shared.isRtl ?? false {
-                profileButton.leftAnchor.constraint(equalTo: navigationBar.leftAnchor, constant: 16).isActive = true
+                profileButton.leftAnchor.constraint(equalTo: navigationBar.safeAreaLayoutGuide.leftAnchor, constant: 16).isActive = true
             } else {
-                profileButton.rightAnchor.constraint(equalTo: navigationBar.rightAnchor, constant: -16).isActive = true
+                profileButton.rightAnchor.constraint(equalTo: navigationBar.safeAreaLayoutGuide.rightAnchor, constant: -16).isActive = true
             }
             NSLayoutConstraint.activate([
                 profileButton.bottomAnchor.constraint(equalTo: navigationBar.bottomAnchor, constant: -12)
@@ -382,19 +386,47 @@ final class FeaturedViewController: SileoViewController, UIScrollViewDelegate, F
         TabBarController.singleton?.updateLiquidGlassScroll(scrollView)
     }
     
-    func subviewHeightChanged() {
-        self.viewDidLayoutSubviews()
+    func scrollViewDidChangeAdjustedContentInset(_ scrollView: UIScrollView) {
+        layoutFeaturedContentIfNeeded()
     }
-    
+
+    func subviewHeightChanged() {
+        layoutFeaturedContentIfNeeded()
+    }
+
+    override func viewSafeAreaInsetsDidChange() {
+        super.viewSafeAreaInsetsDidChange()
+        layoutFeaturedContentIfNeeded()
+    }
+
+    private func layoutFeaturedContentIfNeeded() {
+        guard let scrollView else { return }
+        let horizontalInsets = scrollView.adjustedContentInset.left + scrollView.adjustedContentInset.right
+        let contentWidth = max(0, scrollView.bounds.width - horizontalInsets)
+
+        if let featuredView {
+            let featuredHeight = featuredView.depictionHeight(width: contentWidth)
+            let targetSize = CGSize(width: contentWidth, height: featuredHeight)
+            if scrollView.contentSize != targetSize {
+                scrollView.contentSize = targetSize
+            }
+            let targetFrame = CGRect(origin: .zero, size: targetSize)
+            if featuredView.frame != targetFrame {
+                featuredView.frame = targetFrame
+                featuredView.setNeedsLayout()
+            }
+        }
+
+        let minOffsetX = -scrollView.adjustedContentInset.left
+        let maxOffsetX = max(minOffsetX, scrollView.contentSize.width + scrollView.adjustedContentInset.right - scrollView.bounds.width)
+        if scrollView.contentOffset.x < minOffsetX - 0.5 || scrollView.contentOffset.x > maxOffsetX + 0.5 {
+            scrollView.contentOffset.x = min(max(scrollView.contentOffset.x, minOffsetX), maxOffsetX)
+        }
+    }
+
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        
-        if let featuredHeight = featuredView?.depictionHeight(width: self.view.bounds.width) {
-            scrollView?.contentSize = CGSize(width: self.view.bounds.width, height: featuredHeight)
-        
-            featuredView?.frame = CGRect(origin: .zero, size: CGSize(width: self.view.bounds.width, height: featuredHeight))
-        }
-        
+        layoutFeaturedContentIfNeeded()
         self.view.updateConstraintsIfNeeded()
     }
 }

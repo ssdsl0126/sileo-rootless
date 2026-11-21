@@ -79,12 +79,14 @@ class PackageListHeader: UICollectionReusableView {
         label.adjustsFontSizeToFitWidth = true
         label.minimumScaleFactor = 0.75
 
-        let maxContainerWidth = max(44, bounds.width - 30)
+        let leadingInset = safeAreaInsets.left + 15
+        let trailingInset = safeAreaInsets.right + 15
+        let maxContainerWidth = max(44, bounds.width - leadingInset - trailingInset)
         let measuredTextWidth = label.sizeThatFits(CGSize(width: CGFloat.greatestFiniteMagnitude, height: 24)).width
         let targetContainerWidth = min(maxContainerWidth, max(44, ceil(measuredTextWidth) + 20))
 
         var containerFrame = container.frame
-        containerFrame.origin.x = 15
+        containerFrame.origin.x = leadingInset
         containerFrame.origin.y = (bounds.height - 24) / 2
         containerFrame.size.width = targetContainerWidth
         containerFrame.size.height = 24

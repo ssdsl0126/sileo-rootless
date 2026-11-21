@@ -75,13 +75,23 @@ class PackageListViewController: SileoViewController, UIGestureRecognizerDelegat
         return !searchHistory.isEmpty && (searchController.searchBar.text?.isEmpty ?? false)
     }
 
+    private var lastCollectionLayoutMetrics: (width: CGFloat, safeLeft: CGFloat, safeRight: CGFloat, adjLeft: CGFloat, adjRight: CGFloat) = (0, 0, 0, 0, 0)
+
     private var usesExpandedSourceDetailLayout: Bool {
         guard #available(iOS 26.0, *),
-              UIDevice.current.userInterfaceIdiom == .pad,
               let splitViewController = splitViewController as? SourcesSplitViewController else {
             return false
         }
         return !splitViewController.isCollapsed
+    }
+
+    private func usesHorizontalSafeAreaCollectionLayout(for collectionView: UICollectionView) -> Bool {
+        guard #available(iOS 26.0, *) else {
+            return false
+        }
+        return usesExpandedSourceDetailLayout
+            || collectionView.safeAreaInsets.left > 0
+            || collectionView.safeAreaInsets.right > 0
     }
 
     @objc func updateSileoColors() {
@@ -101,11 +111,32 @@ class PackageListViewController: SileoViewController, UIGestureRecognizerDelegat
         updateSileoColors()
     }
 
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        invalidateCollectionLayoutIfMetricsChanged()
+    }
+
     override func viewSafeAreaInsetsDidChange() {
         super.viewSafeAreaInsetsDidChange()
-        if #available(iOS 26.0, *), usesExpandedSourceDetailLayout {
-            collectionView?.collectionViewLayout.invalidateLayout()
+        invalidateCollectionLayoutIfMetricsChanged()
+    }
+
+    private func invalidateCollectionLayoutIfMetricsChanged() {
+        guard let collectionView else { return }
+        let metrics = (collectionView.bounds.width,
+                       collectionView.safeAreaInsets.left,
+                       collectionView.safeAreaInsets.right,
+                       collectionView.adjustedContentInset.left,
+                       collectionView.adjustedContentInset.right)
+        guard abs(metrics.0 - lastCollectionLayoutMetrics.width) > 0.5 ||
+              abs(metrics.1 - lastCollectionLayoutMetrics.safeLeft) > 0.5 ||
+              abs(metrics.2 - lastCollectionLayoutMetrics.safeRight) > 0.5 ||
+              abs(metrics.3 - lastCollectionLayoutMetrics.adjLeft) > 0.5 ||
+              abs(metrics.4 - lastCollectionLayoutMetrics.adjRight) > 0.5 else {
+            return
         }
+        lastCollectionLayoutMetrics = metrics
+        collectionView.collectionViewLayout.invalidateLayout()
     }
     
     override func viewWillAppear(_ animated: Bool) {
@@ -694,6 +725,10 @@ extension PackageListViewController: UICollectionViewDelegate {
         TabBarController.singleton?.updateLiquidGlassScroll(scrollView)
     }
 
+    func scrollViewDidChangeAdjustedContentInset(_ scrollView: UIScrollView) {
+        invalidateCollectionLayoutIfMetricsChanged()
+    }
+
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
         collectionView.deselectItem(at: indexPath, animated: true)
         guard let pvc = self.controller(indexPath: indexPath) else { return }
@@ -711,16 +746,19 @@ extension PackageListViewController: UICollectionViewDelegateFlowLayout {
     func collectionView(_ collectionView: UICollectionView,
                         layout collectionViewLayout: UICollectionViewLayout,
                         insetForSectionAt section: Int) -> UIEdgeInsets {
-        guard #available(iOS 26.0, *), usesExpandedSourceDetailLayout else {
-            return (collectionViewLayout as? UICollectionViewFlowLayout)?.sectionInset ?? .zero
+        let base = (collectionViewLayout as? UICollectionViewFlowLayout)?.sectionInset ?? .zero
+        guard usesHorizontalSafeAreaCollectionLayout(for: collectionView) else {
+            return base
         }
 
-        // iPadOS 26 双栏下，详情真正可用的宽度还受 safe-area 约束。
-        // 布局必须排除这部分区域，否则 FlowLayout 会误排成两列并裁掉第一列。
-        return UIEdgeInsets(top: 0,
-                            left: collectionView.safeAreaInsets.left,
-                            bottom: 0,
-                            right: collectionView.safeAreaInsets.right)
+        // iPadOS 26 双栏以及折叠屏/横屏侧边标签栏场景下，列表真正可用的宽度受水平 safe-area 约束。
+        // 仅补充 adjustedContentInset 尚未扣除的部分，避免折叠/旋转过渡帧内双重缩进导致左偏移。
+        let extraLeft = max(0, collectionView.safeAreaInsets.left - collectionView.adjustedContentInset.left)
+        let extraRight = max(0, collectionView.safeAreaInsets.right - collectionView.adjustedContentInset.right)
+        return UIEdgeInsets(top: base.top,
+                            left: base.left + extraLeft,
+                            bottom: base.bottom,
+                            right: base.right + extraRight)
     }
 
     func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, referenceSizeForHeaderInSection section: Int) -> CGSize {
@@ -743,10 +781,15 @@ extension PackageListViewController: UICollectionViewDelegateFlowLayout {
     
     func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, sizeForItemAt indexPath: IndexPath) -> CGSize {
         var width = collectionView.bounds.size.width
-        if #available(iOS 26.0, *), usesExpandedSourceDetailLayout {
-            width -= collectionView.safeAreaInsets.left + collectionView.safeAreaInsets.right
+        if usesHorizontalSafeAreaCollectionLayout(for: collectionView) {
+            let horizontalInset = max(collectionView.safeAreaInsets.left, collectionView.adjustedContentInset.left)
+                + max(collectionView.safeAreaInsets.right, collectionView.adjustedContentInset.right)
+            width = max(0, width - horizontalInset)
         }
-        if UIDevice.current.userInterfaceIdiom == .pad || UIApplication.shared.statusBarOrientation.isLandscape {
+        let isWideLayout = UIDevice.current.userInterfaceIdiom == .pad
+            || collectionView.bounds.width > collectionView.bounds.height
+            || traitCollection.horizontalSizeClass == .regular
+        if isWideLayout {
             if width > 330 {
                 width = 330
             }
@@ -759,6 +802,10 @@ extension PackageListViewController: UICollectionViewDelegateFlowLayout {
     }
     
     func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, minimumLineSpacingForSectionAt section: Int) -> CGFloat {
+        0
+    }
+
+    func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, minimumInteritemSpacingForSectionAt section: Int) -> CGFloat {
         0
     }
 }

@@ -488,6 +488,22 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         return ""
     }
 
+    private var modernTabBadgeSearchRoot: UIView {
+        guard isViewLoaded, tabBar.isDescendant(of: view) else {
+            return tabBar
+        }
+        // iOS 27 竖排浮动标签栏（如 iPhone Duo 的 _UITabBarVisualProvider_FloatingLandscape）
+        // 会把 _UITabBarItemPlatterView 与 _UIBarBadgeView 托管在 _UITabContainerView 下的
+        // _UIFloatingBarContainerView，而不是 tabBar 子树内部。
+        // 沿 tabBar 向上取 TabBarController.view 的直接容器子视图，即可覆盖底栏与侧边浮动栏，
+        // 同时不进入兄弟分支 UITransitionView 里的业务页面。
+        var container: UIView = tabBar
+        while let superview = container.superview, superview !== view {
+            container = superview
+        }
+        return container
+    }
+
     func setSourcesRefreshing(_ refreshing: Bool) {
         if !Thread.isMainThread {
             DispatchQueue.main.async {
@@ -523,7 +539,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
             if let anchoredBadges {
                 anchoredBadges.setRefreshing(refreshing, in: tabBar)
             } else if !refreshing {
-                nativeRefreshBadge.update(in: tabBar, isRefreshing: false)
+                nativeRefreshBadge.update(in: modernTabBadgeSearchRoot, isRefreshing: false)
             }
             if didMutateBadge {
                 updateModernTabBadges()
@@ -669,7 +685,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
                 updateModernTabBadgeDisplayLink()
             }
         } else {
-            nativeRefreshBadge.update(in: tabBar, isRefreshing: isSourcesRefreshing)
+            nativeRefreshBadge.update(in: modernTabBadgeSearchRoot, isRefreshing: isSourcesRefreshing)
             nativeBadgePortalLift?.update(in: tabBar)
         }
     }

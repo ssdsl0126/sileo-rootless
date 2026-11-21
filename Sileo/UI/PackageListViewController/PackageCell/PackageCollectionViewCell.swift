@@ -173,8 +173,12 @@ class PackageCollectionViewCell: SwipeCollectionViewCell {
         super.layoutSubviews()
         
         var numberOfItemsInRow = CGFloat(1)
-        if UIDevice.current.userInterfaceIdiom == .pad || UIApplication.shared.statusBarOrientation.isLandscape {
-            numberOfItemsInRow = (self.superview?.bounds.width ?? 0) / 300
+        let superBounds = self.superview?.bounds ?? .zero
+        let isWideLayout = UIDevice.current.userInterfaceIdiom == .pad
+            || superBounds.width > superBounds.height
+            || traitCollection.horizontalSizeClass == .regular
+        if isWideLayout {
+            numberOfItemsInRow = superBounds.width / 300
         }
         
         if alwaysHidesSeparator || !localDebProgressView.isHidden || ceil((item + 1) / numberOfItemsInRow) == ceil(numberOfItems / numberOfItemsInRow) {

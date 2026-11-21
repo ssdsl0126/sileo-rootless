@@ -215,8 +215,8 @@ class CategoryViewController: SileoTableViewController {
 
     private var headerContentFrame: CGRect {
         var insets = UIEdgeInsets.zero
-        if #available(iOS 26.0, *), UIDevice.current.userInterfaceIdiom == .pad {
-            // 分栏会让表格延伸到侧栏下方，表头内容需像分类单元格一样避开水平安全区。
+        if #available(iOS 26.0, *) {
+            // 分栏或侧边标签栏会让表格延伸到安全区外，表头内容需像分类单元格一样避开水平安全区。
             insets = tableView.safeAreaInsets
         }
         return CGRect(x: insets.left,

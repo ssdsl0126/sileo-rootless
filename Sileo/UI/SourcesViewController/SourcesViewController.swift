@@ -61,7 +61,9 @@ final class SourcesViewController: SileoViewController {
         tableView = SileoTableView(frame: .zero, style: .plain)
         if #available(iOS 26.0, *) {
             tableView?.alwaysBounceVertical = true
-            tableView?.contentInsetAdjustmentBehavior = .always
+            tableView?.alwaysBounceHorizontal = false
+            tableView?.showsHorizontalScrollIndicator = false
+            tableView?.contentInsetAdjustmentBehavior = .scrollableAxes
         }
         view.addSubview(tableView!)
         tableView?.translatesAutoresizingMaskIntoConstraints = false

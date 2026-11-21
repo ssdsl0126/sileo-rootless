@@ -26,6 +26,7 @@ class NewsViewController: SileoViewController, UICollectionViewDataSource, UICol
     private var sections = [Int64: [Package]]()
     private var timestamps = [Int64]()
     private var reloadOnForeground = false
+    private var lastCollectionLayoutMetrics: (width: CGFloat, safeLeft: CGFloat, safeRight: CGFloat, adjLeft: CGFloat, adjRight: CGFloat) = (0, 0, 0, 0, 0)
 
     var dateFormatter: DateFormatter = DateFormatter()
     private var updateQueue: DispatchQueue = DispatchQueue(label: "org.coolstar.SileoStore.news-update-queue", qos: .userInitiated)
@@ -116,6 +117,38 @@ class NewsViewController: SileoViewController, UICollectionViewDataSource, UICol
     
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
         updateSileoColors()
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        invalidateCollectionLayoutIfMetricsChanged()
+    }
+
+    override func viewSafeAreaInsetsDidChange() {
+        super.viewSafeAreaInsetsDidChange()
+        invalidateCollectionLayoutIfMetricsChanged()
+    }
+
+    func scrollViewDidChangeAdjustedContentInset(_ scrollView: UIScrollView) {
+        invalidateCollectionLayoutIfMetricsChanged()
+    }
+
+    private func invalidateCollectionLayoutIfMetricsChanged() {
+        guard let collectionView else { return }
+        let metrics = (collectionView.bounds.width,
+                       collectionView.safeAreaInsets.left,
+                       collectionView.safeAreaInsets.right,
+                       collectionView.adjustedContentInset.left,
+                       collectionView.adjustedContentInset.right)
+        guard abs(metrics.0 - lastCollectionLayoutMetrics.width) > 0.5 ||
+              abs(metrics.1 - lastCollectionLayoutMetrics.safeLeft) > 0.5 ||
+              abs(metrics.2 - lastCollectionLayoutMetrics.safeRight) > 0.5 ||
+              abs(metrics.3 - lastCollectionLayoutMetrics.adjLeft) > 0.5 ||
+              abs(metrics.4 - lastCollectionLayoutMetrics.adjRight) > 0.5 else {
+            return
+        }
+        lastCollectionLayoutMetrics = metrics
+        collectionView.collectionViewLayout.invalidateLayout()
     }
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
@@ -325,6 +358,19 @@ extension NewsViewController: UICollectionViewDelegateFlowLayout { // Collection
         return UICollectionReusableView()
     }
     
+    func collectionView(_ collectionView: UICollectionView,
+                        layout collectionViewLayout: UICollectionViewLayout,
+                        insetForSectionAt section: Int) -> UIEdgeInsets {
+        let base = (collectionViewLayout as? UICollectionViewFlowLayout)?.sectionInset ?? .zero
+        // 仅补充 adjustedContentInset 尚未扣除的水平安全区，避免折叠/旋转过渡帧内出现双重缩进。
+        let extraLeft = max(0, collectionView.safeAreaInsets.left - collectionView.adjustedContentInset.left)
+        let extraRight = max(0, collectionView.safeAreaInsets.right - collectionView.adjustedContentInset.right)
+        return UIEdgeInsets(top: base.top,
+                            left: base.left + extraLeft,
+                            bottom: base.bottom,
+                            right: base.right + extraRight)
+    }
+
     func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, referenceSizeForHeaderInSection section: Int) -> CGSize {
         switch currentSection(section) {
         case .news, .placeholder: return CGSize.zero
@@ -333,13 +379,18 @@ extension NewsViewController: UICollectionViewDelegateFlowLayout { // Collection
     }
 
     func collectionView(_ collectionView: UICollectionView, layout: UICollectionViewLayout, sizeForItemAt indexPath: IndexPath) -> CGSize {
-        var width = collectionView.bounds.size.width
+        let horizontalInset = max(collectionView.safeAreaInsets.left, collectionView.adjustedContentInset.left)
+            + max(collectionView.safeAreaInsets.right, collectionView.adjustedContentInset.right)
+        var width = max(0, collectionView.bounds.size.width - horizontalInset)
         var height: CGFloat = 73
         switch currentSection(indexPath.section) {
         case .news: height = 180
         case .placeholder: height = 300
         case .packages:
-            if UIDevice.current.userInterfaceIdiom == UIUserInterfaceIdiom.pad || UIApplication.shared.statusBarOrientation.isLandscape {
+            let isWideLayout = UIDevice.current.userInterfaceIdiom == .pad
+                || collectionView.bounds.width > collectionView.bounds.height
+                || traitCollection.horizontalSizeClass == .regular
+            if isWideLayout {
                 width = min(width, 330)
             }
         }
