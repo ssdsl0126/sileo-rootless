@@ -661,16 +661,22 @@ final class RepoManager {
             fixLists()
         }
         
-        let errorOutput = NSMutableAttributedString()
+        let refreshResultLock = NSLock()
+        var logEntries: [(message: String, type: LogType)] = []
+        var reposUpdated = 0
+
         func log(_ message: String, type: LogType) {
-            errorOutput.append(NSAttributedString(
-                string: "\(type): \(message)\n",
-                attributes: [.foregroundColor: type.color])
-            )
+            refreshResultLock.withLock {
+                logEntries.append((message, type))
+            }
         }
 
-        
-        var reposUpdated = 0
+        func markRepoUpdated() {
+            refreshResultLock.withLock {
+                reposUpdated += 1
+            }
+        }
+
         let dpkgArchitectures = DpkgWrapper.architecture
         let updateGroup = DispatchGroup()
 
@@ -680,7 +686,6 @@ final class RepoManager {
             backgroundIdentifier = nil
         }
 
-        var errorsFound = false
         var repos = repos
         let lock = NSLock()
 
@@ -728,7 +733,6 @@ final class RepoManager {
 
                             guard let releaseContents = fileURL.aptContents else {
                                 log("Could not parse release file from \(releaseURL)", type: .error)
-                                errorsFound = true
                                 return
                             }
 
@@ -737,13 +741,11 @@ final class RepoManager {
                                 releaseDict = try ControlFileParser.dictionary(controlFile: releaseContents, isReleaseFile: true).0
                             } catch {
                                 log("Could not parse release file: \(error)", type: .error)
-                                errorsFound = true
                                 return
                             }
 
                             guard let repoArchs = (releaseDict["architectures"]?.components(separatedBy: " ") ?? releaseDict["architecture"].map { [$0] }) else {
                                 log("Didn't find architectures \(dpkgArchitectures) in \(releaseURL)", type: .error)
-                                errorsFound = true
                                 return
                             }
                             if repoArchs.contains(dpkgArchitectures.primary.rawValue) {
@@ -759,14 +761,12 @@ final class RepoManager {
                             
                             guard preferredArch != nil else {
                                 log("Didn't find architectures \(dpkgArchitectures) in \(releaseURL)", type: .error)
-                                errorsFound = true
                                 return
                             }
 
                             guard ["components"].allSatisfy(releaseDict.keys.contains) else {
                                 try? FileManager.default.removeItem(at: fileURL)
                                 log("Could not parse release file.", type: .error)
-                                errorsFound = true
                                 return
                             }
 
@@ -781,7 +781,6 @@ final class RepoManager {
                             }
 
                             log("\(releaseURL) returned status \(status). \(error?.localizedDescription ?? "")", type: .error)
-                            errorsFound = true
                             repo.releaseProgress = 1
                             self.postProgressNotification(repo)
                         }
@@ -853,7 +852,6 @@ final class RepoManager {
                                 semaphore.signal()
                             }
                             log("\(url) returned status \(status). \(error?.localizedDescription ?? "")", type: .error)
-                            errorsFound = true
                             repo.packagesProgress = 1
                             self.postProgressNotification(repo)
                         }
@@ -882,7 +880,6 @@ final class RepoManager {
 
                             if FileManager.default.fileExists(atPath: releaseGPGFileDst.aptPath) {
                                 log("\(releaseGPGURL) returned status \(status). \(error?.localizedDescription ?? "")", type: .error)
-                                errorsFound = true
                             }
                             repo.releaseGPGProgress = 1
                             self.postProgressNotification(repo)
@@ -970,8 +967,7 @@ final class RepoManager {
                     releaseGPGTask?.cancel()
                     guard let releaseFile = optReleaseFile else {
                         log("Could not find release file for \(repo.repoURL)", type: .error)
-                        errorsFound = true
-                        reposUpdated += 1
+                        markRepoUpdated()
                         self.checkUpdatesInBackground()
                         continue
                     }
@@ -982,10 +978,9 @@ final class RepoManager {
                         if !validAndTrusted || !error.isEmpty {
                             if FileManager.default.fileExists(atPath: releaseGPGFileDst.aptPath) {
                                 log("Invalid GPG signature at \(releaseGPGURL)", type: .error)
-                                errorsFound = true
                                 #if targetEnvironment(macCatalyst)
                                 repo.packageDict = [:]
-                                reposUpdated += 1
+                                markRepoUpdated()
                                 self.checkUpdatesInBackground()
                                 continue
                                 #endif
@@ -998,9 +993,8 @@ final class RepoManager {
                     #if targetEnvironment(macCatalyst)
                     if !isReleaseGPGValid {
                         repo.packageDict = [:]
-                        errorsFound = true
                         log("\(repo.repoURL) had no valid GPG signature", type: .error)
-                        reposUpdated += 1
+                        markRepoUpdated()
                         self.checkUpdatesInBackground()
                         continue
                     }
@@ -1011,8 +1005,7 @@ final class RepoManager {
                     if !breakOff {
                         guard var packagesFile = optPackagesFile else {
                             log("Could not find packages file for \(repo.repoURL)", type: .error)
-                            errorsFound = true
-                            reposUpdated += 1
+                            markRepoUpdated()
                             self.checkUpdatesInBackground()
                             continue
                         }
@@ -1026,7 +1019,6 @@ final class RepoManager {
                             ? .sha512 : .sha256
                         if releaseFileContainsHashes && !isPackagesFileValid {
                             log("Hash for \(packagesFile.name) from \(repo.repoURL) is invalid!", type: .error)
-                            errorsFound = true
                         }
                         let (shouldSkip, hash) = self.ignorePackages(repo: repo, packagesURL: packagesFile.url, type: succeededExtension, destinationPath: packagesFileDst, hashtype: hashToSave)
                         skipPackages = shouldSkip
@@ -1086,7 +1078,6 @@ final class RepoManager {
                                 } catch {
                                     log("Could not decompress packages from \(repo.repoURL) (\(succeededExtension)): \(error.localizedDescription)", type: .error)
                                     isPackagesFileValid = false
-                                    errorsFound = true
                                 }
                             }
                         }
@@ -1110,7 +1101,7 @@ final class RepoManager {
                                 repo.packageDict = [:]
                                 self.update(repo)
                             }
-                            reposUpdated += 1
+                            markRepoUpdated()
                         }
                         if !releaseFileContainsHashes || (releaseFileContainsHashes && isPackagesFileValid) {
                             if !skipPackages {
@@ -1126,7 +1117,7 @@ final class RepoManager {
                         try? FileManager.default.setAttributes(attributes, ofItemAtPath: packagesFileDst.path)
                     }
                     if FileManager.default.fileExists(atPath: releaseGPGFileDst.aptPath) && !isReleaseGPGValid {
-                        reposUpdated += 1
+                        markRepoUpdated()
                         self.checkUpdatesInBackground()
                         continue
                     }
@@ -1153,6 +1144,15 @@ final class RepoManager {
         }
 
         updateGroup.notify(queue: .main) {
+            let (completedLogEntries, updatedRepoCount) = refreshResultLock.withLock { (logEntries, reposUpdated) }
+            let errorOutput = NSMutableAttributedString()
+            for (message, type) in completedLogEntries {
+                errorOutput.append(NSAttributedString(
+                    string: "\(type): \(message)\n",
+                    attributes: [.foregroundColor: type.color]
+                ))
+            }
+            let errorsFound = completedLogEntries.contains { $0.type == .error }
             #if !targetEnvironment(macCatalyst)
             var files = self.cachePrefix.implicitContents
 
@@ -1182,7 +1182,7 @@ final class RepoManager {
             #endif
             self.postProgressNotification(nil)
             
-            if reposUpdated > 0 {
+            if updatedRepoCount > 0 {
                 DownloadManager.aptQueue.async {
                     DatabaseManager.shared.saveQueue()
                     DownloadManager.shared.repoRefresh()
@@ -1195,11 +1195,11 @@ final class RepoManager {
             backgroundIdentifier.map(UIApplication.shared.endBackgroundTask)
             
             DispatchQueue.main.async {
-                if reposUpdated > 0 {
+                if updatedRepoCount > 0 {
                     NotificationCenter.default.post(name: PackageListManager.reloadNotification, object: nil)
                     NotificationCenter.default.post(name: NewsViewController.reloadNotification, object: nil)
                 }
-                completion(errorsFound, errorOutput)
+                completion(errorsFound, NSAttributedString(attributedString: errorOutput))
             }
         }
     }

@@ -25,6 +25,7 @@ class NewsViewController: SileoViewController, UICollectionViewDataSource, UICol
 
     private var sections = [Int64: [Package]]()
     private var timestamps = [Int64]()
+    private var reloadOnForeground = false
 
     var dateFormatter: DateFormatter = DateFormatter()
     private var updateQueue: DispatchQueue = DispatchQueue(label: "org.coolstar.SileoStore.news-update-queue", qos: .userInitiated)
@@ -81,6 +82,10 @@ class NewsViewController: SileoViewController, UICollectionViewDataSource, UICol
         NotificationCenter.default.addObserver(self,
                                                selector: #selector(reloadData),
                                                name: NewsResolver.ShowNews,
+                                               object: nil)
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(reloadAfterSuspension),
+                                               name: UIApplication.didBecomeActiveNotification,
                                                object: nil)
 
         // Scene 创建页面前，软件包缓存可能已经加载完毕，不能只依赖完成通知。
@@ -169,6 +174,11 @@ class NewsViewController: SileoViewController, UICollectionViewDataSource, UICol
 extension NewsViewController { // Get Data
     @objc func reloadData() {
         DispatchQueue.main.async {
+            guard UIApplication.shared.applicationState != .background else {
+                self.reloadOnForeground = true
+                return
+            }
+            self.reloadOnForeground = false
             self.collectionView.isHidden = true
             self.activityIndicatorView.startAnimating()
             self.activityIndicatorView.isHidden = false
@@ -177,20 +187,23 @@ extension NewsViewController { // Get Data
         }
     }
     
-    func loadNextBatch() {
+    @objc private func reloadAfterSuspension() {
+        if reloadOnForeground { reloadData() }
+    }
+
+    private func loadNextBatch() {
         updateQueue.async {
             let packageListManager = PackageListManager.shared
             // 必须先加载软件源中的软件包，否则已有历史记录也会被解析成空列表。
             packageListManager.initWait()
-            let databaseManager = DatabaseManager.shared
-            
-            let timestampsWeCareAbout = PackageStub.timestamps().sorted { $0 > $1 }
-            // Ok so we've got a list of timestamps we haven't bothered to load yet
-            // We're gonna load the batches, until we get to 100 or over
-            // Thanks to new repo contexts, loading packages is signifcantly faster anyway
-            var stubs = ContiguousArray<PackageStub>()
-            for timestamp in timestampsWeCareAbout {
-                stubs += databaseManager.stubsAtTimestamp(timestamp)
+            guard let stubs = DatabaseManager.shared.packageStubs() else {
+                DispatchQueue.main.async {
+                    self.reloadOnForeground = true
+                    if UIApplication.shared.applicationState == .active {
+                        self.reloadAfterSuspension()
+                    }
+                }
+                return
             }
             
             // Going to take advantage of those sweet contexts and dictionaries for super speedy package loads

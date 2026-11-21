@@ -40,23 +40,6 @@ struct PackageStub: Codable {
         }))
     }
     
-    static func timestamps() -> [Int64] {
-        let database = DatabaseManager.shared.database
-        var timestamps: [Int64] = []
-        let packages = Table("Packages")
-        
-        let firstSeen = Expression<Int64>("firstSeen")
-        do {
-            for stamps in try database.prepare(packages.select(firstSeen).select(distinct: firstSeen).order(firstSeen.desc)) {
-                let stamp = stamps[firstSeen]
-                timestamps.append(stamp)
-            }
-        } catch {
-            
-        }
-        return timestamps
-    }
-
     init(from package: Package) {
         self.package = package.package
         self.version = package.version

@@ -65,6 +65,8 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate {
         #endif
         // Prepare the Evander manifest
         Evander.prepare()
+        // 在启动并行刷新之前，在主线程初始化 Evander 的共享下载容器和队列。
+        _ = EvanderDownloadDelegate.shared.containers
         #if targetEnvironment(macCatalyst)
         _ = MacRootWrapper.shared
         #endif
@@ -73,7 +75,19 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate {
         _ = RepoManager.shared
         // Init the local database
         _ = PackageListManager.shared
-        _ = DatabaseManager.shared
+        let database = DatabaseManager.shared
+        if UIApplication.shared.applicationState == .background {
+            database.pauseForSuspension()
+        }
+        // Scene 模式下也会发送应用级通知，用它在系统挂起前停止数据库访问。
+        _ = NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification,
+                                                   object: nil, queue: .main) { _ in
+            database.pauseForSuspension()
+        }
+        _ = NotificationCenter.default.addObserver(forName: UIApplication.willEnterForegroundNotification,
+                                                   object: nil, queue: .main) { _ in
+            database.resumeAfterSuspension()
+        }
         _ = DownloadManager.shared
         // Start the language helper for customised localizations
         _ = LanguageHelper.shared
@@ -157,7 +171,7 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate {
                 controller.tabBarItem._setInternalTitle(String(localizationKey: "Search_Page"))
             }
         }
-        // 先让各页面完成标题本地化，再为 iOS 27 创建全新的标签项。
+        // 先让各页面完成标题本地化，再为 iOS 26 / 27 创建全新的标签项。
         (tabBarController as? TabBarController)?.configureSearchTabIfNeeded()
     }
 

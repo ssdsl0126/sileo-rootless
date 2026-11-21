@@ -38,15 +38,6 @@
         }
       },
       {
-        "package": "LNPopupController",
-        "repositoryURL": "https://github.com/elihwyma/LNPopupController",
-        "state": {
-          "branch": null,
-          "revision": "6cdb4a977b8e0253305cd5009e33028d90631788",
-          "version": null
-        }
-      },
-      {
         "package": "LNZTreeView",
         "repositoryURL": "https://github.com/elihwyma/LNZTreeView",
         "state": {

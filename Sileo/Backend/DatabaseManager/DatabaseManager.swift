@@ -21,10 +21,17 @@ class DatabaseManager {
     
     static let shared = DatabaseManager()
     
-    let database: Connection
+    private let database: Connection
     
     private var packages = ContiguousArray<Package>()
-    private var updateQueue: DispatchQueue = DispatchQueue(label: "org.coolstar.SileoStore.news-seen-update")
+    private let stateLock = NSLock()
+    private var isPaused = false
+    private let databaseQueue = DispatchQueue(label: "org.coolstar.SileoStore.package-database", qos: .userInitiated)
+    private var pendingWrites: [() throws -> Void] = []
+
+    private enum AccessError: Error {
+        case paused
+    }
     
     init() {
         let sileoURL = EvanderNetworking._cacheDirectory.appendingPathComponent("Database")
@@ -64,42 +71,72 @@ class DatabaseManager {
     }
     
     public func addToSaveQueue(packages: [Package]) {
-        self.packages += packages
+        stateLock.withLock {
+            self.packages += packages
+        }
+    }
+
+    func pauseForSuspension() {
+        // 先禁止打开新的读写，再中断 SQLite，等正在执行的语句释放数据库锁。
+        stateLock.withLock { isPaused = true }
+        database.interrupt()
+        databaseQueue.sync {}
+    }
+
+    func resumeAfterSuspension() {
+        stateLock.withLock { isPaused = false }
+        databaseQueue.async {
+            self.flushWrites()
+        }
+    }
+
+    private var databaseIsPaused: Bool {
+        stateLock.withLock { isPaused }
+    }
+
+    private func enqueueWrite(_ work: @escaping () throws -> Void) {
+        pendingWrites.append(work)
+        flushWrites()
+    }
+
+    private func flushWrites() {
+        while !databaseIsPaused, let work = pendingWrites.first {
+            do {
+                try work()
+            } catch {
+                // 被挂起打断的操作留在队首，回到前台后按原顺序重试。
+                if databaseIsPaused { return }
+            }
+            pendingWrites.removeFirst()
+        }
     }
     
     public func saveQueue() {
-        if packages.isEmpty { return }
-        let guid = Expression<String>("guid")
-        let package = Expression<String>("package")
-        let version = Expression<String>("version")
-        let firstSeen = Expression<Int64>("firstSeen")
-        let userRead = Expression<Int64>("userRead")
-        let repoURL = Expression<String>("repoURL")
-        let table = Table("Packages")
-        
-        let stubToCopy = PackageStub(from: packages[0])
-        let firstSeenLocal = Int64(stubToCopy.firstSeenDate.timeIntervalSince1970)
-        
-        try? database.transaction {
-            for tmp in packages {
-                let stub = PackageStub(from: tmp)
-                let count = try? database.scalar(table.filter(guid == stub.guid).count)
-                guard count ?? 0 == 0 else { continue }
-                _ = try? database.run(table.insert(
-                    guid <- "\(stub.package)-\(stub.version)",
-                    package <- stub.package,
-                    version <- stub.version,
-                    firstSeen <- firstSeenLocal,
-                    userRead <- stub.userReadDate ?? 0,
-                    repoURL <- stub.repoURL
-                ))
+        databaseQueue.sync {
+            let batch = stateLock.withLock {
+                let batch = packages
+                packages.removeAll()
+                return batch
+            }
+            guard !batch.isEmpty else { return }
+            let timestamp = Int64(Date().timeIntervalSince1970)
+            enqueueWrite { [unowned self] in
+                try self.insertStubs(batch.lazy.map { PackageStub(from: $0) }, firstSeenAt: timestamp)
             }
         }
-        packages.removeAll()
     }
     
     public func saveStubs(stubs: [PackageStub]) {
-        if stubs.isEmpty { return }
+        guard !stubs.isEmpty else { return }
+        databaseQueue.sync {
+            enqueueWrite { [unowned self] in
+                try self.insertStubs(stubs)
+            }
+        }
+    }
+
+    private func insertStubs<Stubs: Sequence>(_ stubs: Stubs, firstSeenAt timestamp: Int64? = nil) throws
+    where Stubs.Element == PackageStub {
         let guid = Expression<String>("guid")
         let package = Expression<String>("package")
         let version = Expression<String>("version")
@@ -108,15 +145,14 @@ class DatabaseManager {
         let repoURL = Expression<String>("repoURL")
         let table = Table("Packages")
 
-        try? database.transaction {
+        try database.transaction {
             for stub in stubs {
-                let count = try? database.scalar(table.filter(guid == stub.guid).count)
-                guard count ?? 0 == 0 else { continue }
-                _ = try? database.run(table.insert(
+                if databaseIsPaused { throw AccessError.paused }
+                try database.run(table.insert(or: .ignore,
                     guid <- "\(stub.package)-\(stub.version)",
                     package <- stub.package,
                     version <- stub.version,
-                    firstSeen <- Int64(stub.firstSeenDate.timeIntervalSince1970),
+                    firstSeen <- (timestamp ?? Int64(stub.firstSeenDate.timeIntervalSince1970)),
                     userRead <- stub.userReadDate ?? 0,
                     repoURL <- stub.repoURL
                 ))
@@ -124,61 +160,56 @@ class DatabaseManager {
         }
     }
     
-    public func stubsAtTimestamp(_ timestamp: Int64) -> [PackageStub] {
-        let database = self.database
-        let guid = Expression<String>("guid")
-        let package = Expression<String>("package")
-        let version = Expression<String>("version")
-        let firstSeen = Expression<Int64>("firstSeen")
-        let userRead = Expression<Int64>("userRead")
-        let repoURL = Expression<String>("repoURL")
-        let packages = Table("Packages")
-        
-        var stubs: [PackageStub] = []
-        
-        do {
-            let query = packages.select(guid,
-                                        package,
-                                        version,
-                                        firstSeen,
-                                        userRead,
-                                        repoURL)
-                .filter(firstSeen == timestamp)
-            for stub in try database.prepare(query) {
-                var stubObj = PackageStub(packageName: stub[package], version: stub[version], source: stub[repoURL])
-                stubObj.firstSeenDate = Date(timeIntervalSince1970: TimeInterval(stub[firstSeen]))
-                stubObj.firstSeen = stub[firstSeen]
-                stubObj.repoURL = stub[repoURL]
-                stubObj.userReadDate = stub[userRead]
-                stubs.append(stubObj)
+    func packageStubs() -> [PackageStub]? {
+        databaseQueue.sync {
+            guard !databaseIsPaused else { return nil }
+            let package = Expression<String>("package")
+            let version = Expression<String>("version")
+            let firstSeen = Expression<Int64>("firstSeen")
+            let userRead = Expression<Int64>("userRead")
+            let repoURL = Expression<String>("repoURL")
+            let query = Table("Packages").select(package, version, firstSeen, userRead, repoURL)
+
+            var stubs: [PackageStub] = []
+            do {
+                // 一次读取完整快照，SQLite 中断时让可抛错的迭代器退出并释放游标。
+                let rows = try database.prepareRowIterator(query)
+                while !databaseIsPaused, let row = try rows.failableNext() {
+                    var stub = PackageStub(packageName: row[package], version: row[version], source: row[repoURL])
+                    let timestamp = row[firstSeen]
+                    stub.firstSeenDate = Date(timeIntervalSince1970: TimeInterval(timestamp))
+                    stub.firstSeen = timestamp
+                    stub.userReadDate = row[userRead]
+                    stubs.append(stub)
+                }
+            } catch {
+                if databaseIsPaused { return nil }
             }
-        } catch {
-            
+            return databaseIsPaused ? nil : stubs
         }
-        return stubs
     }
     
     public func markAsSeen(_ dataPackage: Package) {
-        updateQueue.async {
-            let database = self.database
-            let packages = Table("Packages")
-            let package = Expression<String>("package")
-            let userRead = Expression<Int64>("userRead")
-            
-            let stub = packages.filter(package == dataPackage.packageID)
-            do {
-                try database.run(stub.update(userRead <- 1))
-            } catch {
-                
+        let packageID = dataPackage.packageID
+        databaseQueue.async {
+            self.enqueueWrite { [unowned self] in
+                let package = Expression<String>("package")
+                let userRead = Expression<Int64>("userRead")
+                let rows = Table("Packages").filter(package == packageID)
+                try self.database.run(rows.update(userRead <- 1))
             }
         }
     }
    
     public func deleteRepo(repo: Repo) {
         let file = RepoManager.shared.cacheFile(named: "Packages", for: repo).lastPathComponent
-        let repoURL = Expression<String>("repoURL")
-        let packages = Table("Packages")
-        _ = try? database.run(packages.filter(repoURL == file).delete())
+        databaseQueue.sync {
+            enqueueWrite { [unowned self] in
+                let repoURL = Expression<String>("repoURL")
+                let rows = Table("Packages").filter(repoURL == file)
+                try self.database.run(rows.delete())
+            }
+        }
     }
     
 }
