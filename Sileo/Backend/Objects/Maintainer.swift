@@ -22,12 +22,13 @@ struct Maintainer: Decodable {
             return
         }
         self.string = string
-        if let emailStartIndex = inputString.range(of: "<")?.lowerBound {
-            let nameRange = inputString.startIndex..<emailStartIndex
+        if let openingBracketIndex = inputString.firstIndex(of: "<") {
+            let nameRange = inputString.startIndex..<openingBracketIndex
             let name = inputString[nameRange].trimmingCharacters(in: .whitespaces)
+            let emailStartIndex = inputString.index(after: openingBracketIndex)
             
-            if let emailEndIndex = inputString.range(of: ">")?.lowerBound {
-                let emailRange = inputString.index(after: emailStartIndex)..<emailEndIndex
+            if let emailEndIndex = inputString[emailStartIndex...].firstIndex(of: ">") {
+                let emailRange = emailStartIndex..<emailEndIndex
                 let email = inputString[emailRange].lowercased()
                 
                 self.name = name.isEmpty ? nil : name

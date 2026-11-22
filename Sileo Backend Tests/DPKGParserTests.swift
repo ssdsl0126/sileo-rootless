@@ -32,6 +32,16 @@ final class DPKGParserTests: XCTestCase {
         XCTAssert(case3Maintainer.name == "Amy While" && case3Maintainer.email == nil, "Failed to parse \(case3), got: \(dump(case3Maintainer))")
     }
 
+    func testMaintainerNameWithClosingBracket() {
+        let maintainer = Maintainer(string: "Demo > Maintainer <demo@example.com>")
+        XCTAssertEqual(maintainer.name, "Demo > Maintainer")
+        XCTAssertEqual(maintainer.email, "demo@example.com")
+
+        let missingClosingBracket = Maintainer(string: "Demo > Maintainer <demo@example.com")
+        XCTAssertEqual(missingClosingBracket.name, "Demo > Maintainer")
+        XCTAssertNil(missingClosingBracket.email)
+    }
+
     func testPackageIndexFormatValidatorRejectsHTMLFallback() {
         let html = Data("<!DOCTYPE html><html></html>".utf8)
         for fileExtension in ["zst", "xz", "lzma", "bz2", "gz", ""] {
