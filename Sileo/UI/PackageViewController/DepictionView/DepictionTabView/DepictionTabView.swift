@@ -10,8 +10,8 @@ import Foundation
 import Evander
 
 class DepictionTabView: DepictionBaseView, DepictionTabControlContainer {
-    var tabViews: [DepictionTabControl] = []
-    var tabContentViews: [DepictionBaseView] = []
+    private var tabViews: [DepictionTabControl] = []
+    private var tabContentViews: [DepictionBaseView] = []
 
     var tabView: UIView?
     var tabViewSeparator: UIView?
@@ -40,14 +40,15 @@ class DepictionTabView: DepictionBaseView, DepictionTabControlContainer {
                 continue
             }
 
-            let tabControl = DepictionTabControl(text: tabName)
-
             if let view = DepictionBaseView.view(dictionary: tab, viewController: viewController, tintColor: tintColor, isActionable: isActionable) {
+                let tabControl = DepictionTabControl(text: tabName)
                 tabViews.append(tabControl)
                 tabView?.addSubview(tabControl)
                 tabContentViews.append(view)
             }
         }
+
+        guard !tabContentViews.isEmpty else { return nil }
 
         tabViewSeparator = UIView(frame: .zero)
         tabViewSeparator?.backgroundColor = .sileoSeparatorColor
@@ -61,8 +62,6 @@ class DepictionTabView: DepictionBaseView, DepictionTabControlContainer {
 
         tabViewHighlight = UIView(frame: .zero)
         tabView?.addSubview(tabViewHighlight!)
-
-        activeTab = 0
     }
 
     required public init?(coder aDecoder: NSCoder) {
@@ -72,13 +71,13 @@ class DepictionTabView: DepictionBaseView, DepictionTabControlContainer {
     override func layoutSubviews() {
         super.layoutSubviews()
 
+        guard let selectedTab = tabViews[safe: activeTab],
+              let activeTabContent = tabContentViews[safe: activeTab] else { return }
+
         tabView?.frame = CGRect(origin: .zero, size: CGSize(width: self.bounds.width, height: 40))
         tabView?.accessibilityTraits = .tabBar
 
-        let activeTab = tabViews[self.activeTab]
-        activeTab.highlighted = true
-
-        let activeTabContent = tabContentViews[self.activeTab]
+        selectedTab.highlighted = true
         self.addSubview(activeTabContent)
 
         let tabCount = CGFloat(tabViews.count)
@@ -88,7 +87,7 @@ class DepictionTabView: DepictionBaseView, DepictionTabControlContainer {
             tabControl.frame = CGRect(x: x, y: 0, width: self.bounds.width/tabCount, height: 40)
             x += tabControl.frame.width
 
-            if tabControl != activeTab {
+            if tabControl != selectedTab {
                 tabControl.highlighted = false
             }
         }
@@ -97,11 +96,11 @@ class DepictionTabView: DepictionBaseView, DepictionTabControlContainer {
             tabContent.removeFromSuperview()
         }
 
-        let highlightWidth = activeTab.textWidth() + 6
+        let highlightWidth = selectedTab.textWidth() + 6
         tabViewHighlight?.backgroundColor = self.tintColor
 
         tabViewSeparator?.frame = CGRect(x: 0, y: 39, width: self.bounds.width, height: 1)
-        tabViewHighlight?.frame = CGRect(x: activeTab.frame.minX + (activeTab.frame.width - highlightWidth)/2.0,
+        tabViewHighlight?.frame = CGRect(x: selectedTab.frame.minX + (selectedTab.frame.width - highlightWidth)/2.0,
                                          y: 38.0,
                                          width: highlightWidth,
                                          height: 2)
@@ -113,12 +112,13 @@ class DepictionTabView: DepictionBaseView, DepictionTabControlContainer {
     }
 
     func tabTapped(_ tab: DepictionTabControl) {
+        guard let index = tabViews.firstIndex(of: tab) else { return }
         FRUIView.animate(withDuration: 0.25) {
-            self.activeTab = self.tabViews.firstIndex(of: tab) ?? 0
+            self.activeTab = index
         }
     }
 
-    var activeTab: Int = 0 {
+    private var activeTab: Int = 0 {
         didSet {
             self.subviewHeightChanged()
         }
@@ -130,11 +130,8 @@ class DepictionTabView: DepictionBaseView, DepictionTabControlContainer {
     }
 
     override func depictionHeight(width: CGFloat) -> CGFloat {
-        var height = CGFloat(40)
-
-        let depictionView = tabContentViews[activeTab]
-        height += depictionView.depictionHeight(width: width)
-        return height
+        guard let depictionView = tabContentViews[safe: activeTab] else { return 0 }
+        return 40 + depictionView.depictionHeight(width: width)
     }
     
     @objc func updateSileoColors() {
