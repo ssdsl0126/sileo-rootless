@@ -12,4 +12,11 @@ class SileoNavigationController: UINavigationController {
     override var childForStatusBarStyle: UIViewController? {
         viewControllers.last
     }
+
+    override func present(_ viewControllerToPresent: UIViewController, animated flag: Bool, completion: (() -> Void)? = nil) {
+        if #available(iOS 26.0, *) {
+            TabBarController.singleton?.restoreModernPadTraitsIfNeeded(for: viewControllerToPresent)
+        }
+        super.present(viewControllerToPresent, animated: flag, completion: completion)
+    }
 }

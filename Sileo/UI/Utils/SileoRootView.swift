@@ -335,6 +335,12 @@ enum SileoGlass {
         // 导航栏和标签栏观察同一内容面，避免 UIKit 用启发式选中其它滚动视图。
         viewController.setContentScrollView(scrollView, for: .top)
         viewController.navigationController?.setContentScrollView(scrollView, for: .top)
+        if UIDevice.current.userInterfaceIdiom == .pad,
+           viewController.splitViewController is SourcesSplitViewController {
+            // iPadOS 26+ 双栏软件源由 SourcesSplitViewController 的滚动协调器统一管理 .bottom，
+            // 避免右栏导航控制器在布局/安全区变化时抢走底栏的滚动观测。
+            return
+        }
         viewController.setContentScrollView(scrollView, for: .bottom)
         viewController.navigationController?.setContentScrollView(scrollView, for: .bottom)
     }
@@ -510,6 +516,9 @@ extension UIViewController {
             default:
                 alertController.overrideUserInterfaceStyle = overrideUserInterfaceStyle
             }
+        }
+        if #available(iOS 26.0, *) {
+            TabBarController.singleton?.restoreModernPadTraitsIfNeeded(for: alertController)
         }
         SileoGlass.configure(alertController: alertController, tintColor: tintColor)
         present(alertController, animated: animated) {

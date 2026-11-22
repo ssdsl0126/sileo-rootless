@@ -37,6 +37,13 @@ public class SileoViewController: UIViewController {
         return statusBarStyle
     }
     
+    public override func present(_ viewControllerToPresent: UIViewController, animated flag: Bool, completion: (() -> Void)? = nil) {
+        if #available(iOS 26.0, *) {
+            TabBarController.singleton?.restoreModernPadTraitsIfNeeded(for: viewControllerToPresent)
+        }
+        super.present(viewControllerToPresent, animated: flag, completion: completion)
+    }
+
     func normalizeLargeTitleLayoutMargins(leading: CGFloat = 20) {
         guard Thread.isMainThread,
               #available(iOS 11.0, *),

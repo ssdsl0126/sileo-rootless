@@ -268,6 +268,11 @@ class PackageListViewController: SileoViewController, UIGestureRecognizerDelegat
                 // iOS 26 / 27 均启用 UISearchTab，允许独立搜索标签接管底部搜索栏与左侧返回按钮。
                 navigationItem.preferredSearchBarPlacement = .automatic
                 navigationItem.searchBarPlacementAllowsToolbarIntegration = true
+            } else if showSearchField, UIDevice.current.userInterfaceIdiom == .pad {
+                // iPadOS 26+ 启用底栏变形搜索框，由 .integrated 集成到底部标签栏并同步队列显隐。
+                searchController.delegate = self
+                navigationItem.preferredSearchBarPlacement = .integrated
+                navigationItem.searchBarPlacementAllowsToolbarIntegration = true
             } else {
                 // 软件包列表继续使用顶部搜索栏，保留旧系统和 iPad 的现有布局。
                 navigationItem.preferredSearchBarPlacement = .stacked
@@ -721,12 +726,35 @@ extension PackageListViewController: UICollectionViewDataSource {
 }
 
 extension PackageListViewController: UICollectionViewDelegate {
+    func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+        TabBarController.singleton?.handleModernPadScrollWillBeginDragging(scrollView)
+    }
+
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
         TabBarController.singleton?.updateLiquidGlassScroll(scrollView)
+        TabBarController.singleton?.handleModernPadScrollDidScroll(scrollView)
     }
 
     func scrollViewDidChangeAdjustedContentInset(_ scrollView: UIScrollView) {
         invalidateCollectionLayoutIfMetricsChanged()
+        TabBarController.singleton?.handleModernPadScrollDidChangeAdjustedInset(scrollView)
+    }
+
+    func scrollViewShouldScrollToTop(_ scrollView: UIScrollView) -> Bool {
+        TabBarController.singleton?.handleModernPadScrollShouldScrollToTop(scrollView)
+        return true
+    }
+
+    func scrollViewDidScrollToTop(_ scrollView: UIScrollView) {
+        TabBarController.singleton?.handleModernPadScrollDidScrollToTop(scrollView)
+    }
+
+    func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+        TabBarController.singleton?.handleModernPadScrollDidEndDragging(scrollView, willDecelerate: decelerate)
+    }
+
+    func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
+        TabBarController.singleton?.handleModernPadScrollDidEndDecelerating(scrollView)
     }
 
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
@@ -857,6 +885,26 @@ extension PackageListViewController {
             animator.addAnimations {
                 self.show(previewController, sender: self)
             }
+        }
+    }
+}
+
+extension PackageListViewController: UISearchControllerDelegate {
+    func willPresentSearchController(_ searchController: UISearchController) {
+        if #available(iOS 26.0, *), showSearchField, UIDevice.current.userInterfaceIdiom == .pad {
+            TabBarController.singleton?.setModernPadSearchActive(true)
+        }
+    }
+
+    func willDismissSearchController(_ searchController: UISearchController) {
+        if #available(iOS 26.0, *), showSearchField, UIDevice.current.userInterfaceIdiom == .pad {
+            TabBarController.singleton?.setModernPadSearchActive(false)
+        }
+    }
+
+    func didDismissSearchController(_ searchController: UISearchController) {
+        if #available(iOS 26.0, *), showSearchField, UIDevice.current.userInterfaceIdiom == .pad {
+            TabBarController.singleton?.setModernPadSearchActive(false)
         }
     }
 }

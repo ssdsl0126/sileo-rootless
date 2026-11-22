@@ -338,7 +338,7 @@ final class SourcesViewController: SileoViewController {
 
         let item = splitViewController?.tabBarItem ?? navigationController?.tabBarItem
         sourceRefreshIndicatorIsVisible = true
-        if UIDevice.current.userInterfaceIdiom == .phone {
+        if UIDevice.current.userInterfaceIdiom == .phone || UIDevice.current.userInterfaceIdiom == .pad {
             ((tabBarController as? TabBarController) ?? TabBarController.singleton)?.setSourcesRefreshing(true)
             return
         }
@@ -350,7 +350,8 @@ final class SourcesViewController: SileoViewController {
     private func hideSourceRefreshIndicator() {
         sourceRefreshIndicatorIsVisible = false
         clearSourceRefreshIndicatorViews()
-        if UIDevice.current.userInterfaceIdiom == .phone {
+        if #available(iOS 26.0, *),
+           UIDevice.current.userInterfaceIdiom == .phone || UIDevice.current.userInterfaceIdiom == .pad {
             ((tabBarController as? TabBarController) ?? TabBarController.singleton)?.setSourcesRefreshing(false)
             return
         }
@@ -370,7 +371,7 @@ final class SourcesViewController: SileoViewController {
             return
         }
 
-        if UIDevice.current.userInterfaceIdiom == .phone {
+        if UIDevice.current.userInterfaceIdiom == .phone || UIDevice.current.userInterfaceIdiom == .pad {
             ((tabBarController as? TabBarController) ?? TabBarController.singleton)?.setSourcesRefreshing(true)
             return
         }
@@ -1020,12 +1021,35 @@ extension SourcesViewController: UITableViewDataSource { // UITableViewDataSourc
 }
 
 extension SourcesViewController: UITableViewDelegate { // UITableViewDelegate
+    func scrollViewDidChangeAdjustedContentInset(_ scrollView: UIScrollView) {
+        TabBarController.singleton?.handleModernPadScrollDidChangeAdjustedInset(scrollView)
+    }
+
     func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
         TabBarController.singleton?.prepareLiquidGlassScroll(scrollView)
+        TabBarController.singleton?.handleModernPadScrollWillBeginDragging(scrollView)
     }
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
         TabBarController.singleton?.updateLiquidGlassScroll(scrollView)
+        TabBarController.singleton?.handleModernPadScrollDidScroll(scrollView)
+    }
+
+    func scrollViewShouldScrollToTop(_ scrollView: UIScrollView) -> Bool {
+        TabBarController.singleton?.handleModernPadScrollShouldScrollToTop(scrollView)
+        return true
+    }
+
+    func scrollViewDidScrollToTop(_ scrollView: UIScrollView) {
+        TabBarController.singleton?.handleModernPadScrollDidScrollToTop(scrollView)
+    }
+
+    func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+        TabBarController.singleton?.handleModernPadScrollDidEndDragging(scrollView, willDecelerate: decelerate)
+    }
+
+    func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
+        TabBarController.singleton?.handleModernPadScrollDidEndDecelerating(scrollView)
     }
 
     func tableView(_ tableView: UITableView, shouldShowMenuForRowAt indexPath: IndexPath) -> Bool {

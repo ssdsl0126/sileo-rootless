@@ -378,16 +378,39 @@ final class FeaturedViewController: SileoViewController, UIScrollViewDelegate, F
         profileButton?.transform = CGAffineTransform(scaleX: scale, y: scale).translatedBy(x: xTranslation, y: yTranslation)
     }
     
+    func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+        TabBarController.singleton?.handleModernPadScrollWillBeginDragging(scrollView)
+    }
+
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
         guard let height = self.navigationController?.navigationBar.frame.height else {
             return
         }
         self.moveAndResizeProfile(height: height)
         TabBarController.singleton?.updateLiquidGlassScroll(scrollView)
+        TabBarController.singleton?.handleModernPadScrollDidScroll(scrollView)
     }
     
     func scrollViewDidChangeAdjustedContentInset(_ scrollView: UIScrollView) {
         layoutFeaturedContentIfNeeded()
+        TabBarController.singleton?.handleModernPadScrollDidChangeAdjustedInset(scrollView)
+    }
+
+    func scrollViewShouldScrollToTop(_ scrollView: UIScrollView) -> Bool {
+        TabBarController.singleton?.handleModernPadScrollShouldScrollToTop(scrollView)
+        return true
+    }
+
+    func scrollViewDidScrollToTop(_ scrollView: UIScrollView) {
+        TabBarController.singleton?.handleModernPadScrollDidScrollToTop(scrollView)
+    }
+
+    func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+        TabBarController.singleton?.handleModernPadScrollDidEndDragging(scrollView, willDecelerate: decelerate)
+    }
+
+    func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
+        TabBarController.singleton?.handleModernPadScrollDidEndDecelerating(scrollView)
     }
 
     func subviewHeightChanged() {

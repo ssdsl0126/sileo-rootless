@@ -13,6 +13,86 @@ class TabBar: UITabBar {
     var onDidMoveToWindow: (() -> Void)?
     var onDidAddSubview: ((UIView) -> Void)?
     var onWillRemoveSubview: ((UIView) -> Void)?
+    var modernPadWidthRatio: CGFloat?
+
+    private var isAdjustingModernPadGeometry = false
+
+    private func modernPadTargetWidth(for containerWidth: CGFloat) -> CGFloat? {
+        guard #available(iOS 26.0, *),
+              UIDevice.current.userInterfaceIdiom == .pad,
+              let ratio = modernPadWidthRatio,
+              ratio > 0, ratio < 1,
+              containerWidth > 0 else {
+            return nil
+        }
+        // 按屏幕/窗口宽度的指定比例居中显示；窄分屏下保留 350pt 最小可用宽度，避免四标签与搜索键重叠。
+        // iPadOS 26 的浮动底栏主托盘上限约 336pt、横屏搜索框上限约 316.5pt，限制最大宽度 396pt 可彻底避免中间出现空洞；
+        // iPadOS 27 支持主托盘与搜索框随底栏宽度完整铺满，直接按 50% 宽度显示。
+        var desired = max(350, floor(containerWidth * ratio))
+        if #unavailable(iOS 27.0) {
+            desired = min(desired, 396)
+        }
+        let target = min(containerWidth, desired)
+        return target < containerWidth - 1 ? target : nil
+    }
+
+    func refreshModernPadFrameIfNeeded() {
+        let current = super.frame
+        guard current.width > 0 else { return }
+        let containerWidth = superview?.bounds.width ?? window?.bounds.width ?? current.width
+        guard let targetWidth = modernPadTargetWidth(for: containerWidth) else { return }
+        let targetX = floor((containerWidth - targetWidth) / 2)
+        if abs(current.width - targetWidth) > 0.5 || abs(current.origin.x - targetX) > 0.5 {
+            isAdjustingModernPadGeometry = true
+            super.frame = CGRect(x: targetX, y: current.origin.y, width: targetWidth, height: current.height)
+            isAdjustingModernPadGeometry = false
+        }
+    }
+
+    override var frame: CGRect {
+        get { super.frame }
+        set {
+            guard !isAdjustingModernPadGeometry,
+                  newValue.width > 0 else {
+                super.frame = newValue
+                return
+            }
+            let containerWidth = superview?.bounds.width ?? window?.bounds.width ?? newValue.width
+            guard let targetWidth = modernPadTargetWidth(for: containerWidth),
+                  newValue.width > targetWidth + 0.5 else {
+                super.frame = newValue
+                return
+            }
+            let horizontalInset = floor((newValue.width - targetWidth) / 2)
+            isAdjustingModernPadGeometry = true
+            super.frame = CGRect(x: newValue.origin.x + horizontalInset,
+                                 y: newValue.origin.y,
+                                 width: targetWidth,
+                                 height: newValue.height)
+            isAdjustingModernPadGeometry = false
+        }
+    }
+
+    override var bounds: CGRect {
+        get { super.bounds }
+        set {
+            guard !isAdjustingModernPadGeometry,
+                  newValue.width > 0 else {
+                super.bounds = newValue
+                return
+            }
+            let containerWidth = superview?.bounds.width ?? window?.bounds.width ?? newValue.width
+            guard let targetWidth = modernPadTargetWidth(for: containerWidth),
+                  newValue.width > targetWidth + 0.5 else {
+                super.bounds = newValue
+                return
+            }
+            isAdjustingModernPadGeometry = true
+            super.bounds = CGRect(origin: newValue.origin,
+                                  size: CGSize(width: targetWidth, height: newValue.height))
+            isAdjustingModernPadGeometry = false
+        }
+    }
 
     override func layoutSubviews() {
         super.layoutSubviews()
@@ -36,6 +116,9 @@ class TabBar: UITabBar {
 
     override var traitCollection: UITraitCollection {
         if UIDevice.current.userInterfaceIdiom == .phone {
+            return super.traitCollection
+        }
+        if #available(iOS 26.0, *) {
             return super.traitCollection
         }
         if UIApplication.shared.statusBarOrientation.isLandscape && self.bounds.width >= 400 {

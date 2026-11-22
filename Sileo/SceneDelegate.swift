@@ -8,6 +8,18 @@
 
 import UIKit
 
+final class SileoWindow: UIWindow {
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        let hit = super.hitTest(point, with: event)
+        if #available(iOS 26.0, *),
+           UIDevice.current.userInterfaceIdiom == .pad,
+           let hit {
+            TabBarController.singleton?.handleModernPadHitTest(hit)
+        }
+        return hit
+    }
+}
+
 @objc(SceneDelegate)
 final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
@@ -18,7 +30,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         }
 
         if window == nil {
-            let createdWindow = UIWindow(windowScene: windowScene)
+            let createdWindow = SileoWindow(windowScene: windowScene)
             createdWindow.rootViewController = UIStoryboard(name: "Main", bundle: nil).instantiateInitialViewController()
             window = createdWindow
         }
@@ -35,6 +47,21 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         for context in connectionOptions.urlContexts {
             appDelegate.handleOpenURL(context.url)
         }
+    }
+
+    func windowScene(_ windowScene: UIWindowScene,
+                     didUpdate previousCoordinateSpace: UICoordinateSpace,
+                     interfaceOrientation previousInterfaceOrientation: UIInterfaceOrientation,
+                     traitCollection previousTraitCollection: UITraitCollection) {
+        guard #available(iOS 26.0, *),
+              UIDevice.current.userInterfaceIdiom == .pad,
+              let tabBarController = window?.rootViewController as? TabBarController else {
+            return
+        }
+        tabBarController.syncModernPadContentTabTraits(
+            window: window,
+            targetHorizontalSizeClass: windowScene.traitCollection.horizontalSizeClass
+        )
     }
 
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {

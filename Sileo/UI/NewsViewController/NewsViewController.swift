@@ -131,6 +131,7 @@ class NewsViewController: SileoViewController, UICollectionViewDataSource, UICol
 
     func scrollViewDidChangeAdjustedContentInset(_ scrollView: UIScrollView) {
         invalidateCollectionLayoutIfMetricsChanged()
+        TabBarController.singleton?.handleModernPadScrollDidChangeAdjustedInset(scrollView)
     }
 
     private func invalidateCollectionLayoutIfMetricsChanged() {
@@ -151,8 +152,30 @@ class NewsViewController: SileoViewController, UICollectionViewDataSource, UICol
         collectionView.collectionViewLayout.invalidateLayout()
     }
 
+    func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+        TabBarController.singleton?.handleModernPadScrollWillBeginDragging(scrollView)
+    }
+
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
         TabBarController.singleton?.updateLiquidGlassScroll(scrollView)
+        TabBarController.singleton?.handleModernPadScrollDidScroll(scrollView)
+    }
+
+    func scrollViewShouldScrollToTop(_ scrollView: UIScrollView) -> Bool {
+        TabBarController.singleton?.handleModernPadScrollShouldScrollToTop(scrollView)
+        return true
+    }
+
+    func scrollViewDidScrollToTop(_ scrollView: UIScrollView) {
+        TabBarController.singleton?.handleModernPadScrollDidScrollToTop(scrollView)
+    }
+
+    func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+        TabBarController.singleton?.handleModernPadScrollDidEndDragging(scrollView, willDecelerate: decelerate)
+    }
+
+    func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
+        TabBarController.singleton?.handleModernPadScrollDidEndDecelerating(scrollView)
     }
 
     override func viewWillAppear(_ animated: Bool) {

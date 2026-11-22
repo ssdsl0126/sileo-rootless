@@ -63,7 +63,7 @@ class PackageCollectionViewCell: SwipeCollectionViewCell {
 
     override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
         if #available(iOS 26.0, *),
-           traitCollection.userInterfaceIdiom == .pad,
+           (traitCollection.userInterfaceIdiom == .pad || UIDevice.current.userInterfaceIdiom == .pad),
            event?.type != .touches {
             // SwipeCellKit 会在命中测试离开已展开的 cell 时自动收起；
             // iPad 鼠标悬停会持续触发非触摸命中测试，因此不能沿用该副作用。

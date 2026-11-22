@@ -135,8 +135,14 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
         self.navigationItem.largeTitleDisplayMode = .never
         scrollView.delegate = self
         if #available(iOS 26.0, *) {
-            // 明确让顶部和底部容器跟踪详情页主滚动视图，避免系统版本间的启发式差异。
-            setContentScrollView(scrollView, for: [.top, .bottom])
+            if UIDevice.current.userInterfaceIdiom == .pad,
+               splitViewController is SourcesSplitViewController {
+                // iPadOS 26+ 双栏软件源内仅绑定 .top，由 SourcesSplitViewController 滚动协调器统一管理 .bottom。
+                setContentScrollView(scrollView, for: .top)
+            } else {
+                // 明确让顶部和底部容器跟踪详情页主滚动视图，避免系统版本间的启发式差异。
+                setContentScrollView(scrollView, for: [.top, .bottom])
+            }
         }
         
         NotificationCenter.default.addObserver(self,
@@ -439,6 +445,14 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
         }
     }
 
+    func scrollViewDidChangeAdjustedContentInset(_ scrollView: UIScrollView) {
+        TabBarController.singleton?.handleModernPadScrollDidChangeAdjustedInset(scrollView)
+    }
+
+    func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+        TabBarController.singleton?.handleModernPadScrollWillBeginDragging(scrollView)
+    }
+
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
         if #available(iOS 27.0, *),
            UIDevice.current.userInterfaceIdiom == .pad {
@@ -449,6 +463,7 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
             }
         }
         TabBarController.singleton?.updateLiquidGlassScroll(scrollView)
+        TabBarController.singleton?.handleModernPadScrollDidScroll(scrollView)
         // do header view scaling magic
         let headerBounds = depictionHeaderView.bounds
         var aspectRatio = headerBounds.width / headerBounds.height
@@ -555,7 +570,17 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
         self.setNeedsStatusBarAppearanceUpdate()
     }
 
+    func scrollViewShouldScrollToTop(_ scrollView: UIScrollView) -> Bool {
+        TabBarController.singleton?.handleModernPadScrollShouldScrollToTop(scrollView)
+        return true
+    }
+
+    func scrollViewDidScrollToTop(_ scrollView: UIScrollView) {
+        TabBarController.singleton?.handleModernPadScrollDidScrollToTop(scrollView)
+    }
+
     func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+        TabBarController.singleton?.handleModernPadScrollDidEndDragging(scrollView, willDecelerate: decelerate)
         // for those wondering about the magic numbers and what's going on here:
         // This is the spring effect on scrolling (aka step to start or step to after header
         // 113 = header imageView height - nav bar height and 56 is simply for setitng the step boundary, aka halfway
@@ -567,6 +592,10 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
         } else if scrollViewOffset > 66 && scrollViewOffset < 133 {
             scrollView.setContentOffset(CGPoint(x: 0, y: 156 - UIApplication.shared.statusBarFrame.height), animated: true)
         }
+    }
+
+    func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
+        TabBarController.singleton?.handleModernPadScrollDidEndDecelerating(scrollView)
     }
 
     func subviewHeightChanged() {

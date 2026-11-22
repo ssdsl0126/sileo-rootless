@@ -333,6 +333,35 @@ class CategoryViewController: SileoTableViewController {
         let packageListVC = self.controller(indexPath: indexPath)
         self.navigationController?.pushViewController(packageListVC, animated: true)
     }
+
+    override func scrollViewDidChangeAdjustedContentInset(_ scrollView: UIScrollView) {
+        TabBarController.singleton?.handleModernPadScrollDidChangeAdjustedInset(scrollView)
+    }
+
+    override func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+        TabBarController.singleton?.handleModernPadScrollWillBeginDragging(scrollView)
+    }
+
+    override func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        TabBarController.singleton?.handleModernPadScrollDidScroll(scrollView)
+    }
+
+    override func scrollViewShouldScrollToTop(_ scrollView: UIScrollView) -> Bool {
+        TabBarController.singleton?.handleModernPadScrollShouldScrollToTop(scrollView)
+        return true
+    }
+
+    override func scrollViewDidScrollToTop(_ scrollView: UIScrollView) {
+        TabBarController.singleton?.handleModernPadScrollDidScrollToTop(scrollView)
+    }
+
+    override func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+        TabBarController.singleton?.handleModernPadScrollDidEndDragging(scrollView, willDecelerate: decelerate)
+    }
+
+    override func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
+        TabBarController.singleton?.handleModernPadScrollDidEndDecelerating(scrollView)
+    }
 }
 
 extension CategoryViewController: UIViewControllerPreviewingDelegate {

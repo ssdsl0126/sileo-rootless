@@ -75,6 +75,12 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     private var packageBadgeValue: String?
     private var packageBadgeColor: UIColor?
     private var lastNonSearchTabIdentifier: String?
+    private var isModernPadSearchActive = false
+    private var transientPadSelectedTabTitle: String?
+    private var transientPadSelectionResetWorkItem: DispatchWorkItem?
+    private var suspendedPadTabBarPointerInteractions: [ObjectIdentifier: UIPointerInteraction] = [:]
+    private var padPointerRestoreWorkItem: DispatchWorkItem?
+    private let modernPadScrollStates = NSMapTable<UIScrollView, ModernPadScrollState>.weakToStrongObjects()
     private struct CompactBadgeSyncAttempt: Equatable {
         let buttonID: ObjectIdentifier
         let title: String
@@ -86,8 +92,15 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     var isQueuePresentationVisible: Bool {
         popupIsPresented ||
         isPresentingQueueSheet ||
-        isQueueSheetVisible ||
+        isQueueSheetEffectivelyVisible ||
         presentedViewController === downloadsController
+    }
+
+    private var isQueueSheetEffectivelyVisible: Bool {
+        if isQueueSheetVisible && downloadsController?.presentingViewController == nil {
+            isQueueSheetVisible = false
+        }
+        return isQueueSheetVisible
     }
     
     private var preferredPopupInteractionStyle: LNPopupInteractionStyle {
@@ -98,9 +111,17 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         UIDevice.current.userInterfaceIdiom == .phone
     }
 
-    private var usesModernPhoneTabMenu: Bool {
-        if #available(iOS 26.0, *), UIDevice.current.userInterfaceIdiom == .phone {
+    private var usesModernPadBottomTabMenu: Bool {
+        if #available(iOS 26.0, *), UIDevice.current.userInterfaceIdiom == .pad {
             return true
+        }
+        return false
+    }
+
+    private var usesModernTabMenu: Bool {
+        if #available(iOS 26.0, *) {
+            let idiom = UIDevice.current.userInterfaceIdiom
+            return idiom == .phone || idiom == .pad
         }
         return false
     }
@@ -125,6 +146,8 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     }
 
     deinit {
+        transientPadSelectionResetWorkItem?.cancel()
+        padPointerRestoreWorkItem?.cancel()
         badgeDisplayLink?.invalidate()
         NotificationCenter.default.removeObserver(self)
     }
@@ -134,12 +157,22 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         
         delegate = self
         TabBarController.singleton = self
-        if usesModernPhoneTabMenu, let sileoTabBar = tabBar as? TabBar {
+        if usesModernTabMenu, let sileoTabBar = tabBar as? TabBar {
+            if usesModernPadBottomTabMenu {
+                sileoTabBar.modernPadWidthRatio = 0.5
+            }
             if #available(iOS 27.0, *) {
                 nativeBadgePortalLift = NativeBadgePortalLift()
             }
             sileoTabBar.onLayoutSubviews = { [weak self] in
                 guard let self else { return }
+                if #available(iOS 26.0, *), self.usesModernPadBottomTabMenu {
+                    self.ensureModernPadHostedSearchOrderIfNeeded()
+                    self.alignModernPadHostedSearchBarIfNeeded()
+                    if self.transientPadSelectedTabTitle != nil {
+                        self.syncModernPadSelectedTabVisualsIfNeeded()
+                    }
+                }
                 self.anchoredBadges?.invalidateLayout()
                 self.updateModernTabBadges()
             }
@@ -149,6 +182,9 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
                     self.stopModernTabBadgeDisplayLink()
                     self.anchoredBadges?.detach()
                     self.nativeBadgePortalLift?.deactivate()
+                    if #available(iOS 26.0, *), self.usesModernPadBottomTabMenu {
+                        self.restoreModernPadPointerInteractionIfMorphEnded(force: true)
+                    }
                 } else {
                     self.anchoredBadges?.invalidateLayout()
                     self.updateModernTabBadges()
@@ -156,7 +192,30 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
                 }
             }
             sileoTabBar.onDidAddSubview = { [weak self] subview in
-                guard let self, let lift = self.nativeBadgePortalLift else { return }
+                guard let self else { return }
+                if #available(iOS 26.0, *) {
+                    if self.usesModernPadBottomTabMenu {
+                        self.ensureModernPadHostedSearchOrderIfNeeded()
+                    }
+                    let className = NSStringFromClass(type(of: subview))
+                    if className.contains("Reparenting") || className.contains("MagicMorph") {
+                        if self.usesModernPadBottomTabMenu {
+                            self.suspendModernPadPointerInteractionForMorphIfNeeded()
+                        }
+                    }
+                    if className.contains("PlatterView") || className.contains("Reparenting") {
+                        if self.anchoredBadges == nil {
+                            self.syncCompactPlatterBadgesIfNeeded(allowDuringMorph: true)
+                            if self.isSourcesRefreshing {
+                                self.nativeRefreshBadge.update(in: self.modernTabBadgeSearchRoot, isRefreshing: true)
+                            }
+                        }
+                        if self.usesModernPadBottomTabMenu, self.transientPadSelectedTabTitle != nil {
+                            self.syncModernPadSelectedTabVisualsIfNeeded()
+                        }
+                    }
+                }
+                guard let lift = self.nativeBadgePortalLift else { return }
                 lift.update(in: self.tabBar)
                 if !lift.isActive, NSStringFromClass(type(of: subview)) == "_UIPortalView" {
                     DispatchQueue.main.async { [weak self] in
@@ -168,6 +227,15 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
             sileoTabBar.onWillRemoveSubview = { [weak self] subview in
                 guard let self else { return }
                 self.nativeBadgePortalLift?.update(in: self.tabBar, excluding: subview)
+                if #available(iOS 26.0, *), self.usesModernPadBottomTabMenu {
+                    let className = NSStringFromClass(type(of: subview))
+                    if className.contains("Reparenting") || className.contains("MagicMorph") {
+                        DispatchQueue.main.async { [weak self] in
+                            self?.restoreModernPadPointerInteractionIfMorphEnded()
+                            self?.alignModernPadHostedSearchBarIfNeeded()
+                        }
+                    }
+                }
             }
         }
 
@@ -187,7 +255,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
                                                selector: #selector(updateSileoColors),
                                                name: SileoThemeManager.sileoChangedThemeNotification,
                                                object: nil)
-        if usesModernPhoneTabMenu {
+        if usesModernTabMenu {
             NotificationCenter.default.addObserver(self,
                                                    selector: #selector(handleModernBadgeDidEnterBackground),
                                                    name: UIApplication.didEnterBackgroundNotification,
@@ -200,17 +268,574 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
                                                    selector: #selector(handleModernBadgeWillEnterForeground),
                                                    name: UIApplication.didBecomeActiveNotification,
                                                    object: nil)
+            if usesModernPadBottomTabMenu {
+                NotificationCenter.default.addObserver(self,
+                                                       selector: #selector(handleModernPadSearchTextDidEndEditing(_:)),
+                                                       name: UITextField.textDidEndEditingNotification,
+                                                       object: nil)
+            }
         }
         updateSileoColors()
         updateLiquidGlassTabBarMinimizeBehavior()
     }
 
+    override func present(_ viewControllerToPresent: UIViewController, animated flag: Bool, completion: (() -> Void)? = nil) {
+        if #available(iOS 26.0, *) {
+            restoreModernPadTraitsIfNeeded(for: viewControllerToPresent)
+        }
+        super.present(viewControllerToPresent, animated: flag, completion: completion)
+    }
+
+    @available(iOS 26.0, *)
+    private var realWindowSceneHorizontalSizeClass: UIUserInterfaceSizeClass {
+        let scene = viewIfLoaded?.window?.windowScene
+            ?? (UIApplication.shared.delegate as? SileoAppDelegate)?.window?.windowScene
+        if let sizeClass = scene?.traitCollection.horizontalSizeClass, sizeClass != .unspecified {
+            return sizeClass
+        }
+        return .regular
+    }
+
+    @available(iOS 26.0, *)
+    private func setHorizontalSizeClassOverride(_ value: UIUserInterfaceSizeClass, on overrides: inout UITraitOverrides) {
+        if overrides.contains(UITraitHorizontalSizeClass.self),
+           overrides.horizontalSizeClass == value {
+            return
+        }
+        overrides.horizontalSizeClass = value
+    }
+
+    @available(iOS 26.0, *)
+    private func setUserInterfaceIdiomOverride(_ value: UIUserInterfaceIdiom, on overrides: inout UITraitOverrides) {
+        if overrides.contains(UITraitUserInterfaceIdiom.self),
+           overrides.userInterfaceIdiom == value {
+            return
+        }
+        overrides.userInterfaceIdiom = value
+    }
+
+    @available(iOS 26.0, *)
+    func prepareModernPadBottomTabTraitsIfNeeded(in window: UIWindow?) {
+        guard usesModernPadBottomTabMenu else { return }
+        if let targetWindow = window ?? viewIfLoaded?.window {
+            setHorizontalSizeClassOverride(.compact, on: &targetWindow.traitOverrides)
+            setUserInterfaceIdiomOverride(.phone, on: &targetWindow.traitOverrides)
+        }
+        setHorizontalSizeClassOverride(.compact, on: &traitOverrides)
+        setUserInterfaceIdiomOverride(.phone, on: &traitOverrides)
+        if mode != .tabBar {
+            mode = .tabBar
+        }
+        syncModernPadContentTabTraits(window: window)
+    }
+
+    @available(iOS 26.0, *)
+    func syncModernPadContentTabTraits(window: UIWindow? = nil,
+                                       targetHorizontalSizeClass: UIUserInterfaceSizeClass? = nil) {
+        guard usesModernPadBottomTabMenu else { return }
+        let resolvedHorizontal: UIUserInterfaceSizeClass
+        if let targetHorizontalSizeClass, targetHorizontalSizeClass != .unspecified {
+            resolvedHorizontal = targetHorizontalSizeClass
+        } else if let sceneSizeClass = (window?.windowScene ?? viewIfLoaded?.window?.windowScene)?.traitCollection.horizontalSizeClass,
+                  sceneSizeClass != .unspecified {
+            resolvedHorizontal = sceneSizeClass
+        } else {
+            resolvedHorizontal = realWindowSceneHorizontalSizeClass
+        }
+
+        for controller in sileoViewControllers ?? [] {
+            // 搜索标签保持 .compact + .phone 以启用底栏变形搜索框，其余内容标签恢复真实 iPad 尺寸类与 idiom。
+            let isSearchTabController = (controller as? UINavigationController)
+                .flatMap { $0.viewControllers.first as? PackageListViewController }?
+                .showSearchField == true
+            if isSearchTabController {
+                controller.traitOverrides.remove(UITraitHorizontalSizeClass.self)
+                controller.traitOverrides.remove(UITraitUserInterfaceIdiom.self)
+            } else {
+                setUserInterfaceIdiomOverride(.pad, on: &controller.traitOverrides)
+                setHorizontalSizeClassOverride(resolvedHorizontal, on: &controller.traitOverrides)
+            }
+        }
+
+        var presented = presentedViewController
+        while let vc = presented {
+            if !(vc is UISearchController) {
+                setUserInterfaceIdiomOverride(.pad, on: &vc.traitOverrides)
+                setHorizontalSizeClassOverride(resolvedHorizontal, on: &vc.traitOverrides)
+            }
+            presented = vc.presentedViewController
+        }
+    }
+
+    @available(iOS 26.0, *)
+    func restoreModernPadTraitsIfNeeded(for viewController: UIViewController) {
+        guard usesModernPadBottomTabMenu, !(viewController is UISearchController) else {
+            return
+        }
+        let resolvedHorizontal = realWindowSceneHorizontalSizeClass
+        setUserInterfaceIdiomOverride(.pad, on: &viewController.traitOverrides)
+        if resolvedHorizontal != .unspecified {
+            setHorizontalSizeClassOverride(resolvedHorizontal, on: &viewController.traitOverrides)
+        }
+    }
+
+    @available(iOS 26.0, *)
+    private var modernSearchTabSearchController: UISearchController? {
+        for controller in sileoViewControllers ?? [] {
+            if let nav = controller as? UINavigationController,
+               let pkgList = nav.viewControllers.first as? PackageListViewController,
+               pkgList.showSearchField {
+                return pkgList.searchController
+            }
+        }
+        return nil
+    }
+
+    @available(iOS 26.0, *)
+    private func ensureModernPadFullWidthTabPlatterIfNeeded() {
+        // 仅 iPadOS 27 支持通过 hostedElements bit 2 (0x4) 将主托盘撑满底栏宽度；
+        // iPadOS 26 上强行置位既不会加宽托盘，还可能在队列+搜索形变结束时触发系统 Accessibility 字典空指针崩溃。
+        guard #available(iOS 27.0, *),
+              usesModernPadBottomTabMenu,
+              let visualProviderIvar = class_getInstanceVariable(UITabBar.self, "_visualProvider"),
+              let visualProvider = object_getIvar(tabBar, visualProviderIvar) as? NSObject,
+              NSStringFromClass(type(of: visualProvider)).contains("_UITabBarVisualProvider_Floating") else {
+            return
+        }
+        let getSelector = NSSelectorFromString("hostedElements")
+        let setSelector = NSSelectorFromString("setHostedElements:")
+        guard visualProvider.responds(to: getSelector),
+              visualProvider.responds(to: setSelector) else {
+            return
+        }
+        typealias GetHostedIMP = @convention(c) (AnyObject, Selector) -> UInt
+        typealias SetHostedIMP = @convention(c) (AnyObject, Selector, UInt) -> Void
+        let getFn = unsafeBitCast(visualProvider.method(for: getSelector), to: GetHostedIMP.self)
+        let current = getFn(visualProvider, getSelector)
+        // bit 2 (0x4) 指示浮动视觉提供者按完整底栏宽度展开主托盘，避免空队列时主托盘缩至 336pt 靠左、与右侧搜索键之间出现巨大空隙。
+        // 与队列存在时保持完全一致的宽度，增删队列时底栏无宽度跳变，且不改变任何安全区或硬编码坐标。
+        let fullWidthBit: UInt = 1 << 2
+        guard (current & fullWidthBit) == 0 else { return }
+        let setFn = unsafeBitCast(visualProvider.method(for: setSelector), to: SetHostedIMP.self)
+        setFn(visualProvider, setSelector, current | fullWidthBit)
+        tabBar.setNeedsLayout()
+    }
+
+    @available(iOS 26.0, *)
+    private func applyModernPadBottomBarLayoutIfNeeded() {
+        guard usesModernPadBottomTabMenu, let sileoTabBar = tabBar as? TabBar else { return }
+        sileoTabBar.refreshModernPadFrameIfNeeded()
+        alignModernPadHostedSearchBarIfNeeded()
+    }
+
+    @objc private func handleModernPadSearchTextDidEndEditing(_ notification: Notification) {
+        guard #available(iOS 26.0, *),
+              usesModernPadBottomTabMenu,
+              selectedTab is UISearchTab else {
+            return
+        }
+        if let textField = notification.object as? UITextField,
+           let searchField = modernSearchTabSearchController?.searchBar.searchTextField,
+           textField !== searchField {
+            return
+        }
+        scheduleModernPadHostedSearchAlignIfNeeded(afterDismiss: true)
+    }
+
+    @available(iOS 26.0, *)
+    func scheduleModernPadHostedSearchAlignIfNeeded(afterDismiss: Bool = false) {
+        guard usesModernPadBottomTabMenu else { return }
+        if !afterDismiss {
+            alignModernPadHostedSearchBarIfNeeded()
+        }
+        let delays: [TimeInterval] = afterDismiss ? [0.45, 0.65, 0.85] : [0.05, 0.35, 0.55]
+        for delay in delays {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.alignModernPadHostedSearchBarIfNeeded()
+            }
+        }
+    }
+
+    @available(iOS 26.0, *)
+    private func alignModernPadHostedSearchBarIfNeeded() {
+        guard usesModernPadBottomTabMenu,
+              selectedTab is UISearchTab,
+              let container = tabBar.superview,
+              let hostedContainer = container.subviews.first(where: {
+                  NSStringFromClass(type(of: $0)).contains("_UITabHostedSearchContainer")
+              }),
+              !hostedContainer.isHidden else {
+            return
+        }
+
+        let tabBarFrame = tabBar.frame
+        let hostedFrame = hostedContainer.frame
+        guard tabBarFrame.width > 0,
+              hostedFrame.width > 0,
+              hostedFrame.minY >= tabBarFrame.minY - 8 else {
+            return
+        }
+
+        // 等待 UIKit 进程内流体收起动画完全落位（presentationLayer 已停止纵向移动）后再写入 frame，
+        // 避免在流体动画运行期间改写 model frame 导致 presentationLayer 停留在旧宽度。
+        if let presentationFrame = hostedContainer.layer.presentation()?.frame,
+           abs(presentationFrame.minY - hostedFrame.minY) > 0.5 {
+            return
+        }
+
+        // iPadOS 26 横屏非激活态下，UIKit 会按整屏半宽（containerWidth/2 - 44）设定 _UITabHostedSearchContainer 左边界，
+        // 导致与居中收窄后的左侧返回圆钮之间出现空隙；将其对齐到返回圆钮右侧 12pt 与底栏右内边距之间。
+        let collapsedButtonMaxX: CGFloat
+        if let returnPlatter = tabBar.subviews.first(where: { subview in
+            let cls = NSStringFromClass(type(of: subview))
+            return cls.contains("_UITabBarPlatterView")
+                && !subview.isHidden
+                && subview.bounds.width > 0
+                && subview.bounds.width <= 80
+        }) {
+            collapsedButtonMaxX = tabBar.convert(returnPlatter.frame, to: container).maxX
+        } else {
+            collapsedButtonMaxX = tabBarFrame.minX + 58
+        }
+
+        let desiredMinX = collapsedButtonMaxX + 12
+        let desiredMaxX = tabBarFrame.maxX - 10
+        let desiredWidth = desiredMaxX - desiredMinX
+        guard desiredWidth > 120,
+              hostedFrame.minX > desiredMinX + 4 else {
+            return
+        }
+
+        let targetFrame = CGRect(x: desiredMinX,
+                                 y: hostedFrame.origin.y,
+                                 width: desiredWidth,
+                                 height: hostedFrame.height)
+        UIView.performWithoutAnimation {
+            hostedContainer.frame = targetFrame
+            hostedContainer.setNeedsLayout()
+            hostedContainer.layoutIfNeeded()
+        }
+    }
+
+    @available(iOS 26.0, *)
+    private func ensureModernPadHostedSearchOrderIfNeeded() {
+        guard usesModernPadBottomTabMenu,
+              let container = tabBar.superview else {
+            return
+        }
+        // iPadOS 26/27 进入底栏搜索形变时，UIKit 会把 _UITabHostedSearchContainer 插在 Sileo.TabBar 之前（index 0）。
+        // 形变期间 _UIReparentingView 的嵌套 CAPortalLayer 前向引用排在后面的 Sileo.TabBar 内部图标层与转圈角标层时，
+        // CARenderServer 会跳过这些前向层，导致进入搜索左侧圆圈短暂空白、刷新角标先闪纯红点、返回菜单时首图标先消失再出现。
+        // 将 _UITabHostedSearchContainer 调整到 tabBar 之上（且不影响上方可能存在的 bottomAccessory）即可在首帧彻底消除。
+        guard let tabBarIndex = container.subviews.firstIndex(where: { $0 === tabBar }),
+              let hostedIndex = container.subviews.firstIndex(where: {
+                  NSStringFromClass(type(of: $0)).contains("_UITabHostedSearchContainer")
+              }),
+              hostedIndex < tabBarIndex else {
+            return
+        }
+        container.insertSubview(container.subviews[hostedIndex], aboveSubview: tabBar)
+    }
+
+    @available(iOS 26.0, *)
+    private func hasActiveModernPadMorphTransition(excluding removingSubview: UIView? = nil) -> Bool {
+        let roots = [tabBar, tabBar.superview].compactMap { $0 }
+        for root in roots {
+            for subview in root.subviews where subview !== removingSubview {
+                let cls = NSStringFromClass(type(of: subview))
+                if cls.contains("Reparenting") || cls.contains("MagicMorph") || cls.contains("MorphAnimationContainer") {
+                    return true
+                }
+                if cls.contains("_UITabHostedSearchContainer") {
+                    for child in subview.subviews where child !== removingSubview {
+                        let childCls = NSStringFromClass(type(of: child))
+                        if childCls.contains("Reparenting") || childCls.contains("MagicMorph") || childCls.contains("MorphAnimationContainer") {
+                            return true
+                        }
+                    }
+                }
+            }
+        }
+        return false
+    }
+
+    @available(iOS 26.0, *)
+    private func suspendModernPadPointerInteractionForMorphIfNeeded() {
+        guard usesModernPadBottomTabMenu else { return }
+        // iPadOS 触控板/鼠标指针点击搜索页左下角返回圆圈后，指针坐标仍停留在展开后“精选”标签的悬停热区内。
+        // UIKit 的 UIPointerInteraction 会立刻对未选中的第一个“精选”按钮创建 UIPointerHoverEffect 镜像并隐藏其源图层，
+        // 导致 MagicMorph 形变期间“精选”图标短暂脱离并被压在液态玻璃背板后面（呈现先消失再弹回的闪烁）。
+        // 在形变过渡期间临时暂停 tabBar 的 UIPointerInteraction，形变结束后立即恢复原生悬停效果。
+        padPointerRestoreWorkItem?.cancel()
+        padPointerRestoreWorkItem = nil
+
+        var stack: [UIView] = [tabBar]
+        while let view = stack.popLast() {
+            for interaction in view.interactions {
+                if let pointerInteraction = interaction as? UIPointerInteraction {
+                    let key = ObjectIdentifier(pointerInteraction)
+                    if pointerInteraction.isEnabled {
+                        suspendedPadTabBarPointerInteractions[key] = pointerInteraction
+                        pointerInteraction.invalidate()
+                        pointerInteraction.isEnabled = false
+                    }
+                }
+            }
+            stack.append(contentsOf: view.subviews)
+        }
+
+        guard !suspendedPadTabBarPointerInteractions.isEmpty else { return }
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.restoreModernPadPointerInteractionIfMorphEnded(force: true)
+        }
+        padPointerRestoreWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.35, execute: workItem)
+    }
+
+    @available(iOS 26.0, *)
+    private func restoreModernPadPointerInteractionIfMorphEnded(excluding removingSubview: UIView? = nil,
+                                                                force: Bool = false) {
+        guard !suspendedPadTabBarPointerInteractions.isEmpty else { return }
+        if !force, hasActiveModernPadMorphTransition(excluding: removingSubview) {
+            return
+        }
+        padPointerRestoreWorkItem?.cancel()
+        padPointerRestoreWorkItem = nil
+        let interactions = suspendedPadTabBarPointerInteractions.values
+        suspendedPadTabBarPointerInteractions.removeAll()
+        for pointerInteraction in interactions {
+            pointerInteraction.isEnabled = true
+            pointerInteraction.invalidate()
+        }
+    }
+
+    @available(iOS 26.0, *)
+    private func beginTransientModernPadSelectionHighlight(for title: String?, duration: TimeInterval = 0.35) {
+        guard usesModernPadBottomTabMenu else { return }
+        transientPadSelectionResetWorkItem?.cancel()
+        transientPadSelectionResetWorkItem = nil
+        transientPadSelectedTabTitle = title
+        syncModernPadSelectedTabVisualsIfNeeded()
+
+        guard title != nil else { return }
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.finishTransientModernPadSelectionHighlight(retriesRemaining: 2)
+        }
+        transientPadSelectionResetWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration, execute: workItem)
+    }
+
+    @available(iOS 26.0, *)
+    private func finishTransientModernPadSelectionHighlight(retriesRemaining: Int) {
+        guard usesModernPadBottomTabMenu else { return }
+        if retriesRemaining > 0, isModernPadLensLifted() {
+            let workItem = DispatchWorkItem { [weak self] in
+                self?.finishTransientModernPadSelectionHighlight(retriesRemaining: retriesRemaining - 1)
+            }
+            transientPadSelectionResetWorkItem = workItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: workItem)
+            return
+        }
+        transientPadSelectionResetWorkItem = nil
+        transientPadSelectedTabTitle = nil
+        syncModernPadSelectedTabVisualsIfNeeded()
+    }
+
+    @available(iOS 26.0, *)
+    private func modernPadLiquidLensView() -> UIView? {
+        guard let itemPlatter = tabBar.subviews.first(where: {
+            NSStringFromClass(type(of: $0)).contains("_UITabBarItemPlatterView")
+        }) else {
+            return nil
+        }
+        return firstDescendant(in: itemPlatter, matching: {
+            NSStringFromClass(type(of: $0)) == "_UILiquidLensView"
+        })
+    }
+
+    @available(iOS 26.0, *)
+    private func isModernPadLensLifted() -> Bool {
+        guard let lensView = modernPadLiquidLensView() else { return false }
+        let liftedSelector = NSSelectorFromString("lifted")
+        guard lensView.responds(to: liftedSelector) else { return false }
+        typealias GetBoolIMP = @convention(c) (AnyObject, Selector) -> ObjCBool
+        let getLifted = unsafeBitCast(lensView.method(for: liftedSelector), to: GetBoolIMP.self)
+        return getLifted(lensView, liftedSelector).boolValue
+    }
+
+    @available(iOS 26.0, *)
+    private func syncModernPadSelectedTabVisualsIfNeeded(force: Bool = false) {
+        guard usesModernPadBottomTabMenu, !tabs.isEmpty else { return }
+        // iPadOS 宽底栏（>1000pt）切换远端标签时，液态玻璃透镜飞行到位前新标签在 ContentView 中仍为黑色。
+        // 仅在切换过渡期短暂为目标标签同步主题色，透镜落位（DestOutView 已完全遮罩 ContentView）后自动恢复原生模板态，
+        // 从而同时保证点击切换 0ms 变色与长按拖动透镜时绝不出现双标签同时高亮。
+        let resolvedTitle = transientPadSelectedTabTitle
+
+        guard let itemPlatter = tabBar.subviews.first(where: {
+            NSStringFromClass(type(of: $0)).contains("_UITabBarItemPlatterView")
+        }) else {
+            return
+        }
+        guard let contentView = itemPlatter.subviews.first(where: { subview in
+            let cls = NSStringFromClass(type(of: subview))
+            return cls.contains("ContentView") && !cls.contains("Selected")
+        }) else {
+            return
+        }
+
+        let traits = tabBar.traitCollection
+        let selectedColor = tabBar.tintColor ?? UIColor.tintColor
+        let resolvedSelectedColor = selectedColor.resolvedColor(with: traits)
+        let unselectedColor = tabBar.unselectedItemTintColor ?? .label
+
+        let buttons = allDescendants(in: contentView, matching: {
+            NSStringFromClass(type(of: $0)) == "_UITabButton"
+        })
+        for button in buttons {
+            guard let title = tabButtonTitle(in: button), !title.isEmpty else { continue }
+            let isSelected = (resolvedTitle != nil && title == resolvedTitle)
+            applyModernPadTabButtonStyle(button,
+                                         isSelected: isSelected,
+                                         selectedColor: selectedColor,
+                                         resolvedSelectedColor: resolvedSelectedColor,
+                                         unselectedColor: unselectedColor,
+                                         traits: traits,
+                                         force: force)
+        }
+    }
+
+    private func applyModernPadTabButtonStyle(_ button: UIView,
+                                              isSelected: Bool,
+                                              selectedColor: UIColor,
+                                              resolvedSelectedColor: UIColor,
+                                              unselectedColor: UIColor,
+                                              traits: UITraitCollection,
+                                              force: Bool) {
+        let targetTextColor = isSelected ? selectedColor : unselectedColor
+        var stack = button.subviews
+        while let view = stack.popLast() {
+            if NSStringFromClass(type(of: view)) == "_UIBarBadgeView" {
+                continue
+            }
+            if let imageView = view as? UIImageView, let image = imageView.image {
+                if isSelected {
+                    if force || image.renderingMode != .alwaysOriginal {
+                        imageView.image = image
+                            .withRenderingMode(.alwaysTemplate)
+                            .withTintColor(resolvedSelectedColor, renderingMode: .alwaysOriginal)
+                    }
+                } else if image.renderingMode != .alwaysTemplate {
+                    imageView.image = image.withRenderingMode(.alwaysTemplate)
+                }
+            } else if let label = view as? UILabel {
+                if let attributed = label.attributedText, attributed.length > 0 {
+                    let existingColor = attributed.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? UIColor
+                    if force || !colorsMatch(existingColor, targetTextColor, traits: traits) {
+                        let mutable = NSMutableAttributedString(attributedString: attributed)
+                        mutable.addAttribute(.foregroundColor,
+                                             value: targetTextColor,
+                                             range: NSRange(location: 0, length: mutable.length))
+                        label.attributedText = mutable
+                    }
+                }
+                if force || !colorsMatch(label.textColor, targetTextColor, traits: traits) {
+                    label.textColor = targetTextColor
+                }
+            }
+            stack.append(contentsOf: view.subviews)
+        }
+    }
+
+    private func colorsMatch(_ lhs: UIColor?, _ rhs: UIColor, traits: UITraitCollection) -> Bool {
+        guard let lhs else { return false }
+        return lhs.resolvedColor(with: traits).isEqual(rhs.resolvedColor(with: traits))
+    }
+
+    @available(iOS 26.0, *)
+    private func accelerateModernPadLensUnliftIfNeeded() {
+        guard usesModernPadBottomTabMenu,
+              !(selectedTab is UISearchTab) else {
+            return
+        }
+        let isMorphing = tabBar.subviews.contains { subview in
+            let cls = NSStringFromClass(type(of: subview))
+            return cls.contains("Reparenting") || cls.contains("MagicMorph")
+        }
+        guard !isMorphing,
+              let lensView = modernPadLiquidLensView() else {
+            return
+        }
+
+        let timerSelector = NSSelectorFromString("unliftDelayTimer")
+        if lensView.responds(to: timerSelector),
+           let timer = lensView.perform(timerSelector)?.takeUnretainedValue() as? Timer,
+           timer.isValid {
+            timer.fire()
+            return
+        }
+
+        let liftedSelector = NSSelectorFromString("lifted")
+        let actuallySetLiftedSelector = NSSelectorFromString("actuallySetLifted:animated:alongsideAnimations:completion:")
+        guard lensView.responds(to: liftedSelector),
+              lensView.responds(to: actuallySetLiftedSelector) else {
+            return
+        }
+        typealias GetBoolIMP = @convention(c) (AnyObject, Selector) -> ObjCBool
+        typealias ActuallySetLiftedIMP = @convention(c) (AnyObject, Selector, ObjCBool, ObjCBool, AnyObject?, AnyObject?) -> Void
+        let getLifted = unsafeBitCast(lensView.method(for: liftedSelector), to: GetBoolIMP.self)
+        guard getLifted(lensView, liftedSelector).boolValue else {
+            return
+        }
+        let actuallySetLifted = unsafeBitCast(lensView.method(for: actuallySetLiftedSelector), to: ActuallySetLiftedIMP.self)
+        actuallySetLifted(lensView, actuallySetLiftedSelector, ObjCBool(false), ObjCBool(true), nil, nil)
+    }
+
+    @available(iOS 26.0, *)
+    func setModernPadSearchActive(_ isActive: Bool) {
+        guard usesModernPadBottomTabMenu else { return }
+        if !isActive {
+            scheduleModernPadHostedSearchAlignIfNeeded(afterDismiss: true)
+        }
+        guard isModernPadSearchActive != isActive else { return }
+        isModernPadSearchActive = isActive
+        guard popupIsPresented, !isQueueSheetEffectivelyVisible, !isPresentingQueueSheet else {
+            return
+        }
+        if isActive {
+            setBottomAccessory(nil, animated: true)
+            ensureModernPadFullWidthTabPlatterIfNeeded()
+        } else {
+            restoreLiquidGlassQueueBarIfNeeded(animated: true)
+        }
+    }
+
+    @available(iOS 26.0, *)
+    private func deactivateModernPadSearchForTabSwitchIfNeeded() {
+        guard usesModernPadBottomTabMenu else { return }
+        if let searchController = modernSearchTabSearchController, searchController.isActive {
+            UIView.performWithoutAnimation {
+                searchController.isActive = false
+            }
+        }
+        isModernPadSearchActive = false
+        if popupIsPresented, !isQueueSheetEffectivelyVisible, !isPresentingQueueSheet, bottomAccessory == nil {
+            restoreLiquidGlassQueueBarIfNeeded(animated: true)
+        } else {
+            ensureModernPadFullWidthTabPlatterIfNeeded()
+        }
+    }
+
     func configureSearchTabIfNeeded() {
         guard #available(iOS 26.0, *),
-              UIDevice.current.userInterfaceIdiom == .phone,
+              usesModernTabMenu,
               tabs.isEmpty,
               let controllers = super.viewControllers else {
             return
+        }
+
+        if usesModernPadBottomTabMenu {
+            prepareModernPadBottomTabTraitsIfNeeded(in: viewIfLoaded?.window
+                ?? (UIApplication.shared.delegate as? SileoAppDelegate)?.window)
         }
 
         let previousController = super.selectedViewController
@@ -219,6 +844,9 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
            let searchTab = configuredTabs.first(where: { $0 is UISearchTab }) {
             // iOS 27 需要通过 prominentTabIdentifier 指定独立的底部搜索入口。
             prominentTabIdentifier = searchTab.identifier
+        }
+        if usesModernPadBottomTabMenu {
+            mode = .tabBar
         }
         setTabs(configuredTabs, animated: false)
         // 按 Demo v34 顺序：iOS 26 在 setTabs 后、selectedTab 前初始化 AnchoredBadgeRenderer。
@@ -238,6 +866,9 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         }
         // 预先触发视图控制器提供闭包，确保各子控制器在首次切换前也能关联到对应 UITab。
         _ = tabs.map(\.viewController)
+        if usesModernPadBottomTabMenu {
+            syncModernPadContentTabTraits()
+        }
         let initialTab = tabs.first { $0.viewController === previousController } ?? tabs.first
         if #available(iOS 27.0, *) {
             // iOS 27 首次选中后才重新计算中文标签高度，在首帧提交前完成各标签的布局。
@@ -263,7 +894,14 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         }
         updateModernTabBadges()
         updateModernTabBadgeDisplayLink()
-        registerLiquidGlassContentScrollView()
+        if usesModernPadBottomTabMenu {
+            ensureModernPadFullWidthTabPlatterIfNeeded()
+            applyModernPadBottomBarLayoutIfNeeded()
+            ensureModernPadHostedSearchOrderIfNeeded()
+        }
+        if usesFloatingQueueCardOnPhone {
+            registerLiquidGlassContentScrollView()
+        }
     }
 
     @available(iOS 26.0, *)
@@ -371,7 +1009,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
 
     @available(iOS 26.0, *)
     private func syncCompactPlatterBadgesIfNeeded(allowDuringMorph: Bool = false) {
-        guard usesModernPhoneTabMenu, !tabs.isEmpty else { return }
+        guard usesModernTabMenu, !tabs.isEmpty else { return }
         if !allowDuringMorph {
             let isMorphing = tabBar.subviews.contains { subview in
                 let cls = NSStringFromClass(type(of: subview))
@@ -511,7 +1149,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
             }
             return
         }
-        guard usesModernPhoneTabMenu else { return }
+        guard usesModernTabMenu else { return }
         let badgeValue = refreshing ? NativeRefreshBadge.value : nil
         let stateChanged = isSourcesRefreshing != refreshing
         isSourcesRefreshing = refreshing
@@ -557,7 +1195,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
             }
             return true
         }
-        guard usesModernPhoneTabMenu else { return false }
+        guard usesModernTabMenu else { return false }
         guard #available(iOS 26.0, *) else { return false }
 
         let sourcesTab = tab(withIdentifier: SileoTabIdentifier.sources)
@@ -612,7 +1250,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
 
     @available(iOS 26.0, *)
     private var needsModernTabBadgeDisplayLink: Bool {
-        guard usesModernPhoneTabMenu,
+        guard usesModernTabMenu,
               isViewLoaded,
               isModernTabBarVisible,
               view.window != nil,
@@ -626,7 +1264,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     }
 
     private func updateModernTabBadgeDisplayLink() {
-        guard #available(iOS 26.0, *), usesModernPhoneTabMenu else { return }
+        guard #available(iOS 26.0, *), usesModernTabMenu else { return }
         guard needsModernTabBadgeDisplayLink else {
             stopModernTabBadgeDisplayLink()
             return
@@ -659,7 +1297,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     }
 
     fileprivate func updateModernTabBadges() {
-        guard #available(iOS 26.0, *), usesModernPhoneTabMenu, isViewLoaded else { return }
+        guard #available(iOS 26.0, *), usesModernTabMenu, isViewLoaded else { return }
         guard view.window != nil else {
             anchoredBadges?.detach()
             nativeBadgePortalLift?.deactivate()
@@ -696,28 +1334,55 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     }
 
     @objc private func handleModernBadgeWillEnterForeground() {
-        guard usesModernPhoneTabMenu else { return }
+        guard usesModernTabMenu else { return }
         anchoredBadges?.invalidateLayout()
         updateModernTabBadges()
         updateModernTabBadgeDisplayLink()
     }
 
     fileprivate func handleProgrammaticTabSelection() {
-        guard #available(iOS 26.0, *), usesModernPhoneTabMenu else { return }
+        guard #available(iOS 26.0, *), usesModernTabMenu else { return }
         if let current = selectedTab, !(current is UISearchTab) {
             lastNonSearchTabIdentifier = current.identifier
+            deactivateModernPadSearchForTabSwitchIfNeeded()
+        }
+        if usesModernPadBottomTabMenu {
+            ensureModernPadHostedSearchOrderIfNeeded()
+            if let current = selectedTab, !(current is UISearchTab) {
+                beginTransientModernPadSelectionHighlight(for: current.title)
+            } else {
+                beginTransientModernPadSelectionHighlight(for: nil)
+            }
         }
         anchoredBadges?.invalidateLayout()
         updateModernTabBadges()
-        registerLiquidGlassContentScrollView()
+        if usesFloatingQueueCardOnPhone {
+            registerLiquidGlassContentScrollView()
+        } else if usesModernPadBottomTabMenu {
+            (sileoSelectedViewController as? SourcesSplitViewController)?.padScrollCoordinator?.markNeedsRebind()
+        }
     }
 
     @available(iOS 18.0, *)
     func tabBarController(_ tabBarController: UITabBarController, shouldSelectTab tab: UITab) -> Bool {
         if tab is UISearchTab {
             nativeBadgePortalLift?.deactivate()
+        } else if #available(iOS 26.0, *) {
+            deactivateModernPadSearchForTabSwitchIfNeeded()
         }
         if #available(iOS 26.0, *) {
+            if usesModernPadBottomTabMenu {
+                ensureModernPadHostedSearchOrderIfNeeded()
+                if tab is UISearchTab || selectedTab is UISearchTab {
+                    suspendModernPadPointerInteractionForMorphIfNeeded()
+                }
+                if !(tab is UISearchTab) {
+                    let duration: TimeInterval = (selectedTab is UISearchTab) ? 0.45 : 0.35
+                    beginTransientModernPadSelectionHighlight(for: tab.title, duration: duration)
+                } else {
+                    beginTransientModernPadSelectionHighlight(for: nil)
+                }
+            }
             syncCompactPlatterBadgesIfNeeded(allowDuringMorph: true)
         }
         guard let controller = tab.viewController else { return false }
@@ -729,8 +1394,37 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     func tabBarController(_ tabBarController: UITabBarController, didSelectTab selectedTab: UITab, previousTab: UITab?) {
         if !(selectedTab is UISearchTab) {
             lastNonSearchTabIdentifier = selectedTab.identifier
+            if #available(iOS 26.0, *) {
+                deactivateModernPadSearchForTabSwitchIfNeeded()
+            }
         } else if let previousTab, !(previousTab is UISearchTab) {
             lastNonSearchTabIdentifier = previousTab.identifier
+        }
+        if #available(iOS 26.0, *) {
+            if anchoredBadges == nil {
+                syncCompactPlatterBadgesIfNeeded(allowDuringMorph: true)
+                if isSourcesRefreshing {
+                    nativeRefreshBadge.update(in: modernTabBadgeSearchRoot, isRefreshing: true)
+                }
+            }
+            if usesModernPadBottomTabMenu {
+                ensureModernPadHostedSearchOrderIfNeeded()
+                if selectedTab is UISearchTab || previousTab is UISearchTab {
+                    suspendModernPadPointerInteractionForMorphIfNeeded()
+                }
+                if !(selectedTab is UISearchTab) {
+                    let duration: TimeInterval = (previousTab is UISearchTab) ? 0.45 : 0.35
+                    beginTransientModernPadSelectionHighlight(for: selectedTab.title, duration: duration)
+                    if let previousTab, !(previousTab is UISearchTab), selectedTab !== previousTab {
+                        DispatchQueue.main.async { [weak self] in
+                            self?.accelerateModernPadLensUnliftIfNeeded()
+                        }
+                    }
+                } else {
+                    beginTransientModernPadSelectionHighlight(for: nil)
+                    scheduleModernPadHostedSearchAlignIfNeeded()
+                }
+            }
         }
         guard let controller = selectedTab.viewController else { return }
         self.tabBarController(tabBarController, didSelect: controller)
@@ -738,7 +1432,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        if usesModernPhoneTabMenu {
+        if usesModernTabMenu {
             anchoredBadges?.invalidateLayout()
             updateModernTabBadges()
         }
@@ -747,9 +1441,14 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
 
-        if #available(iOS 26.0, *), usesFloatingQueueCardOnPhone {
+        if #available(iOS 26.0, *), usesModernTabMenu {
             isModernTabBarVisible = true
-            registerLiquidGlassContentScrollView()
+            if usesModernPadBottomTabMenu {
+                prepareModernPadBottomTabTraitsIfNeeded(in: view.window)
+            }
+            if usesFloatingQueueCardOnPhone {
+                registerLiquidGlassContentScrollView()
+            }
             updateModernTabBadges()
             updateModernTabBadgeDisplayLink()
         }
@@ -759,7 +1458,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
 
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
-        if usesModernPhoneTabMenu {
+        if usesModernTabMenu {
             isModernTabBarVisible = false
             stopModernTabBadgeDisplayLink()
             if view.window == nil {
@@ -771,16 +1470,26 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
 
     override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
         super.viewWillTransition(to: size, with: coordinator)
-        guard usesModernPhoneTabMenu else { return }
+        guard usesModernTabMenu else { return }
         anchoredBadges?.invalidateLayout()
         nativeBadgePortalLift?.deactivate()
         coordinator.animate(alongsideTransition: { [weak self] _ in
-            self?.anchoredBadges?.invalidateLayout()
-            self?.updateModernTabBadges()
+            guard let self else { return }
+            if #available(iOS 26.0, *), self.usesModernPadBottomTabMenu {
+                self.syncModernPadContentTabTraits()
+                self.applyModernPadBottomBarLayoutIfNeeded()
+            }
+            self.anchoredBadges?.invalidateLayout()
+            self.updateModernTabBadges()
         }, completion: { [weak self] _ in
-            self?.anchoredBadges?.invalidateLayout()
-            self?.updateModernTabBadges()
-            self?.updateModernTabBadgeDisplayLink()
+            guard let self else { return }
+            if #available(iOS 26.0, *), self.usesModernPadBottomTabMenu {
+                self.syncModernPadContentTabTraits()
+                self.applyModernPadBottomBarLayoutIfNeeded()
+            }
+            self.anchoredBadges?.invalidateLayout()
+            self.updateModernTabBadges()
+            self.updateModernTabBadgeDisplayLink()
         })
     }
     
@@ -790,15 +1499,21 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     }
 
     func tabBarController(_ tabBarController: UITabBarController, didSelect viewController: UIViewController) {
-        if #available(iOS 26.0, *), usesFloatingQueueCardOnPhone {
+        if #available(iOS 26.0, *), usesModernTabMenu {
             anchoredBadges?.invalidateLayout()
             updateModernTabBadges()
-            registerLiquidGlassContentScrollView()
+            if usesFloatingQueueCardOnPhone {
+                registerLiquidGlassContentScrollView()
+            } else if usesModernPadBottomTabMenu {
+                (viewController as? SourcesSplitViewController)?.padScrollCoordinator?.markNeedsRebind()
+            }
             // iOS 26 在切换顶层标签时会重建滚动观察关系，并可能把收缩策略临时重置为 .never。
             // 等本轮容器布局结束后重新注册当前列表并恢复策略，避免“软件源”页丢失队列收缩能力。
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
-                self.registerLiquidGlassContentScrollView()
+                if self.usesFloatingQueueCardOnPhone {
+                    self.registerLiquidGlassContentScrollView()
+                }
                 self.restoreLiquidGlassMinimizeBehaviorIfNeeded()
                 self.anchoredBadges?.invalidateLayout()
                 self.updateModernTabBadges()
@@ -1271,7 +1986,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
             if traitCollection.hasDifferentColorAppearance(comparedTo: previousTraitCollection) {
                 updateSileoColors()
             }
-            if usesModernPhoneTabMenu {
+            if usesModernTabMenu {
                 anchoredBadges?.invalidateLayout()
                 updateModernTabBadges()
             }
@@ -1518,7 +2233,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
 
     @available(iOS 26.0, *)
     private func restoreLiquidGlassMinimizeBehaviorIfNeeded() {
-        guard usesFloatingQueueCardOnPhone,
+        guard usesModernTabMenu,
               !isQueueSheetVisible,
               !isPresentingQueueSheet else {
             return
@@ -1531,7 +2246,8 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
 
     @available(iOS 26.0, *)
     private func registerLiquidGlassContentScrollView() {
-        guard let sileoSelectedViewController,
+        guard usesFloatingQueueCardOnPhone,
+              let sileoSelectedViewController,
               let scrollView = liquidGlassContentScrollView(in: sileoSelectedViewController) else {
             return
         }
@@ -1657,7 +2373,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     @objc private func handlePopupBarTap() {
         guard usesSystemQueueSheetPresentation,
               popupIsPresented,
-              !isQueueSheetVisible,
+              !isQueueSheetEffectivelyVisible,
               !isPresentingQueueSheet
         else {
             return
@@ -1689,7 +2405,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         guard usesSystemQueueSheetPresentation,
               popupIsPresented,
               !isPresentingQueueSheet,
-              !isQueueSheetVisible,
+              !isQueueSheetEffectivelyVisible,
               downloadsController != nil,
               queueSheetPresenter() != nil,
               viewIfLoaded?.window != nil
@@ -1722,6 +2438,9 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         if let queueVC = downloadsController.viewControllers.first as? DownloadsTableViewController {
             queueVC.usesSystemQueueSheetPresentation = true
             queueVC.reloadData()
+        }
+        if #available(iOS 26.0, *) {
+            restoreModernPadTraitsIfNeeded(for: downloadsController)
         }
         downloadsController.modalPresentationStyle = .pageSheet
         if #available(iOS 15.0, *) {
@@ -1776,6 +2495,9 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         tabBar.tintColor = tintColor
         tabBar.unselectedItemTintColor = .label
         refreshTabBarAppearance(tintColor: tintColor)
+        if #available(iOS 26.0, *), usesModernPadBottomTabMenu, transientPadSelectedTabTitle != nil {
+            syncModernPadSelectedTabVisualsIfNeeded(force: true)
+        }
 
         self.popupBar.tintColor = UINavigationBar.appearance().tintColor
         if #available(iOS 26.0, *), usesLiquidGlassQueueAccessory {
@@ -1831,7 +2553,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     }
 
     private func updateLiquidGlassTabBarMinimizeBehavior() {
-        guard #available(iOS 26.0, *), usesFloatingQueueCardOnPhone else {
+        guard #available(iOS 26.0, *), usesModernTabMenu else {
             return
         }
         tabBarMinimizeBehavior = desiredLiquidGlassMinimizeBehavior()
@@ -1898,7 +2620,10 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
     
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        if usesModernPhoneTabMenu {
+        if #available(iOS 26.0, *), usesModernPadBottomTabMenu {
+            applyModernPadBottomBarLayoutIfNeeded()
+        }
+        if usesModernTabMenu {
             anchoredBadges?.invalidateLayout()
             updateModernTabBadges()
         }
@@ -1906,16 +2631,25 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         if self.tabBar.itemPositioning != .centered {
             self.tabBar.itemPositioning = .centered
         }
-        if #available(iOS 26.0, *), usesFloatingQueueCardOnPhone {
+        if #available(iOS 26.0, *), usesModernTabMenu {
             // accessory 的首次布局可能会重建标签栏，布局完成后再次保持当前策略。
             restoreLiquidGlassMinimizeBehaviorIfNeeded()
-            if let sourcesRootController = sileoViewControllers?[safe: 2] {
+            if usesModernPadBottomTabMenu {
+                ensureModernPadFullWidthTabPlatterIfNeeded()
+                applyModernPadBottomBarLayoutIfNeeded()
+                ensureModernPadHostedSearchOrderIfNeeded()
+                if transientPadSelectedTabTitle != nil {
+                    syncModernPadSelectedTabVisualsIfNeeded()
+                }
+            }
+            if usesFloatingQueueCardOnPhone,
+               let sourcesRootController = sileoViewControllers?[safe: 2] {
                 sourcesViewController(in: sourcesRootController)?.layoutSourceRefreshIndicatorIfNeeded()
             }
         } else if usesFloatingQueueCardOnPhone {
             configurePopupTapIfNeeded()
         }
-        if UIDevice.current.userInterfaceIdiom == .pad {
+        if #unavailable(iOS 26.0), UIDevice.current.userInterfaceIdiom == .pad {
             self.updatePopup()
             updateLegacyQueueBarLayout()
         }
@@ -1936,7 +2670,9 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
         queueBar.update(title: downloadsController?.popupItem.title,
                         subtitle: downloadsController?.popupItem.subtitle)
         queueBar.isHidden = false
-        setBottomAccessory(UITabAccessory(contentView: queueBar), animated: false)
+        if !(usesModernPadBottomTabMenu && isModernPadSearchActive) {
+            setBottomAccessory(UITabAccessory(contentView: queueBar), animated: false)
+        }
         if usesFloatingQueueCardOnPhone {
             // accessory 加入后可能重建观察关系，不能依赖后续滚动中的重复设置来恢复。
             registerLiquidGlassContentScrollView()
@@ -1945,7 +2681,36 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
                       !self.isQueueSheetVisible, !self.isPresentingQueueSheet else { return }
                 self.registerLiquidGlassContentScrollView()
             }
+        } else if usesModernPadBottomTabMenu {
+            (sileoSelectedViewController as? SourcesSplitViewController)?.padScrollCoordinator?.markNeedsRebind()
         }
+    }
+
+    @available(iOS 26.0, *)
+    private func restoreLiquidGlassQueueBarIfNeeded(animated: Bool) {
+        guard usesModernPadBottomTabMenu,
+              popupIsPresented,
+              !isQueueSheetEffectivelyVisible,
+              !isPresentingQueueSheet,
+              !isModernPadSearchActive,
+              bottomAccessory == nil else {
+            return
+        }
+        let queueBar: LiquidGlassQueueBar
+        if let existingBar = liquidGlassQueueBar {
+            queueBar = existingBar
+        } else {
+            let createdBar = LiquidGlassQueueBar(frame: .zero)
+            createdBar.addTarget(self, action: #selector(handlePopupBarTap), for: .touchUpInside)
+            liquidGlassQueueBar = createdBar
+            queueBar = createdBar
+        }
+        queueBar.update(title: downloadsController?.popupItem.title,
+                        subtitle: downloadsController?.popupItem.subtitle)
+        queueBar.isHidden = false
+        setBottomAccessory(UITabAccessory(contentView: queueBar), animated: animated)
+        restoreLiquidGlassMinimizeBehaviorIfNeeded()
+        (sileoSelectedViewController as? SourcesSplitViewController)?.padScrollCoordinator?.markNeedsRebind()
     }
 
     @available(iOS 26.0, *)
@@ -1974,7 +2739,206 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate, UIAdapti
             registerLiquidGlassContentScrollView()
             // 移除 accessory 可能重建标签栏，完成后再次确保空队列禁止收缩。
             updateLiquidGlassTabBarMinimizeBehavior()
+        } else if usesModernPadBottomTabMenu {
+            updateLiquidGlassTabBarMinimizeBehavior()
+            ensureModernPadFullWidthTabPlatterIfNeeded()
         }
+    }
+
+    // MARK: - iPadOS 26+ Bottom Tab Dual-Column Scroll & Back-to-Top Expand
+
+    @available(iOS 26.0, *)
+    private var activeModernPadSourcesSplit: SourcesSplitViewController? {
+        guard usesModernPadBottomTabMenu,
+              let split = sileoSelectedViewController as? SourcesSplitViewController,
+              split.style != .unspecified else {
+            return nil
+        }
+        return split
+    }
+
+    private func modernPadScrollState(for scrollView: UIScrollView) -> ModernPadScrollState {
+        if let existing = modernPadScrollStates.object(forKey: scrollView) {
+            return existing
+        }
+        let created = ModernPadScrollState()
+        modernPadScrollStates.setObject(created, forKey: scrollView)
+        return created
+    }
+
+    @available(iOS 26.0, *)
+    private func isScrollViewAllowedForModernPadExpand(_ scrollView: UIScrollView) -> Bool {
+        if let split = activeModernPadSourcesSplit, split.containsColumnScrollView(scrollView) {
+            return split.padScrollCoordinator?.isActive(scrollView) ?? true
+        }
+        return true
+    }
+
+    @available(iOS 26.0, *)
+    func handleModernPadHitTest(_ hitView: UIView) {
+        guard usesModernPadBottomTabMenu,
+              popupIsPresented,
+              !isQueueSheetEffectivelyVisible,
+              !isPresentingQueueSheet,
+              let split = activeModernPadSourcesSplit else {
+            return
+        }
+        split.activateColumnScrollView(containing: hitView)
+    }
+
+    func handleModernPadScrollDidChangeAdjustedInset(_ scrollView: UIScrollView) {
+        guard #available(iOS 26.0, *), usesModernPadBottomTabMenu else { return }
+        let state = modernPadScrollState(for: scrollView)
+        let cur = scrollView.adjustedContentInset
+        if state.hasRecordedInset,
+           abs(cur.top - state.lastAdjustedInset.top) > 1 || abs(cur.bottom - state.lastAdjustedInset.bottom) > 1 {
+            if let split = activeModernPadSourcesSplit, split.containsColumnScrollView(scrollView) {
+                // 任意一栏的 top（大标题缩放）或 bottom（底栏收起/展开）安全区变化，
+                // 都可能让右栏 UINavigationController 抢走底栏观测，标记下次交互前重绑。
+                split.padScrollCoordinator?.markNeedsRebind(from: scrollView)
+            }
+        }
+        state.lastAdjustedInset = cur
+        state.hasRecordedInset = true
+    }
+
+    func handleModernPadScrollWillBeginDragging(_ scrollView: UIScrollView) {
+        guard #available(iOS 26.0, *), usesModernPadBottomTabMenu else { return }
+        let state = modernPadScrollState(for: scrollView)
+        state.didExpandOnCurrentTopGesture = false
+        state.lastScrollOffsetY = scrollView.contentOffset.y
+        state.lastScrollDeltaY = 0
+        guard popupIsPresented, !isQueueSheetEffectivelyVisible, !isPresentingQueueSheet else { return }
+        restoreLiquidGlassMinimizeBehaviorIfNeeded()
+        if let split = activeModernPadSourcesSplit, split.containsColumnScrollView(scrollView) {
+            split.padScrollCoordinator?.activate(scrollView, forceRebind: false)
+        }
+    }
+
+    func handleModernPadScrollShouldScrollToTop(_ scrollView: UIScrollView) {
+        guard #available(iOS 26.0, *), usesModernPadBottomTabMenu else { return }
+        let state = modernPadScrollState(for: scrollView)
+        state.didExpandOnCurrentTopGesture = false
+        guard popupIsPresented, !isQueueSheetEffectivelyVisible, !isPresentingQueueSheet else { return }
+        if let split = activeModernPadSourcesSplit, split.containsColumnScrollView(scrollView) {
+            split.padScrollCoordinator?.activate(scrollView, forceRebind: true)
+        }
+    }
+
+    func handleModernPadScrollDidScrollToTop(_ scrollView: UIScrollView) {
+        guard #available(iOS 26.0, *), usesModernPadBottomTabMenu else { return }
+        let state = modernPadScrollState(for: scrollView)
+        state.hasScrolledBelowTop = false
+        guard popupIsPresented,
+              !isQueueSheetEffectivelyVisible,
+              !isPresentingQueueSheet,
+              isScrollViewAllowedForModernPadExpand(scrollView) else {
+            return
+        }
+        expandModernPadTabBarIfNeeded()
+    }
+
+    func handleModernPadScrollDidScroll(_ scrollView: UIScrollView) {
+        guard #available(iOS 26.0, *), usesModernPadBottomTabMenu else { return }
+        let state = modernPadScrollState(for: scrollView)
+        let topY = -scrollView.adjustedContentInset.top
+        let y = scrollView.contentOffset.y
+        let deltaY = y - state.lastScrollOffsetY
+        state.lastScrollOffsetY = y
+        if deltaY != 0 {
+            state.lastScrollDeltaY = deltaY
+        }
+
+        // 仅在用户主动拖拽或惯性滚动当前列表时才做回顶恢复判定，
+        // 绝不在另一栏触发底栏收缩导致本栏 inset 微调时误触发回顶展开。
+        guard popupIsPresented,
+              !isQueueSheetEffectivelyVisible,
+              !isPresentingQueueSheet,
+              scrollView.isDragging || scrollView.isDecelerating,
+              isScrollViewAllowedForModernPadExpand(scrollView) else {
+            return
+        }
+
+        if y > topY + 24 {
+            state.hasScrolledBelowTop = true
+            state.didExpandOnCurrentTopGesture = false
+            return
+        }
+
+        // 1) 从下方滑回顶部（快滑、慢滑、惯性滑回顶部）
+        if state.hasScrolledBelowTop && deltaY < 0 && y <= topY + 2 {
+            state.hasScrolledBelowTop = false
+            state.didExpandOnCurrentTopGesture = true
+            expandModernPadTabBarIfNeeded()
+            return
+        }
+
+        // 2) 本身已在顶部时，用户继续下拉回弹也立即恢复展开态（例如另一栏曾触发收缩）
+        if scrollView.isDragging && !state.didExpandOnCurrentTopGesture && y < topY - 12 {
+            state.didExpandOnCurrentTopGesture = true
+            expandModernPadTabBarIfNeeded()
+        }
+    }
+
+    func handleModernPadScrollDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+        guard #available(iOS 26.0, *),
+              usesModernPadBottomTabMenu,
+              popupIsPresented,
+              !isQueueSheetEffectivelyVisible,
+              !isPresentingQueueSheet,
+              !decelerate,
+              isScrollViewAllowedForModernPadExpand(scrollView) else {
+            return
+        }
+        let state = modernPadScrollState(for: scrollView)
+        let topY = -scrollView.adjustedContentInset.top
+        if state.hasScrolledBelowTop && state.lastScrollDeltaY <= 0 && scrollView.contentOffset.y <= topY + 2 {
+            state.hasScrolledBelowTop = false
+            if !state.didExpandOnCurrentTopGesture {
+                state.didExpandOnCurrentTopGesture = true
+                expandModernPadTabBarIfNeeded()
+            }
+        }
+    }
+
+    func handleModernPadScrollDidEndDecelerating(_ scrollView: UIScrollView) {
+        guard #available(iOS 26.0, *),
+              usesModernPadBottomTabMenu,
+              popupIsPresented,
+              !isQueueSheetEffectivelyVisible,
+              !isPresentingQueueSheet,
+              isScrollViewAllowedForModernPadExpand(scrollView) else {
+            return
+        }
+        let state = modernPadScrollState(for: scrollView)
+        let topY = -scrollView.adjustedContentInset.top
+        if state.hasScrolledBelowTop && state.lastScrollDeltaY <= 0 && scrollView.contentOffset.y <= topY + 2 {
+            state.hasScrolledBelowTop = false
+            if !state.didExpandOnCurrentTopGesture {
+                state.didExpandOnCurrentTopGesture = true
+                expandModernPadTabBarIfNeeded()
+            }
+        }
+    }
+
+    @available(iOS 26.0, *)
+    private func expandModernPadTabBarIfNeeded() {
+        guard usesModernPadBottomTabMenu,
+              popupIsPresented,
+              !isQueueSheetEffectivelyVisible,
+              !isPresentingQueueSheet,
+              tabBarMinimizeBehavior == .onScrollDown else {
+            return
+        }
+        if let morphTarget = currentLiquidGlassMorphTarget(), morphTarget != 2 {
+            return
+        }
+        activeModernPadSourcesSplit?.padScrollCoordinator?.markNeedsRebind()
+        UIView.animate(withDuration: 0.25) {
+            self.tabBarMinimizeBehavior = .never
+            self.view.layoutIfNeeded()
+        }
+        tabBarMinimizeBehavior = .onScrollDown
     }
 
     @available(iOS 26.0, *)
@@ -2108,58 +3072,8 @@ private final class LiquidGlassQueueBar: UIControl {
         fatalError("init(coder:) has not been implemented")
     }
 
-    private var padWidthConstraint: NSLayoutConstraint?
-
-    func calculatedPadWidth() -> CGFloat {
-        let hostWidth: CGFloat
-        if let parentWidth = TabBarController.singleton?.view.bounds.width, parentWidth > 100 {
-            hostWidth = parentWidth
-        } else if let windowWidth = window?.bounds.width, windowWidth > 100 {
-            hostWidth = windowWidth
-        } else {
-            hostWidth = UIScreen.main.bounds.width
-        }
-        return max(320, hostWidth - 32)
-    }
-
-    func updatePadWidthConstraintIfNeeded() {
-        guard UIDevice.current.userInterfaceIdiom == .pad else { return }
-        let targetWidth = calculatedPadWidth()
-        if let constraint = padWidthConstraint {
-            if constraint.constant != targetWidth {
-                constraint.constant = targetWidth
-                invalidateIntrinsicContentSize()
-            }
-        } else {
-            translatesAutoresizingMaskIntoConstraints = false
-            let constraint = widthAnchor.constraint(equalToConstant: targetWidth)
-            constraint.priority = UILayoutPriority(999)
-            constraint.isActive = true
-            padWidthConstraint = constraint
-            invalidateIntrinsicContentSize()
-        }
-    }
-
-    override func didMoveToWindow() {
-        super.didMoveToWindow()
-        if UIDevice.current.userInterfaceIdiom == .pad {
-            updatePadWidthConstraintIfNeeded()
-        }
-    }
-
     override var intrinsicContentSize: CGSize {
-        if UIDevice.current.userInterfaceIdiom == .pad {
-            return CGSize(width: calculatedPadWidth(), height: 64)
-        }
-        return CGSize(width: UIView.noIntrinsicMetric, height: 64)
-    }
-
-    override func sizeThatFits(_ size: CGSize) -> CGSize {
-        if UIDevice.current.userInterfaceIdiom == .pad {
-            let width = size.width > 100 ? size.width : calculatedPadWidth()
-            return CGSize(width: width, height: 64)
-        }
-        return super.sizeThatFits(size)
+        CGSize(width: UIView.noIntrinsicMetric, height: 64)
     }
 
     func update(title: String?, subtitle: String?) {
@@ -2171,17 +3085,11 @@ private final class LiquidGlassQueueBar: UIControl {
         glassView.effect = SileoGlass.effect(interactive: true,
                                               tintColor: UIColor.sileoBackgroundColor.withAlphaComponent(0.18))
         accessibilityLabel = [title, subtitle].compactMap { $0 }.joined(separator: ", ")
-        if UIDevice.current.userInterfaceIdiom == .pad {
-            updatePadWidthConstraintIfNeeded()
-        }
         setNeedsLayout()
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        if UIDevice.current.userInterfaceIdiom == .pad {
-            updatePadWidthConstraintIfNeeded()
-        }
         if glassView.frame != bounds {
             glassView.frame = bounds
         }
@@ -2439,6 +3347,15 @@ private final class QueueFloatingCardController: UIViewController, UIGestureReco
     }
 }
 
+private final class ModernPadScrollState {
+    var lastScrollOffsetY: CGFloat = 0
+    var lastScrollDeltaY: CGFloat = 0
+    var lastAdjustedInset: UIEdgeInsets = .zero
+    var hasRecordedInset = false
+    var hasScrolledBelowTop = false
+    var didExpandOnCurrentTopGesture = false
+}
+
 private final class ModernBadgeDisplayTick: NSObject {
     private weak var owner: TabBarController?
 
@@ -2502,8 +3419,9 @@ extension UITabBarController {
 
 extension UIViewController {
     func setSileoTabBadgeValue(_ value: String?) {
-        // iPhone iOS 26 / 27 统一由 TabBarController 按稳定 Tab 标识同步原生 badgeValue 与角标渲染器。
-        if #available(iOS 26.0, *), UIDevice.current.userInterfaceIdiom == .phone,
+        // iOS / iPadOS 26+ 统一由 TabBarController 按稳定 Tab 标识同步原生 badgeValue 与角标渲染器。
+        if #available(iOS 26.0, *),
+           (UIDevice.current.userInterfaceIdiom == .phone || UIDevice.current.userInterfaceIdiom == .pad),
            let controller = (tabBarController as? TabBarController) ?? TabBarController.singleton,
            controller.setTabBadgeValue(value, for: self) {
             return

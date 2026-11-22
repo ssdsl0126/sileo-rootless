@@ -103,6 +103,9 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate {
         didConfigureInterface = true
         modernizeSourcesSplitIfNeeded(in: tabBarController)
         if #available(iOS 26.0, *) {
+            (tabBarController as? TabBarController)?.prepareModernPadBottomTabTraitsIfNeeded(in: self.window)
+        }
+        if #available(iOS 26.0, *) {
             // iOS 26 会为系统标签栏提供 Liquid Glass；不要再覆盖系统材质。
             tabBarController.tabBar.isTranslucent = true
             tabBarController.tabBar.backgroundImage = nil
